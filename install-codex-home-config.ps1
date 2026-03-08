@@ -69,12 +69,20 @@ function Invoke-ArchiveDownload {
         [string]$OutFile
     )
 
-    try {
-        Invoke-WebRequest -Uri $Uri -Headers (Get-DownloadRequestHeader) -OutFile $OutFile -MaximumRetryCount 3 -RetryIntervalSec 2 | Out-Null
-    }
-    catch {
-        $apiErrorMessage = Get-ApiErrorMessage -ErrorRecord $_
-        throw "Download request failed for $Uri. $apiErrorMessage"
+    $maxAttempts = 3
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        try {
+            Invoke-WebRequest -Uri $Uri -Headers (Get-DownloadRequestHeader) -OutFile $OutFile | Out-Null
+            return
+        }
+        catch {
+            if ($attempt -ge $maxAttempts) {
+                $apiErrorMessage = Get-ApiErrorMessage -ErrorRecord $_
+                throw "Download request failed for $Uri. $apiErrorMessage"
+            }
+
+            Start-Sleep -Seconds 2
+        }
     }
 }
 
