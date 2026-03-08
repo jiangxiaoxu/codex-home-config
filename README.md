@@ -18,6 +18,7 @@ The installer writes into `$HOME/.codex`, backs up existing `config.toml` and `A
 - `AGENTS.md`
 - `skills/jiangxiaoxu/**`
 - `install-codex-home-config.ps1`
+- `scripts/sync-codex-home-config-repo.ps1`
 
 ## Update
 
@@ -26,5 +27,7 @@ From the author machine:
 ```powershell
 & "$HOME\.codex\sync-codex-home-config-repo.ps1"
 ```
+
+The sync script is also versioned in this repository under `scripts/` for backup and reuse. It is a maintainer script and is not used by the public installer.
 
 Do not store secrets in this repository.
