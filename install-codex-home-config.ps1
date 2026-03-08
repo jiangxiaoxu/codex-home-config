@@ -8,62 +8,6 @@ param(
     [string]$Action = 'Prompt'
 )
 
-function Get-PowerShell7Executable {
-    $candidatePaths = [System.Collections.Generic.List[string]]::new()
-
-    $pwshCommand = Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($null -ne $pwshCommand) {
-        foreach ($propertyName in @('Source', 'Path')) {
-            $property = $pwshCommand.PSObject.Properties[$propertyName]
-            if ($null -ne $property -and -not [string]::IsNullOrWhiteSpace($property.Value)) {
-                $candidatePaths.Add($property.Value)
-            }
-        }
-    }
-
-    $defaultPwshPath = Join-Path $env:ProgramFiles 'PowerShell\7\pwsh.exe'
-    if (-not [string]::IsNullOrWhiteSpace($defaultPwshPath)) {
-        $candidatePaths.Add($defaultPwshPath)
-    }
-
-    foreach ($candidatePath in @($candidatePaths | Select-Object -Unique)) {
-        if (-not (Test-Path -LiteralPath $candidatePath -PathType Leaf)) {
-            continue
-        }
-
-        try {
-            $versionMajor = & $candidatePath -NoProfile -Command '$PSVersionTable.PSVersion.Major'
-            if ($LASTEXITCODE -eq 0 -and [int]$versionMajor -ge 7) {
-                return $candidatePath
-            }
-        }
-        catch {
-            Write-Verbose "Failed to inspect candidate pwsh executable: $candidatePath"
-        }
-    }
-
-    return $null
-}
-
-if ($PSVersionTable.PSVersion.Major -lt 7) {
-    $pwshExecutable = Get-PowerShell7Executable
-    if ([string]::IsNullOrWhiteSpace($pwshExecutable)) {
-        throw 'PowerShell 7 or later is required. pwsh.exe was not found.'
-    }
-
-    $restartArguments = @('-NoProfile', '-File', $PSCommandPath, '-TargetCodexPath', $TargetCodexPath, '-Action', $Action)
-    if ($env:OS -eq 'Windows_NT') {
-        $restartArguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath, '-TargetCodexPath', $TargetCodexPath, '-Action', $Action)
-    }
-
-    & $pwshExecutable @restartArguments
-    if ($LASTEXITCODE -ne 0) {
-        exit $LASTEXITCODE
-    }
-
-    return
-}
-
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 

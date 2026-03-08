@@ -4,13 +4,12 @@ Public Codex home configuration for the installable content under `managed/` and
 
 ## Install
 
-Run this in `pwsh`:
+Run this in PowerShell:
 
 ```powershell
 Invoke-Expression (Invoke-RestMethod -Headers @{ 'User-Agent' = 'codex-home-config-installer' } -Uri 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/main/install-codex-home-config.ps1')
 ```
 
-The installer requires `pwsh` 7+. If it is started from an older PowerShell host, it will relaunch itself in `pwsh.exe`. If `pwsh.exe` cannot be found, the script fails immediately.
 The installer starts with an interactive menu:
 
 - `1. Update config`

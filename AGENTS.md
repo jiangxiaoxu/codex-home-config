@@ -15,7 +15,6 @@
   `.\install-codex-home-config.ps1 -TargetCodexPath '<path>'`
 * For non-interactive update, prefer:
   `.\install-codex-home-config.ps1 -Action Update`
-* The installer should relaunch itself in `pwsh` 7+ when started from an older PowerShell host, and fail fast if `pwsh.exe` is unavailable.
 * The installer starts with an interactive menu for `Update config`, `Restore config`, or `Quit`.
 
 ## Safety Rules
@@ -24,7 +23,6 @@
 * Do not treat the repository root `AGENTS.md` as the file to install into `.codex`.
 * Installable content lives under `managed/config.toml`, `managed/AGENTS.md`, and `managed/skills/`.
 * Backups created by `install-codex-home-config.ps1` are stored under `<TargetCodexPath>\sync_codex-home-config_backup\`.
-* The installer is allowed to assume `pwsh` 7+ after its bootstrap re-launch check.
 * The sync script is also allowed to assume `pwsh` 7+ after its bootstrap re-launch check.
 * `Restore config` should restore one complete backup snapshot at a time and should not create a new backup before restore.
 * After `Update config`, only the latest 5 backup versions should remain under the backup root; older versions should be moved to the Recycle Bin when possible.
