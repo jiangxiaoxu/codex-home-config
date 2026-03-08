@@ -26,24 +26,38 @@ function Get-ApiErrorMessage {
         [System.Management.Automation.ErrorRecord]$ErrorRecord
     )
 
-    if (-not [string]::IsNullOrWhiteSpace($ErrorRecord.ErrorDetails.Message)) {
-        return $ErrorRecord.ErrorDetails.Message.Trim()
+    $errorDetails = $ErrorRecord.ErrorDetails
+    if ($null -ne $errorDetails -and -not [string]::IsNullOrWhiteSpace($errorDetails.Message)) {
+        return $errorDetails.Message.Trim()
     }
 
-    $response = $ErrorRecord.Exception.Response
-    if ($null -ne $response -and $null -ne $response.Content) {
-        try {
-            $responseText = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
-            if (-not [string]::IsNullOrWhiteSpace($responseText)) {
-                return $responseText.Trim()
+    $exception = $ErrorRecord.Exception
+    if ($null -ne $exception) {
+        $responseProperty = $exception.PSObject.Properties['Response']
+        if ($null -ne $responseProperty) {
+            $response = $responseProperty.Value
+            if ($null -ne $response) {
+                $contentProperty = $response.PSObject.Properties['Content']
+                if ($null -ne $contentProperty -and $null -ne $contentProperty.Value) {
+                    try {
+                        $responseText = $contentProperty.Value.ReadAsStringAsync().GetAwaiter().GetResult()
+                        if (-not [string]::IsNullOrWhiteSpace($responseText)) {
+                            return $responseText.Trim()
+                        }
+                    }
+                    catch {
+                        Write-Verbose 'Failed to read the download error response body.'
+                    }
+                }
             }
         }
-        catch {
-            Write-Verbose 'Failed to read the download error response body.'
+
+        if (-not [string]::IsNullOrWhiteSpace($exception.Message)) {
+            return $exception.Message.Trim()
         }
     }
 
-    return $ErrorRecord.Exception.Message
+    return $ErrorRecord.ToString().Trim()
 }
 
 function Invoke-ArchiveDownload {
