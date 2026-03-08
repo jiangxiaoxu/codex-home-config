@@ -17,6 +17,9 @@ $branch = 'main'
 $archiveUri = "https://codeload.github.com/$repoOwner/$repoName/zip/refs/heads/$branch"
 $userAgent = 'codex-home-config-installer'
 $maxBackupVersions = 5
+$backupState = [pscustomobject]@{
+    SessionPath = ''
+}
 
 function Get-DownloadRequestHeader {
     return @{
@@ -96,13 +99,13 @@ function Get-BackupRootPath {
 }
 
 function Get-BackupSessionPath {
-    if ([string]::IsNullOrWhiteSpace($script:backupSessionPath)) {
+    if ([string]::IsNullOrWhiteSpace($backupState.SessionPath)) {
         $backupRootPath = Get-BackupRootPath
-        $script:backupSessionPath = Join-Path $backupRootPath $timestamp
-        $null = New-Item -ItemType Directory -Path $script:backupSessionPath -Force
+        $backupState.SessionPath = Join-Path $backupRootPath $timestamp
+        $null = New-Item -ItemType Directory -Path $backupState.SessionPath -Force
     }
 
-    return $script:backupSessionPath
+    return $backupState.SessionPath
 }
 
 function Backup-ExistingPath {
@@ -416,7 +419,6 @@ if (Test-Path -LiteralPath $TargetCodexPath -PathType Leaf) {
 }
 
 $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-$backupSessionPath = ''
 
 $selectedAction = $Action
 if ($selectedAction -eq 'Prompt') {
