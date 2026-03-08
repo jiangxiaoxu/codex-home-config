@@ -39,6 +39,15 @@ if (-not (Test-Path -LiteralPath (Join-Path $RepoPath '.git') -PathType Containe
     throw "Target repo path is not a git repository: $RepoPath"
 }
 
+$preSyncStatusOutput = & git -C $RepoPath status --porcelain
+if ($LASTEXITCODE -ne 0) {
+    throw "git status failed in $RepoPath"
+}
+
+if (-not [string]::IsNullOrWhiteSpace(($preSyncStatusOutput | Out-String))) {
+    throw "Repository '$RepoPath' has uncommitted changes. Commit or discard them before syncing."
+}
+
 $currentBranch = (& git -C $RepoPath branch --show-current).Trim()
 if ($LASTEXITCODE -ne 0) {
     throw "git branch --show-current failed in $RepoPath"
@@ -51,15 +60,38 @@ if ($currentBranch -ne 'main') {
     }
 }
 
-Copy-Item -LiteralPath $sourceConfigPath -Destination (Join-Path $RepoPath 'config.toml') -Force
-Copy-Item -LiteralPath $sourceAgentsPath -Destination (Join-Path $RepoPath 'AGENTS.md') -Force
+& git -C $RepoPath ls-remote --exit-code --heads origin main *> $null
+$remoteMainCheckExitCode = $LASTEXITCODE
+if (($remoteMainCheckExitCode -ne 0) -and ($remoteMainCheckExitCode -ne 2)) {
+    throw "git ls-remote failed for origin/main in $RepoPath"
+}
+
+if ($remoteMainCheckExitCode -eq 0) {
+    & git -C $RepoPath pull --rebase origin main
+    if ($LASTEXITCODE -ne 0) {
+        throw "git pull --rebase origin main failed in $RepoPath"
+    }
+}
+
 Copy-Item -LiteralPath $sourceInstallerPath -Destination (Join-Path $RepoPath 'install-codex-home-config.ps1') -Force
 
-$repoScriptsPath = Join-Path $RepoPath 'scripts'
-$null = New-Item -ItemType Directory -Path $repoScriptsPath -Force
-Copy-Item -LiteralPath $sourceSyncScriptPath -Destination (Join-Path $repoScriptsPath 'sync-codex-home-config-repo.ps1') -Force
+$repoManagedPath = Join-Path $RepoPath 'managed'
+$null = New-Item -ItemType Directory -Path $repoManagedPath -Force
+Copy-Item -LiteralPath $sourceConfigPath -Destination (Join-Path $repoManagedPath 'config.toml') -Force
+Copy-Item -LiteralPath $sourceAgentsPath -Destination (Join-Path $repoManagedPath 'AGENTS.md') -Force
+Copy-Item -LiteralPath $sourceSyncScriptPath -Destination (Join-Path $RepoPath 'sync-codex-home-config-repo.ps1') -Force
 
-$repoSkillsParentPath = Join-Path $RepoPath 'skills'
+$legacyConfigPath = Join-Path $RepoPath 'config.toml'
+if (Test-Path -LiteralPath $legacyConfigPath -PathType Leaf) {
+    Remove-Item -LiteralPath $legacyConfigPath -Force
+}
+
+$legacyScriptsPath = Join-Path $RepoPath 'scripts'
+if (Test-Path -LiteralPath $legacyScriptsPath -PathType Container) {
+    Remove-Item -LiteralPath $legacyScriptsPath -Recurse -Force
+}
+
+$repoSkillsParentPath = Join-Path $repoManagedPath 'skills'
 $repoSkillPath = Join-Path $repoSkillsParentPath 'jiangxiaoxu'
 if (Test-Path -LiteralPath $repoSkillPath) {
     Remove-Item -LiteralPath $repoSkillPath -Recurse -Force
@@ -67,6 +99,11 @@ if (Test-Path -LiteralPath $repoSkillPath) {
 
 $null = New-Item -ItemType Directory -Path $repoSkillsParentPath -Force
 Copy-Item -LiteralPath $sourceSkillPath -Destination $repoSkillsParentPath -Recurse -Force
+
+$legacyRootSkillsPath = Join-Path $RepoPath 'skills'
+if (Test-Path -LiteralPath $legacyRootSkillsPath -PathType Container) {
+    Remove-Item -LiteralPath $legacyRootSkillsPath -Recurse -Force
+}
 
 $statusOutput = & git -C $RepoPath status --porcelain
 if ($LASTEXITCODE -ne 0) {

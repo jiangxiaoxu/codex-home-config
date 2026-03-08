@@ -93,9 +93,10 @@ try {
     Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
 
     $repositoryPath = Get-ExtractedRepositoryPath -ExtractPath $extractPath
-    $sourceConfigPath = Join-Path $repositoryPath 'config.toml'
-    $sourceAgentsPath = Join-Path $repositoryPath 'AGENTS.md'
-    $sourceSkillPath = Join-Path $repositoryPath 'skills\\jiangxiaoxu'
+    $managedPath = Join-Path $repositoryPath 'managed'
+    $sourceConfigPath = Join-Path $managedPath 'config.toml'
+    $sourceAgentsPath = Join-Path $managedPath 'AGENTS.md'
+    $sourceSkillPath = Join-Path $managedPath 'skills\\jiangxiaoxu'
 
     foreach ($requiredPath in @($sourceConfigPath, $sourceAgentsPath, $sourceSkillPath)) {
         if (-not (Test-Path -LiteralPath $requiredPath)) {
@@ -117,7 +118,13 @@ try {
             Write-Output "Backed up $destinationPath to $backupPath"
         }
 
-        Copy-Item -LiteralPath (Join-Path $repositoryPath $fileName) -Destination $destinationPath -Force
+        $sourcePath = switch ($fileName) {
+            'config.toml' { $sourceConfigPath }
+            'AGENTS.md' { $sourceAgentsPath }
+            default { throw "Unhandled managed file: $fileName" }
+        }
+
+        Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Force
         Write-Output "Installed $fileName to $destinationPath"
     }
 
