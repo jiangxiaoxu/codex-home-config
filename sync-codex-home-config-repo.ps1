@@ -4,7 +4,7 @@ param(
     [string]$SourceCodexPath = (Join-Path $HOME '.codex'),
 
     [Parameter()]
-    [string]$RepoPath = (Join-Path $HOME 'codex-home-config'),
+    [string]$RepoPath = '',
 
     [Parameter()]
     [string]$RepoUrl = 'https://github.com/jiangxiaoxu/codex-home-config.git',
@@ -16,13 +16,20 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$sourceInstallerPath = Join-Path $SourceCodexPath 'install-codex-home-config.ps1'
-$sourceSyncScriptPath = Join-Path $SourceCodexPath 'sync-codex-home-config-repo.ps1'
+if ([string]::IsNullOrWhiteSpace($RepoPath)) {
+    if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+        $RepoPath = $PSScriptRoot
+    }
+    else {
+        $RepoPath = Join-Path $HOME 'codex-home-config'
+    }
+}
+
 $sourceConfigPath = Join-Path $SourceCodexPath 'config.toml'
 $sourceAgentsPath = Join-Path $SourceCodexPath 'AGENTS.md'
 $sourceSkillPath = Join-Path $SourceCodexPath 'skills\\jiangxiaoxu'
 
-foreach ($requiredPath in @($sourceInstallerPath, $sourceSyncScriptPath, $sourceConfigPath, $sourceAgentsPath, $sourceSkillPath)) {
+foreach ($requiredPath in @($sourceConfigPath, $sourceAgentsPath, $sourceSkillPath)) {
     if (-not (Test-Path -LiteralPath $requiredPath)) {
         throw "Required source path was not found: $requiredPath"
     }
@@ -37,6 +44,27 @@ if (-not (Test-Path -LiteralPath $RepoPath -PathType Container)) {
 
 if (-not (Test-Path -LiteralPath (Join-Path $RepoPath '.git') -PathType Container)) {
     throw "Target repo path is not a git repository: $RepoPath"
+}
+
+$sourceInstallerPath = Join-Path $SourceCodexPath 'install-codex-home-config.ps1'
+if (-not (Test-Path -LiteralPath $sourceInstallerPath -PathType Leaf)) {
+    $sourceInstallerPath = Join-Path $RepoPath 'install-codex-home-config.ps1'
+}
+
+$sourceSyncScriptPath = Join-Path $SourceCodexPath 'sync-codex-home-config-repo.ps1'
+if (-not (Test-Path -LiteralPath $sourceSyncScriptPath -PathType Leaf)) {
+    if (-not [string]::IsNullOrWhiteSpace($PSCommandPath) -and (Test-Path -LiteralPath $PSCommandPath -PathType Leaf)) {
+        $sourceSyncScriptPath = $PSCommandPath
+    }
+    else {
+        $sourceSyncScriptPath = Join-Path $RepoPath 'sync-codex-home-config-repo.ps1'
+    }
+}
+
+foreach ($requiredScriptPath in @($sourceInstallerPath, $sourceSyncScriptPath)) {
+    if (-not (Test-Path -LiteralPath $requiredScriptPath -PathType Leaf)) {
+        throw "Required script path was not found: $requiredScriptPath"
+    }
 }
 
 $preSyncStatusOutput = & git -C $RepoPath status --porcelain

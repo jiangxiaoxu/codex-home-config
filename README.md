@@ -11,6 +11,7 @@ Invoke-Expression (Invoke-RestMethod -Headers @{ 'User-Agent' = 'codex-home-conf
 ```
 
 The installer writes into `$HOME/.codex`, backs up existing `config.toml` and `AGENTS.md`, installs `managed/AGENTS.md` as `.codex/AGENTS.md`, and replaces `managed/skills/jiangxiaoxu` into `.codex/skills/jiangxiaoxu`.
+All backups created during one install run are grouped under `.codex/sync_codex-home-config_backup/<timestamp>/`.
 
 ## Managed content
 
@@ -26,10 +27,10 @@ The installer writes into `$HOME/.codex`, backs up existing `config.toml` and `A
 From the author machine:
 
 ```powershell
-& "$HOME\.codex\sync-codex-home-config-repo.ps1"
+.\sync-codex-home-config-repo.ps1
 ```
 
-The sync script is also versioned in this repository root for backup and reuse. It is a maintainer script and is not used by the public installer.
+The sync script uses `$HOME/.codex` as the managed content source and defaults `RepoPath` to the repository root where the script lives.
 
 If you are using Codex inside this repository, the repository root `AGENTS.md` contains the preferred workflow for:
 

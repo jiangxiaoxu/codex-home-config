@@ -86,6 +86,43 @@ function Invoke-ArchiveDownload {
     }
 }
 
+function Get-BackupSessionPath {
+    if ([string]::IsNullOrWhiteSpace($script:backupSessionPath)) {
+        $backupRootPath = Join-Path $TargetCodexPath 'sync_codex-home-config_backup'
+        $script:backupSessionPath = Join-Path $backupRootPath $timestamp
+        $null = New-Item -ItemType Directory -Path $script:backupSessionPath -Force
+    }
+
+    return $script:backupSessionPath
+}
+
+function Backup-ExistingPath {
+    param(
+        [Parameter(Mandatory)]
+        [string]$SourcePath,
+
+        [Parameter(Mandatory)]
+        [string]$RelativeBackupPath,
+
+        [switch]$Recurse
+    )
+
+    $backupPath = Join-Path (Get-BackupSessionPath) $RelativeBackupPath
+    $backupParentPath = Split-Path -Parent $backupPath
+    if (-not [string]::IsNullOrWhiteSpace($backupParentPath)) {
+        $null = New-Item -ItemType Directory -Path $backupParentPath -Force
+    }
+
+    if ($Recurse) {
+        Copy-Item -LiteralPath $SourcePath -Destination $backupPath -Recurse -Force
+    }
+    else {
+        Copy-Item -LiteralPath $SourcePath -Destination $backupPath -Force
+    }
+
+    return $backupPath
+}
+
 function Get-ExtractedRepositoryPath {
     param(
         [Parameter(Mandatory)]
@@ -108,6 +145,7 @@ $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-home-config-" + [guid]::NewGuid().ToString('N'))
 $archivePath = Join-Path $tempRoot 'codex-home-config.zip'
 $extractPath = Join-Path $tempRoot 'extract'
+$backupSessionPath = ''
 $null = New-Item -ItemType Directory -Path $tempRoot -Force
 
 try {
@@ -135,8 +173,7 @@ try {
         }
 
         if (Test-Path -LiteralPath $destinationPath -PathType Leaf) {
-            $backupPath = "$destinationPath.backup.$timestamp"
-            Copy-Item -LiteralPath $destinationPath -Destination $backupPath -Force
+            $backupPath = Backup-ExistingPath -SourcePath $destinationPath -RelativeBackupPath $fileName
             Write-Output "Backed up $destinationPath to $backupPath"
         }
 
@@ -158,8 +195,7 @@ try {
 
     $null = New-Item -ItemType Directory -Path $targetSkillsParentPath -Force
     if (Test-Path -LiteralPath $targetSkillPath -PathType Container) {
-        $backupSkillPath = Join-Path $targetSkillsParentPath "jiangxiaoxu.backup.$timestamp"
-        Copy-Item -LiteralPath $targetSkillPath -Destination $backupSkillPath -Recurse -Force
+        $backupSkillPath = Backup-ExistingPath -SourcePath $targetSkillPath -RelativeBackupPath 'skills\jiangxiaoxu' -Recurse
         Remove-Item -LiteralPath $targetSkillPath -Recurse -Force
         Write-Output "Backed up $targetSkillPath to $backupSkillPath"
     }
