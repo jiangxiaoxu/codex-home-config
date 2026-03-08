@@ -39,6 +39,7 @@ From the author machine:
 .\sync-codex-home-config-repo.ps1
 ```
 
+The sync script requires `pwsh` 7+ as well. If it is started from an older PowerShell host, it relaunches itself in `pwsh.exe` and then continues.
 The sync script uses `$HOME/.codex` as the managed content source and defaults `RepoPath` to the repository root where the script lives.
 
 If you are using Codex inside this repository, the repository root `AGENTS.md` contains the preferred workflow for:
