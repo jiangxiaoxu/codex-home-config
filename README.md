@@ -22,6 +22,18 @@ The installer starts with an interactive menu:
 All backups created during one update run are grouped under `.codex/sync_codex-home-config_backup/<timestamp>/`.
 After a successful update, the installer keeps only the latest 5 backup versions and moves older ones to the Recycle Bin when possible.
 
+For non-interactive update, use:
+
+```powershell
+.\install-codex-home-config.ps1 -Action Update
+```
+
+For non-interactive restore entry, use:
+
+```powershell
+.\install-codex-home-config.ps1 -Action Restore
+```
+
 ## Managed content
 
 - `managed/config.toml`

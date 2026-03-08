@@ -13,6 +13,8 @@
   `.\install-codex-home-config.ps1`
 * For a custom target directory, use:
   `.\install-codex-home-config.ps1 -TargetCodexPath '<path>'`
+* For non-interactive update, prefer:
+  `.\install-codex-home-config.ps1 -Action Update`
 * The installer should relaunch itself in `pwsh` 7+ when started from an older PowerShell host, and fail fast if `pwsh.exe` is unavailable.
 * The installer starts with an interactive menu for `Update config`, `Restore config`, or `Quit`.
 

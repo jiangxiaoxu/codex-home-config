@@ -1,7 +1,11 @@
 [CmdletBinding()]
 param(
     [Parameter()]
-    [string]$TargetCodexPath = (Join-Path $HOME '.codex')
+    [string]$TargetCodexPath = (Join-Path $HOME '.codex'),
+
+    [Parameter()]
+    [ValidateSet('Prompt', 'Update', 'Restore')]
+    [string]$Action = 'Prompt'
 )
 
 function Get-PowerShell7Executable {
@@ -47,9 +51,9 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
         throw 'PowerShell 7 or later is required. pwsh.exe was not found.'
     }
 
-    $restartArguments = @('-NoProfile', '-File', $PSCommandPath, '-TargetCodexPath', $TargetCodexPath)
+    $restartArguments = @('-NoProfile', '-File', $PSCommandPath, '-TargetCodexPath', $TargetCodexPath, '-Action', $Action)
     if ($env:OS -eq 'Windows_NT') {
-        $restartArguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath, '-TargetCodexPath', $TargetCodexPath)
+        $restartArguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath, '-TargetCodexPath', $TargetCodexPath, '-Action', $Action)
     }
 
     & $pwshExecutable @restartArguments
@@ -470,9 +474,14 @@ if (Test-Path -LiteralPath $TargetCodexPath -PathType Leaf) {
 $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
 $backupSessionPath = ''
 
-switch (Select-MainAction) {
+$selectedAction = $Action
+if ($selectedAction -eq 'Prompt') {
+    $selectedAction = Select-MainAction
+}
+
+switch ($selectedAction) {
     'Update' { Invoke-UpdateAction }
     'Restore' { Invoke-RestoreAction }
     'Quit' { Write-Output 'Operation cancelled.' }
-    default { throw 'Unexpected action selection.' }
+    default { throw "Unexpected action selection: $selectedAction" }
 }
