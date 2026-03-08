@@ -1,0 +1,5 @@
+interface:
+  display_name: "vscode tools"
+  short_description: "lmToolsBridge routing for workspace search, VS Code IDE actions, and explicit fallback reporting."
+  icon_small: "./assets/code_70x70.png"
+  icon_large: "./assets/code_150x150.png"
