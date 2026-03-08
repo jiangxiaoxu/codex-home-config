@@ -4,7 +4,21 @@ Public Codex home configuration for the installable content under `managed/` and
 
 ## Install
 
-Run this in PowerShell:
+Copy and run one of these in PowerShell.
+
+Interactive install menu:
+
+```powershell
+iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/main/install-codex-home-config.ps1' | iex
+```
+
+Direct update to the default `$HOME/.codex`:
+
+```powershell
+&([scriptblock]::Create((iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/main/install-codex-home-config.ps1'))) -Action Update
+```
+
+If you already have the script locally:
 
 ```powershell
 Invoke-Expression (Invoke-RestMethod -Headers @{ 'User-Agent' = 'codex-home-config-installer' } -Uri 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/main/install-codex-home-config.ps1')
