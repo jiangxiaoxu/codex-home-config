@@ -10,8 +10,17 @@ Run this in `pwsh`:
 Invoke-Expression (Invoke-RestMethod -Headers @{ 'User-Agent' = 'codex-home-config-installer' } -Uri 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/main/install-codex-home-config.ps1')
 ```
 
-The installer writes into `$HOME/.codex`, backs up existing `config.toml` and `AGENTS.md`, installs `managed/AGENTS.md` as `.codex/AGENTS.md`, and replaces `managed/skills/jiangxiaoxu` into `.codex/skills/jiangxiaoxu`.
-All backups created during one install run are grouped under `.codex/sync_codex-home-config_backup/<timestamp>/`.
+The installer requires `pwsh` 7+. If it is started from an older PowerShell host, it will relaunch itself in `pwsh.exe`. If `pwsh.exe` cannot be found, the script fails immediately.
+The installer starts with an interactive menu:
+
+- `1. Update config`
+- `2. Restore config`
+- `Q. Quit`
+
+`Update config` writes into `$HOME/.codex`, backs up existing `config.toml` and `AGENTS.md`, installs `managed/AGENTS.md` as `.codex/AGENTS.md`, and replaces `managed/skills/jiangxiaoxu` into `.codex/skills/jiangxiaoxu`.
+`Restore config` restores a full local backup snapshot of `config.toml`, `AGENTS.md`, and `skills/jiangxiaoxu`.
+All backups created during one update run are grouped under `.codex/sync_codex-home-config_backup/<timestamp>/`.
+After a successful update, the installer keeps only the latest 5 backup versions and moves older ones to the Recycle Bin when possible.
 
 ## Managed content
 
