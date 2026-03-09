@@ -67,6 +67,25 @@ function Get-RelaunchArgumentList {
     return $arguments
 }
 
+function Copy-ItemIfDifferentPath {
+    param(
+        [Parameter(Mandatory)]
+        [string]$SourcePath,
+
+        [Parameter(Mandatory)]
+        [string]$DestinationPath
+    )
+
+    $sourceFullPath = [System.IO.Path]::GetFullPath($SourcePath)
+    $destinationFullPath = [System.IO.Path]::GetFullPath($DestinationPath)
+
+    if ($sourceFullPath -eq $destinationFullPath) {
+        return
+    }
+
+    Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
+}
+
 if ($PSVersionTable.PSVersion.Major -lt 7) {
     $pwshExecutable = Get-PowerShell7Executable
     if ([string]::IsNullOrWhiteSpace($pwshExecutable)) {
@@ -114,19 +133,13 @@ if (-not (Test-Path -LiteralPath (Join-Path $RepoPath '.git') -PathType Containe
     throw "Target repo path is not a git repository: $RepoPath"
 }
 
-$sourceInstallerPath = Join-Path $SourceCodexPath 'install-codex-home-config.ps1'
-if (-not (Test-Path -LiteralPath $sourceInstallerPath -PathType Leaf)) {
-    $sourceInstallerPath = Join-Path $RepoPath 'install-codex-home-config.ps1'
-}
+$sourceInstallerPath = Join-Path $RepoPath 'install-codex-home-config.ps1'
 
-$sourceSyncScriptPath = Join-Path $SourceCodexPath 'sync-codex-home-config-repo.ps1'
-if (-not (Test-Path -LiteralPath $sourceSyncScriptPath -PathType Leaf)) {
-    if (-not [string]::IsNullOrWhiteSpace($PSCommandPath) -and (Test-Path -LiteralPath $PSCommandPath -PathType Leaf)) {
-        $sourceSyncScriptPath = $PSCommandPath
-    }
-    else {
-        $sourceSyncScriptPath = Join-Path $RepoPath 'sync-codex-home-config-repo.ps1'
-    }
+if (-not [string]::IsNullOrWhiteSpace($PSCommandPath) -and (Test-Path -LiteralPath $PSCommandPath -PathType Leaf)) {
+    $sourceSyncScriptPath = $PSCommandPath
+}
+else {
+    $sourceSyncScriptPath = Join-Path $RepoPath 'sync-codex-home-config-repo.ps1'
 }
 
 foreach ($requiredScriptPath in @($sourceInstallerPath, $sourceSyncScriptPath)) {
@@ -169,13 +182,13 @@ if ($remoteMainCheckExitCode -eq 0) {
     }
 }
 
-Copy-Item -LiteralPath $sourceInstallerPath -Destination (Join-Path $RepoPath 'install-codex-home-config.ps1') -Force
+Copy-ItemIfDifferentPath -SourcePath $sourceInstallerPath -DestinationPath (Join-Path $RepoPath 'install-codex-home-config.ps1')
 
 $repoManagedPath = Join-Path $RepoPath 'managed'
 $null = New-Item -ItemType Directory -Path $repoManagedPath -Force
-Copy-Item -LiteralPath $sourceConfigPath -Destination (Join-Path $repoManagedPath 'config.toml') -Force
-Copy-Item -LiteralPath $sourceAgentsPath -Destination (Join-Path $repoManagedPath 'AGENTS.md') -Force
-Copy-Item -LiteralPath $sourceSyncScriptPath -Destination (Join-Path $RepoPath 'sync-codex-home-config-repo.ps1') -Force
+Copy-ItemIfDifferentPath -SourcePath $sourceConfigPath -DestinationPath (Join-Path $repoManagedPath 'config.toml')
+Copy-ItemIfDifferentPath -SourcePath $sourceAgentsPath -DestinationPath (Join-Path $repoManagedPath 'AGENTS.md')
+Copy-ItemIfDifferentPath -SourcePath $sourceSyncScriptPath -DestinationPath (Join-Path $RepoPath 'sync-codex-home-config-repo.ps1')
 
 $legacyConfigPath = Join-Path $RepoPath 'config.toml'
 if (Test-Path -LiteralPath $legacyConfigPath -PathType Leaf) {
