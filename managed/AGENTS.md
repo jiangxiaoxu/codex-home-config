@@ -1,8 +1,7 @@
 
 ## 通用编程指令
-* Shell 环境固定为 PowerShell 7(`pwsh`),禁止使用 Windows PowerShell 5.x(`powershell.exe`).
+* 处理 PowerShell 命令时,必须显式调用 PowerShell 7 `pwsh` 执行命令,禁止使用 Windows PowerShell 5.x `powershell.exe`.
 * 处理 Shell 命令问题时,允许使用 Python 命令(如 `python -c` 或 Python 脚本)完成任务.
-* 生成和执行 Shell 命令时必须使用 `pwsh` 语法,禁止套用 Bash 专用写法; 关键差异: PowerShell 语法层面的转义字符是反引号,环境变量使用 `$env:NAME` 而非 `$NAME`.
 * `pwsh` 中运行 `rg` 时,包含 `|` 的匹配模式可以使用单引号或双引号;为避免变量插值和转义歧义,优先使用单引号(如 `'a|b'`)或多个 `-e`,禁止使用 Bash 风格 `\"...\"` 转义.
 
 ## 沟通风格
@@ -46,5 +45,3 @@
 ## 工具使用
 
 * 并行执行无依赖的工具调用以提高效率.
-
-
