@@ -31,10 +31,11 @@ The installer starts with an interactive menu:
 - `Q. Quit`
 
 `Update config` writes into `$HOME/.codex`, installs `managed/config.toml`, installs `managed/AGENTS.md` as `.codex/AGENTS.md`, and replaces `managed/skills/jiangxiaoxu` into `.codex/skills/jiangxiaoxu`.
-`Restore config` restores a full local backup snapshot of `config.toml`, `AGENTS.md`, and `skills/jiangxiaoxu`.
+`Restore config` restores the components contained in the selected local backup snapshot.
 `-Components` accepts `Config`, `AgentFile`, and `Skill`. If omitted, `Update config` still updates all three components.
+`-Components` applies to `Update config` only. `Restore config` uses the selected backup version as-is.
 All backups created during one update run are grouped under `.codex/sync_codex-home-config_backup/<timestamp>/`.
-Partial updates still create one full backup snapshot before installation, and `Restore config` still restores the full snapshot.
+Partial updates back up only the selected components before installation, and `Restore config` restores whatever components exist in the selected backup version.
 After a successful update, the installer keeps only the latest 5 backup versions and moves older ones to the Recycle Bin when possible.
 
 `-Components` values:

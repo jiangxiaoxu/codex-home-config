@@ -30,7 +30,8 @@
 * Installable content lives under `managed/config.toml`, `managed/AGENTS.md`, and `managed/skills/`.
 * Backups created by `install-codex-home-config.ps1` are stored under `<TargetCodexPath>\sync_codex-home-config_backup\`.
 * The sync script is also allowed to assume `pwsh` 7+ after its bootstrap re-launch check.
-* `Restore config` should restore one complete backup snapshot at a time and should not create a new backup before restore.
+* `Update config -Components ...` should back up only the selected components before installation.
+* `Restore config` should restore the components that exist in the selected backup snapshot and should not create a new backup before restore.
 * `-Action Restore` skips the main menu, but it still requires the user to choose one local backup version.
 * After `Update config`, only the latest 5 backup versions should remain under the backup root; older versions should be moved to the Recycle Bin when possible.
 * Unless the user explicitly asks for a repo-only edit, avoid manually editing the repository snapshot and pushing it directly. Prefer updating `$HOME\.codex` first, then run the sync script.

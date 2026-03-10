@@ -159,19 +159,29 @@ function Backup-ExistingPath {
 }
 
 function Backup-CurrentSnapshot {
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$SelectedComponents
+    )
+
     $currentSnapshot = Get-SnapshotInfo -RootPath $TargetCodexPath -Name 'current'
+    $componentSelection = Get-ComponentSelection -SelectedComponents $SelectedComponents
 
     foreach ($fileInfo in @(
-            @{ Name = 'config.toml'; SourcePath = $currentSnapshot.ConfigPath; RelativeBackupPath = 'config.toml'; Recurse = $false },
-            @{ Name = 'AGENTS.md'; SourcePath = $currentSnapshot.AgentsPath; RelativeBackupPath = 'AGENTS.md'; Recurse = $false }
+            @{ Name = 'config.toml'; SourcePath = $currentSnapshot.ConfigPath; RelativeBackupPath = 'config.toml'; Component = 'Config' },
+            @{ Name = 'AGENTS.md'; SourcePath = $currentSnapshot.AgentsPath; RelativeBackupPath = 'AGENTS.md'; Component = 'AgentFile' }
         )) {
+        if (-not $componentSelection[$fileInfo.Component]) {
+            continue
+        }
+
         if (Test-Path -LiteralPath $fileInfo.SourcePath -PathType Leaf) {
             $backupPath = Backup-ExistingPath -SourcePath $fileInfo.SourcePath -RelativeBackupPath $fileInfo.RelativeBackupPath
             Write-Output "Backed up $(Join-Path $TargetCodexPath $fileInfo.Name) to $backupPath"
         }
     }
 
-    if (Test-Path -LiteralPath $currentSnapshot.SkillPath -PathType Container) {
+    if ($componentSelection.Skill -and (Test-Path -LiteralPath $currentSnapshot.SkillPath -PathType Container)) {
         $backupSkillPath = Backup-ExistingPath -SourcePath $currentSnapshot.SkillPath -RelativeBackupPath 'skills\jiangxiaoxu' -Recurse
         Write-Output "Backed up $($currentSnapshot.SkillPath) to $backupSkillPath"
     }
@@ -212,19 +222,24 @@ function Get-SnapshotInfo {
 function Test-SnapshotInfo {
     param(
         [Parameter(Mandatory)]
-        [pscustomobject]$SnapshotInfo
+        [pscustomobject]$SnapshotInfo,
+
+        [Parameter()]
+        [string[]]$SelectedComponents = @('Config', 'AgentFile', 'Skill')
     )
 
     $missingItems = [System.Collections.Generic.List[string]]::new()
-    if (-not (Test-Path -LiteralPath $SnapshotInfo.ConfigPath -PathType Leaf)) {
+    $componentSelection = Get-ComponentSelection -SelectedComponents $SelectedComponents
+
+    if ($componentSelection.Config -and -not (Test-Path -LiteralPath $SnapshotInfo.ConfigPath -PathType Leaf)) {
         $missingItems.Add('config.toml')
     }
 
-    if (-not (Test-Path -LiteralPath $SnapshotInfo.AgentsPath -PathType Leaf)) {
+    if ($componentSelection.AgentFile -and -not (Test-Path -LiteralPath $SnapshotInfo.AgentsPath -PathType Leaf)) {
         $missingItems.Add('AGENTS.md')
     }
 
-    if (-not (Test-Path -LiteralPath $SnapshotInfo.SkillPath -PathType Container)) {
+    if ($componentSelection.Skill -and -not (Test-Path -LiteralPath $SnapshotInfo.SkillPath -PathType Container)) {
         $missingItems.Add('skills\jiangxiaoxu')
     }
 
@@ -241,14 +256,39 @@ function Assert-SnapshotInfo {
         [pscustomobject]$SnapshotInfo,
 
         [Parameter(Mandatory)]
-        [string]$SnapshotLabel
+        [string]$SnapshotLabel,
+
+        [Parameter()]
+        [string[]]$SelectedComponents = @('Config', 'AgentFile', 'Skill')
     )
 
-    $validationResult = Test-SnapshotInfo -SnapshotInfo $SnapshotInfo
+    $validationResult = Test-SnapshotInfo -SnapshotInfo $SnapshotInfo -SelectedComponents $SelectedComponents
     if (-not $validationResult.IsValid) {
         $missingText = $validationResult.MissingItems -join ', '
         throw "$SnapshotLabel is incomplete. Missing: $missingText"
     }
+}
+
+function Get-AvailableSnapshotComponent {
+    param(
+        [Parameter(Mandatory)]
+        [pscustomobject]$SnapshotInfo
+    )
+
+    $components = [System.Collections.Generic.List[string]]::new()
+    if (Test-Path -LiteralPath $SnapshotInfo.ConfigPath -PathType Leaf) {
+        $components.Add('Config')
+    }
+
+    if (Test-Path -LiteralPath $SnapshotInfo.AgentsPath -PathType Leaf) {
+        $components.Add('AgentFile')
+    }
+
+    if (Test-Path -LiteralPath $SnapshotInfo.SkillPath -PathType Container) {
+        $components.Add('Skill')
+    }
+
+    return @($components)
 }
 
 function Get-BackupVersionDirectory {
@@ -303,10 +343,12 @@ function Select-BackupSnapshot {
     Show-MenuSection -Lines @('Available backup versions:')
     for ($index = 0; $index -lt $backupDirectories.Count; $index++) {
         $snapshotInfo = Get-SnapshotInfo -RootPath $backupDirectories[$index].FullName -Name $backupDirectories[$index].Name
-        $validationResult = Test-SnapshotInfo -SnapshotInfo $snapshotInfo
-        $statusSuffix = ''
-        if (-not $validationResult.IsValid) {
-            $statusSuffix = " [invalid: missing $($validationResult.MissingItems -join ', ')]"
+        $availableComponents = @(Get-AvailableSnapshotComponent -SnapshotInfo $snapshotInfo)
+        if ($availableComponents.Count -eq 0) {
+            $statusSuffix = ' [invalid: empty backup]'
+        }
+        else {
+            $statusSuffix = " [components: $($availableComponents -join ', ')]"
         }
 
         Write-Information ('{0}. {1}{2}' -f ($index + 1), $backupDirectories[$index].Name, $statusSuffix) -InformationAction Continue
@@ -350,7 +392,7 @@ function Install-Snapshot {
     $componentSelection = Get-ComponentSelection -SelectedComponents $SelectedComponents
 
     if ($CreateBackup) {
-        Backup-CurrentSnapshot
+        Backup-CurrentSnapshot -SelectedComponents $SelectedComponents
     }
 
     foreach ($fileInfo in @(
@@ -446,7 +488,7 @@ function Invoke-UpdateAction {
         $repositoryPath = Get-ExtractedRepositoryPath -ExtractPath $extractPath
         $managedPath = Join-Path $repositoryPath 'managed'
         $snapshotInfo = Get-SnapshotInfo -RootPath $managedPath -Name 'repository'
-        Assert-SnapshotInfo -SnapshotInfo $snapshotInfo -SnapshotLabel 'Repository snapshot'
+        Assert-SnapshotInfo -SnapshotInfo $snapshotInfo -SnapshotLabel 'Repository snapshot' -SelectedComponents $SelectedComponents
         Install-Snapshot -SnapshotInfo $snapshotInfo -SelectedComponents $SelectedComponents -CreateBackup
         Remove-OldBackupVersion
     }
@@ -462,8 +504,12 @@ function Invoke-RestoreAction {
         return
     }
 
-    Assert-SnapshotInfo -SnapshotInfo $snapshotInfo -SnapshotLabel "Backup version '$($snapshotInfo.Name)'"
-    Install-Snapshot -SnapshotInfo $snapshotInfo
+    $availableComponents = @(Get-AvailableSnapshotComponent -SnapshotInfo $snapshotInfo)
+    if ($availableComponents.Count -eq 0) {
+        throw "Backup version '$($snapshotInfo.Name)' is empty."
+    }
+
+    Install-Snapshot -SnapshotInfo $snapshotInfo -SelectedComponents $availableComponents
     Write-Output "Restored backup version: $($snapshotInfo.Name)"
 }
 
