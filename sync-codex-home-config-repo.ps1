@@ -13,8 +13,8 @@ param(
     [string]$CommitMessage = ("Sync Codex home config " + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')),
 
     [Parameter()]
-    [ValidateSet('Config', 'Agents', 'Skill')]
-    [string[]]$Components = @('Config', 'Agents', 'Skill')
+    [ValidateSet('Config', 'AgentFile', 'Skill')]
+    [string[]]$Components = @('Config', 'AgentFile', 'Skill')
 )
 
 function Get-ComponentSelection {
@@ -24,9 +24,9 @@ function Get-ComponentSelection {
     )
 
     $componentSelection = @{
-        Config = $false
-        Agents = $false
-        Skill  = $false
+        Config    = $false
+        AgentFile = $false
+        Skill     = $false
     }
 
     foreach ($component in $SelectedComponents) {
@@ -150,7 +150,7 @@ $componentSelection = Get-ComponentSelection -SelectedComponents $Components
 
 foreach ($requiredPath in @(
         @{ Path = $sourceConfigPath; Selected = $componentSelection.Config },
-        @{ Path = $sourceAgentsPath; Selected = $componentSelection.Agents },
+        @{ Path = $sourceAgentsPath; Selected = $componentSelection.AgentFile },
         @{ Path = $sourceSkillPath; Selected = $componentSelection.Skill }
     )) {
     if ($requiredPath.Selected -and -not (Test-Path -LiteralPath $requiredPath.Path)) {
@@ -226,7 +226,7 @@ if ($componentSelection.Config) {
     Copy-ItemIfDifferentPath -SourcePath $sourceConfigPath -DestinationPath (Join-Path $repoManagedPath 'config.toml')
 }
 
-if ($componentSelection.Agents) {
+if ($componentSelection.AgentFile) {
     Copy-ItemIfDifferentPath -SourcePath $sourceAgentsPath -DestinationPath (Join-Path $repoManagedPath 'AGENTS.md')
 }
 

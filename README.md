@@ -32,7 +32,7 @@ The installer starts with an interactive menu:
 
 `Update config` writes into `$HOME/.codex`, installs `managed/config.toml`, installs `managed/AGENTS.md` as `.codex/AGENTS.md`, and replaces `managed/skills/jiangxiaoxu` into `.codex/skills/jiangxiaoxu`.
 `Restore config` restores a full local backup snapshot of `config.toml`, `AGENTS.md`, and `skills/jiangxiaoxu`.
-`-Components` accepts `Config`, `Agents`, and `Skill`. If omitted, `Update config` still updates all three components.
+`-Components` accepts `Config`, `AgentFile`, and `Skill`. If omitted, `Update config` still updates all three components.
 All backups created during one update run are grouped under `.codex/sync_codex-home-config_backup/<timestamp>/`.
 Partial updates still create one full backup snapshot before installation, and `Restore config` still restores the full snapshot.
 After a successful update, the installer keeps only the latest 5 backup versions and moves older ones to the Recycle Bin when possible.
@@ -40,7 +40,7 @@ After a successful update, the installer keeps only the latest 5 backup versions
 `-Components` values:
 
 - `Config` -> `config.toml`
-- `Agents` -> `AGENTS.md`
+- `AgentFile` -> `AGENTS.md`
 - `Skill` -> `skills/jiangxiaoxu`
 
 For non-interactive update, use:
@@ -52,7 +52,7 @@ For non-interactive update, use:
 Update `AGENTS.md` only:
 
 ```powershell
-.\install-codex-home-config.ps1 -Action Update -Components Agents
+.\install-codex-home-config.ps1 -Action Update -Components AgentFile
 ```
 
 Update `config.toml` and `skills/jiangxiaoxu` together:
@@ -93,13 +93,13 @@ Sync `skills/jiangxiaoxu` only:
 Sync `config.toml` and `AGENTS.md` only:
 
 ```powershell
-.\sync-codex-home-config-repo.ps1 -Components Config,Agents
+.\sync-codex-home-config-repo.ps1 -Components Config,AgentFile
 ```
 
 The sync script requires `pwsh` 7+ as well. If it is started from an older PowerShell host, it relaunches itself in `pwsh.exe` and then continues.
 The sync script uses `$HOME/.codex` as the managed content source and defaults `RepoPath` to the repository root where the script lives.
-`-Components` accepts `Config`, `Agents`, and `Skill`. If omitted, the sync script still publishes all three managed components.
-The same `-Components` values apply here: `Config` -> `config.toml`, `Agents` -> `AGENTS.md`, `Skill` -> `skills/jiangxiaoxu`.
+`-Components` accepts `Config`, `AgentFile`, and `Skill`. If omitted, the sync script still publishes all three managed components.
+The same `-Components` values apply here: `Config` -> `config.toml`, `AgentFile` -> `AGENTS.md`, `Skill` -> `skills/jiangxiaoxu`.
 
 If you are using Codex inside this repository, the repository root `AGENTS.md` contains the preferred workflow for:
 

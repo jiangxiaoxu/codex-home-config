@@ -8,8 +8,8 @@ param(
     [string]$Action = 'Prompt',
 
     [Parameter()]
-    [ValidateSet('Config', 'Agents', 'Skill')]
-    [string[]]$Components = @('Config', 'Agents', 'Skill')
+    [ValidateSet('Config', 'AgentFile', 'Skill')]
+    [string[]]$Components = @('Config', 'AgentFile', 'Skill')
 )
 
 Set-StrictMode -Version Latest
@@ -32,9 +32,9 @@ function Get-ComponentSelection {
     )
 
     $componentSelection = @{
-        Config = $false
-        Agents = $false
-        Skill  = $false
+        Config    = $false
+        AgentFile = $false
+        Skill     = $false
     }
 
     foreach ($component in $SelectedComponents) {
@@ -341,7 +341,7 @@ function Install-Snapshot {
         [pscustomobject]$SnapshotInfo,
 
         [Parameter()]
-        [string[]]$SelectedComponents = @('Config', 'Agents', 'Skill'),
+        [string[]]$SelectedComponents = @('Config', 'AgentFile', 'Skill'),
 
         [switch]$CreateBackup
     )
@@ -355,7 +355,7 @@ function Install-Snapshot {
 
     foreach ($fileInfo in @(
             @{ Name = 'config.toml'; SourcePath = $SnapshotInfo.ConfigPath; Component = 'Config' },
-            @{ Name = 'AGENTS.md'; SourcePath = $SnapshotInfo.AgentsPath; Component = 'Agents' }
+            @{ Name = 'AGENTS.md'; SourcePath = $SnapshotInfo.AgentsPath; Component = 'AgentFile' }
         )) {
         if (-not $componentSelection[$fileInfo.Component]) {
             continue
