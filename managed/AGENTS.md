@@ -6,6 +6,7 @@
 
 ### MermaidDiagram 使用要求
 - 需要解释流程/结构/关系/时序/计划/分类等内容时,输出Mermaid DSL.
+- 如果当前是Codex CLI 环境 则不要输出Mermaid DSL,改用普通文本形式输出.
 
 ## 路径输出格式
 - 禁止在链接前添加额外符号,包括 `-`,`*`,`1.`等.
@@ -13,7 +14,7 @@
 ## Code Review 输出
 
 * 当需要指出代码中的待处理问题,缺陷风险,行为回归或 review finding,且问题可以精确定位到文件和行号时,优先使用 `::code-comment{...}` 输出,由客户端渲染为 review 卡片.
-* `::code-comment` 仅在 Codex app 运行环境下使用; 如果当前是 CLI 环境或客户端不支持该指令渲染,则不要输出 `::code-comment`,改用普通文本形式输出 findings.
+* `::code-comment` 仅在 Codex app 运行环境下使用; 如果当前是 CLI 或者vsocde 插件运行环境,则不要输出 `::code-comment`,改用普通文本形式输出 findings.
 * `::code-comment` 应至少包含 `title`,`body`,`file`; 能准确定位时补充 `start`,`end`; 需要表达严重性和把握度时再补充 `priority`,`confidence`.
 * `::code-comment` 的 `title` 和 `body` 默认使用中文表述; 仅保留必要的英文术语,代码标识符和 API 名称原文.
 * `file` 必须使用绝对路径; 行号使用 1-based,范围尽量精确且最小化.
