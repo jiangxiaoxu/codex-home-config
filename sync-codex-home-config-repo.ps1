@@ -10,8 +10,31 @@ param(
     [string]$RepoUrl = 'https://github.com/jiangxiaoxu/codex-home-config.git',
 
     [Parameter()]
-    [string]$CommitMessage = ("Sync Codex home config " + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))
+    [string]$CommitMessage = ("Sync Codex home config " + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')),
+
+    [Parameter()]
+    [ValidateSet('Config', 'Agents', 'Skill')]
+    [string[]]$Components = @('Config', 'Agents', 'Skill')
 )
+
+function Get-ComponentSelection {
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$SelectedComponents
+    )
+
+    $componentSelection = @{
+        Config = $false
+        Agents = $false
+        Skill  = $false
+    }
+
+    foreach ($component in $SelectedComponents) {
+        $componentSelection[$component] = $true
+    }
+
+    return $componentSelection
+}
 
 function Get-PowerShell7Executable {
     $candidatePaths = [System.Collections.Generic.List[string]]::new()
@@ -58,9 +81,17 @@ function Get-RelaunchArgumentList {
 
     $arguments += @('-File', $PSCommandPath)
 
-    foreach ($parameterName in @('SourceCodexPath', 'RepoPath', 'RepoUrl', 'CommitMessage')) {
+    foreach ($parameterName in @('SourceCodexPath', 'RepoPath', 'RepoUrl', 'CommitMessage', 'Components')) {
         if ($PSBoundParameters.ContainsKey($parameterName)) {
-            $arguments += @("-$parameterName", [string]$PSBoundParameters[$parameterName])
+            $arguments += "-$parameterName"
+
+            $parameterValue = $PSBoundParameters[$parameterName]
+            if ($parameterValue -is [System.Array]) {
+                $arguments += @($parameterValue | ForEach-Object { [string]$_ })
+            }
+            else {
+                $arguments += [string]$parameterValue
+            }
         }
     }
 
@@ -115,10 +146,15 @@ if ([string]::IsNullOrWhiteSpace($RepoPath)) {
 $sourceConfigPath = Join-Path $SourceCodexPath 'config.toml'
 $sourceAgentsPath = Join-Path $SourceCodexPath 'AGENTS.md'
 $sourceSkillPath = Join-Path $SourceCodexPath 'skills\\jiangxiaoxu'
+$componentSelection = Get-ComponentSelection -SelectedComponents $Components
 
-foreach ($requiredPath in @($sourceConfigPath, $sourceAgentsPath, $sourceSkillPath)) {
-    if (-not (Test-Path -LiteralPath $requiredPath)) {
-        throw "Required source path was not found: $requiredPath"
+foreach ($requiredPath in @(
+        @{ Path = $sourceConfigPath; Selected = $componentSelection.Config },
+        @{ Path = $sourceAgentsPath; Selected = $componentSelection.Agents },
+        @{ Path = $sourceSkillPath; Selected = $componentSelection.Skill }
+    )) {
+    if ($requiredPath.Selected -and -not (Test-Path -LiteralPath $requiredPath.Path)) {
+        throw "Required source path was not found: $($requiredPath.Path)"
     }
 }
 
@@ -186,8 +222,14 @@ Copy-ItemIfDifferentPath -SourcePath $sourceInstallerPath -DestinationPath (Join
 
 $repoManagedPath = Join-Path $RepoPath 'managed'
 $null = New-Item -ItemType Directory -Path $repoManagedPath -Force
-Copy-ItemIfDifferentPath -SourcePath $sourceConfigPath -DestinationPath (Join-Path $repoManagedPath 'config.toml')
-Copy-ItemIfDifferentPath -SourcePath $sourceAgentsPath -DestinationPath (Join-Path $repoManagedPath 'AGENTS.md')
+if ($componentSelection.Config) {
+    Copy-ItemIfDifferentPath -SourcePath $sourceConfigPath -DestinationPath (Join-Path $repoManagedPath 'config.toml')
+}
+
+if ($componentSelection.Agents) {
+    Copy-ItemIfDifferentPath -SourcePath $sourceAgentsPath -DestinationPath (Join-Path $repoManagedPath 'AGENTS.md')
+}
+
 Copy-ItemIfDifferentPath -SourcePath $sourceSyncScriptPath -DestinationPath (Join-Path $RepoPath 'sync-codex-home-config-repo.ps1')
 
 $legacyConfigPath = Join-Path $RepoPath 'config.toml'
@@ -202,12 +244,14 @@ if (Test-Path -LiteralPath $legacyScriptsPath -PathType Container) {
 
 $repoSkillsParentPath = Join-Path $repoManagedPath 'skills'
 $repoSkillPath = Join-Path $repoSkillsParentPath 'jiangxiaoxu'
-if (Test-Path -LiteralPath $repoSkillPath) {
-    Remove-Item -LiteralPath $repoSkillPath -Recurse -Force
-}
-
 $null = New-Item -ItemType Directory -Path $repoSkillsParentPath -Force
-Copy-Item -LiteralPath $sourceSkillPath -Destination $repoSkillsParentPath -Recurse -Force
+if ($componentSelection.Skill) {
+    if (Test-Path -LiteralPath $repoSkillPath) {
+        Remove-Item -LiteralPath $repoSkillPath -Recurse -Force
+    }
+
+    Copy-Item -LiteralPath $sourceSkillPath -Destination $repoSkillsParentPath -Recurse -Force
+}
 
 $legacyRootSkillsPath = Join-Path $RepoPath 'skills'
 if (Test-Path -LiteralPath $legacyRootSkillsPath -PathType Container) {

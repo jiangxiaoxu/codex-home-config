@@ -5,7 +5,11 @@ param(
 
     [Parameter()]
     [ValidateSet('Prompt', 'Update', 'Restore')]
-    [string]$Action = 'Prompt'
+    [string]$Action = 'Prompt',
+
+    [Parameter()]
+    [ValidateSet('Config', 'Agents', 'Skill')]
+    [string[]]$Components = @('Config', 'Agents', 'Skill')
 )
 
 Set-StrictMode -Version Latest
@@ -19,6 +23,25 @@ $userAgent = 'codex-home-config-installer'
 $maxBackupVersions = 5
 $backupState = [pscustomobject]@{
     SessionPath = ''
+}
+
+function Get-ComponentSelection {
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$SelectedComponents
+    )
+
+    $componentSelection = @{
+        Config = $false
+        Agents = $false
+        Skill  = $false
+    }
+
+    foreach ($component in $SelectedComponents) {
+        $componentSelection[$component] = $true
+    }
+
+    return $componentSelection
 }
 
 function Get-DownloadRequestHeader {
@@ -133,6 +156,25 @@ function Backup-ExistingPath {
     }
 
     return $backupPath
+}
+
+function Backup-CurrentSnapshot {
+    $currentSnapshot = Get-SnapshotInfo -RootPath $TargetCodexPath -Name 'current'
+
+    foreach ($fileInfo in @(
+            @{ Name = 'config.toml'; SourcePath = $currentSnapshot.ConfigPath; RelativeBackupPath = 'config.toml'; Recurse = $false },
+            @{ Name = 'AGENTS.md'; SourcePath = $currentSnapshot.AgentsPath; RelativeBackupPath = 'AGENTS.md'; Recurse = $false }
+        )) {
+        if (Test-Path -LiteralPath $fileInfo.SourcePath -PathType Leaf) {
+            $backupPath = Backup-ExistingPath -SourcePath $fileInfo.SourcePath -RelativeBackupPath $fileInfo.RelativeBackupPath
+            Write-Output "Backed up $(Join-Path $TargetCodexPath $fileInfo.Name) to $backupPath"
+        }
+    }
+
+    if (Test-Path -LiteralPath $currentSnapshot.SkillPath -PathType Container) {
+        $backupSkillPath = Backup-ExistingPath -SourcePath $currentSnapshot.SkillPath -RelativeBackupPath 'skills\jiangxiaoxu' -Recurse
+        Write-Output "Backed up $($currentSnapshot.SkillPath) to $backupSkillPath"
+    }
 }
 
 function Get-ExtractedRepositoryPath {
@@ -298,27 +340,38 @@ function Install-Snapshot {
         [Parameter(Mandatory)]
         [pscustomobject]$SnapshotInfo,
 
+        [Parameter()]
+        [string[]]$SelectedComponents = @('Config', 'Agents', 'Skill'),
+
         [switch]$CreateBackup
     )
 
     $null = New-Item -ItemType Directory -Path $TargetCodexPath -Force
+    $componentSelection = Get-ComponentSelection -SelectedComponents $SelectedComponents
+
+    if ($CreateBackup) {
+        Backup-CurrentSnapshot
+    }
 
     foreach ($fileInfo in @(
-            @{ Name = 'config.toml'; SourcePath = $SnapshotInfo.ConfigPath },
-            @{ Name = 'AGENTS.md'; SourcePath = $SnapshotInfo.AgentsPath }
+            @{ Name = 'config.toml'; SourcePath = $SnapshotInfo.ConfigPath; Component = 'Config' },
+            @{ Name = 'AGENTS.md'; SourcePath = $SnapshotInfo.AgentsPath; Component = 'Agents' }
         )) {
+        if (-not $componentSelection[$fileInfo.Component]) {
+            continue
+        }
+
         $destinationPath = Join-Path $TargetCodexPath $fileInfo.Name
         if (Test-Path -LiteralPath $destinationPath -PathType Container) {
             throw "Expected file path but found a directory: $destinationPath"
         }
 
-        if ($CreateBackup -and (Test-Path -LiteralPath $destinationPath -PathType Leaf)) {
-            $backupPath = Backup-ExistingPath -SourcePath $destinationPath -RelativeBackupPath $fileInfo.Name
-            Write-Output "Backed up $destinationPath to $backupPath"
-        }
-
         Copy-Item -LiteralPath $fileInfo.SourcePath -Destination $destinationPath -Force
         Write-Output "Installed $($fileInfo.Name) to $destinationPath"
+    }
+
+    if (-not $componentSelection.Skill) {
+        return
     }
 
     $targetSkillsParentPath = Join-Path $TargetCodexPath 'skills'
@@ -329,11 +382,6 @@ function Install-Snapshot {
 
     $null = New-Item -ItemType Directory -Path $targetSkillsParentPath -Force
     if (Test-Path -LiteralPath $targetSkillPath -PathType Container) {
-        if ($CreateBackup) {
-            $backupSkillPath = Backup-ExistingPath -SourcePath $targetSkillPath -RelativeBackupPath 'skills\jiangxiaoxu' -Recurse
-            Write-Output "Backed up $targetSkillPath to $backupSkillPath"
-        }
-
         Remove-Item -LiteralPath $targetSkillPath -Recurse -Force
     }
 
@@ -381,6 +429,11 @@ function Remove-OldBackupVersion {
 }
 
 function Invoke-UpdateAction {
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$SelectedComponents
+    )
+
     $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-home-config-" + [guid]::NewGuid().ToString('N'))
     $archivePath = Join-Path $tempRoot 'codex-home-config.zip'
     $extractPath = Join-Path $tempRoot 'extract'
@@ -394,7 +447,7 @@ function Invoke-UpdateAction {
         $managedPath = Join-Path $repositoryPath 'managed'
         $snapshotInfo = Get-SnapshotInfo -RootPath $managedPath -Name 'repository'
         Assert-SnapshotInfo -SnapshotInfo $snapshotInfo -SnapshotLabel 'Repository snapshot'
-        Install-Snapshot -SnapshotInfo $snapshotInfo -CreateBackup
+        Install-Snapshot -SnapshotInfo $snapshotInfo -SelectedComponents $SelectedComponents -CreateBackup
         Remove-OldBackupVersion
     }
     finally {
@@ -426,7 +479,7 @@ if ($selectedAction -eq 'Prompt') {
 }
 
 switch ($selectedAction) {
-    'Update' { Invoke-UpdateAction }
+    'Update' { Invoke-UpdateAction -SelectedComponents $Components }
     'Restore' { Invoke-RestoreAction }
     'Quit' { Write-Output 'Operation cancelled.' }
     default { throw "Unexpected action selection: $selectedAction" }
