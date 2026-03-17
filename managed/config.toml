@@ -1,5 +1,5 @@
 model = "gpt-5.4"
-model_reasoning_effort = "high"
+model_reasoning_effort = "xhigh"
 
 sandbox_mode = "danger-full-access"
 
@@ -14,6 +14,7 @@ personality = "pragmatic"
 background_terminal_max_timeout = 1800000
 plan_mode_reasoning_effort = "xhigh"
 approvals_reviewer = "guardian_subagent"
+service_tier = "fast"
 
 
 [mcp_servers.lm_tools_bridge]
@@ -59,4 +60,7 @@ trust_level = "trusted"
 trust_level = "trusted"
 
 [projects.'\\?\C:\Users\jxx73']
+trust_level = "trusted"
+
+[projects.'C:\Users\jxx73']
 trust_level = "trusted"
