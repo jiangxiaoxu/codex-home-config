@@ -30,9 +30,6 @@ tool_timeout_sec = 120
 
 [features]
 
-#responses_websockets = true
-#responses_websockets_v2 = true
-
 runtime_metrics = true
 guardian_approval = true
 
