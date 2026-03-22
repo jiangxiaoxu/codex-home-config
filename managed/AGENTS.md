@@ -5,10 +5,10 @@
 * 输出/生成的文字以及注释需要使用半角符号,不要使用全角符号.
 
 ## Interview Questions
-* 无法从 local context 确认, 且基于合理 assumption 继续推进存在较高风险时, 也需要主动向用户发起 interview.
-* 如果用户诉求与 repo reality, existing contract, 或既有 constraints 冲突, 先明确指出冲突及其影响, 再决定是否继续 interview.
-* 只问 high-value questions. 问题应能改变理解, 锁定 key assumptions, 收敛 tradeoff, 或暴露关键风险.
-* 当线程实际处于 `Plan Mode` 时, 应进行更全面的 user interview, 并通过多轮 interview 持续锁定 key assumptions 与收敛 tradeoff.
+* 当存在会实质影响理解, decision-making, 或风险判断的关键不确定性时, 应主动发起补充性质的 interview. 典型情形包括但不限于: 无法从 local context 确认关键信息, 或基于合理 assumption 继续推进存在较高风险.
+* 如果用户诉求与 repo reality, existing contracts, 或既有 constraints 冲突, 先明确指出冲突及其影响, 再决定是否继续 interview.
+* 只问 high-value questions. 问题应能改变理解, 锁定 key assumptions, 收敛 tradeoffs, 或暴露关键风险.
+* 当线程实际处于 Plan Mode 时, 应进行更全面的 user interview, 并通过多轮 interview 持续锁定 key assumptions 与收敛 tradeoffs, 直到剩余问题已不会实质改变方案判断.
 
 
 ### MermaidDiagram 使用要求
