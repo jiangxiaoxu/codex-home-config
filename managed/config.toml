@@ -1,5 +1,5 @@
 model = "gpt-5.4"
-model_reasoning_effort = "high"
+model_reasoning_effort = "xhigh"
 
 sandbox_mode = "danger-full-access"
 
@@ -27,11 +27,12 @@ url = "https://developers.openai.com/mcp"
 
 
 [features]
-
-default_mode_request_user_input = true
 runtime_metrics = true
 guardian_approval = true
 js_repl = true
+
+unified_exec = true
+default_mode_request_user_input = true
 
 [sandbox_workspace_write]
 network_access = true
