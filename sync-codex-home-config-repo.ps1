@@ -117,6 +117,185 @@ function Copy-ItemIfDifferentPath {
     Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
 }
 
+function Get-ConfigTextNewLine {
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$Content
+    )
+
+    if ($Content.Contains("`r`n")) {
+        return "`r`n"
+    }
+
+    if ($Content.Contains("`n")) {
+        return "`n"
+    }
+
+    if ($Content.Contains("`r")) {
+        return "`r"
+    }
+
+    return [Environment]::NewLine
+}
+
+function Get-ConfigTextLineRecord {
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$Content
+    )
+
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lineMatches = [regex]::Matches($Content, "[^\r\n]*(?:\r\n|\n|\r|$)")
+    foreach ($match in $lineMatches) {
+        if ($match.Length -eq 0 -and $match.Index -eq $Content.Length) {
+            continue
+        }
+
+        $lines.Add($match.Value)
+    }
+
+    return @($lines)
+}
+
+function Get-TomlSectionName {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Line
+    )
+
+    $trimmedLine = $Line.TrimEnd("`r", "`n")
+    $match = [regex]::Match(
+        $trimmedLine,
+        '^\s*\[(?<array>\[)?\s*(?<name>(?:[A-Za-z0-9_-]+|"[^"\r\n]*"|''[^''\r\n]*'')(?:\s*\.\s*(?:[A-Za-z0-9_-]+|"[^"\r\n]*"|''[^''\r\n]*''))*)\s*\](?(array)\])\s*(?:#.*)?$'
+    )
+    if (-not $match.Success) {
+        return $null
+    }
+
+    return $match.Groups['name'].Value
+}
+
+function Test-ProjectsTomlSection {
+    param(
+        [Parameter(Mandatory)]
+        [string]$SectionName
+    )
+
+    return [regex]::IsMatch($SectionName, '^projects(?:\s*$|\s*\.)')
+}
+
+function Split-ConfigTomlContent {
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$Content
+    )
+
+    $sharedBlocks = [System.Collections.Generic.List[string]]::new()
+    $localOnlyBlocks = [System.Collections.Generic.List[string]]::new()
+    $currentBlockLines = [System.Collections.Generic.List[string]]::new()
+    $currentBlockIsLocalOnly = $false
+
+    foreach ($line in @(Get-ConfigTextLineRecord -Content $Content)) {
+        $sectionName = Get-TomlSectionName -Line $line
+        if ($null -ne $sectionName) {
+            if ($currentBlockLines.Count -gt 0) {
+                $currentBlockContent = [string]::Concat($currentBlockLines.ToArray())
+                if ($currentBlockIsLocalOnly) {
+                    $localOnlyBlocks.Add($currentBlockContent)
+                }
+                else {
+                    $sharedBlocks.Add($currentBlockContent)
+                }
+
+                $currentBlockLines.Clear()
+            }
+
+            $currentBlockIsLocalOnly = Test-ProjectsTomlSection -SectionName $sectionName
+        }
+
+        $currentBlockLines.Add($line)
+    }
+
+    if ($currentBlockLines.Count -gt 0) {
+        $currentBlockContent = [string]::Concat($currentBlockLines.ToArray())
+        if ($currentBlockIsLocalOnly) {
+            $localOnlyBlocks.Add($currentBlockContent)
+        }
+        else {
+            $sharedBlocks.Add($currentBlockContent)
+        }
+    }
+
+    return [pscustomobject]@{
+        NewLine          = Get-ConfigTextNewLine -Content $Content
+        SharedContent    = [string]::Concat($sharedBlocks.ToArray())
+        LocalOnlyContent = [string]::Concat($localOnlyBlocks.ToArray())
+    }
+}
+
+function Join-ConfigTomlContent {
+    param(
+        [Parameter()]
+        [AllowEmptyString()]
+        [string]$SharedContent = '',
+
+        [Parameter()]
+        [AllowEmptyString()]
+        [string]$LocalOnlyContent = '',
+
+        [Parameter(Mandatory)]
+        [string]$NewLine
+    )
+
+    $segments = [System.Collections.Generic.List[string]]::new()
+    foreach ($segment in @($SharedContent, $LocalOnlyContent)) {
+        if ([string]::IsNullOrWhiteSpace($segment)) {
+            continue
+        }
+
+        $segments.Add($segment.TrimEnd("`r", "`n"))
+    }
+
+    if ($segments.Count -eq 0) {
+        return ''
+    }
+
+    return ([string]::Join($NewLine + $NewLine, $segments.ToArray()) + $NewLine)
+}
+
+function Write-Utf8FileIfDifferent {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$Content
+    )
+
+    if (Test-Path -LiteralPath $Path -PathType Container) {
+        throw "Expected file path but found a directory: $Path"
+    }
+
+    if (Test-Path -LiteralPath $Path -PathType Leaf) {
+        $existingContent = [System.IO.File]::ReadAllText($Path)
+        if ($existingContent -ceq $Content) {
+            return
+        }
+    }
+
+    $parentPath = Split-Path -Parent $Path
+    if (-not [string]::IsNullOrWhiteSpace($parentPath)) {
+        $null = New-Item -ItemType Directory -Path $parentPath -Force
+    }
+
+    $utf8Encoding = New-Object System.Text.UTF8Encoding -ArgumentList $false
+    [System.IO.File]::WriteAllText($Path, $Content, $utf8Encoding)
+}
+
 if ($PSVersionTable.PSVersion.Major -lt 7) {
     $pwshExecutable = Get-PowerShell7Executable
     if ([string]::IsNullOrWhiteSpace($pwshExecutable)) {
@@ -223,7 +402,10 @@ Copy-ItemIfDifferentPath -SourcePath $sourceInstallerPath -DestinationPath (Join
 $repoManagedPath = Join-Path $RepoPath 'managed'
 $null = New-Item -ItemType Directory -Path $repoManagedPath -Force
 if ($componentSelection.Config) {
-    Copy-ItemIfDifferentPath -SourcePath $sourceConfigPath -DestinationPath (Join-Path $repoManagedPath 'config.toml')
+    $sourceConfigContent = [System.IO.File]::ReadAllText($sourceConfigPath)
+    $sourceConfigLayout = Split-ConfigTomlContent -Content $sourceConfigContent
+    $publishedConfigContent = Join-ConfigTomlContent -SharedContent $sourceConfigLayout.SharedContent -NewLine $sourceConfigLayout.NewLine
+    Write-Utf8FileIfDifferent -Path (Join-Path $repoManagedPath 'config.toml') -Content $publishedConfigContent
 }
 
 if ($componentSelection.AgentFile) {

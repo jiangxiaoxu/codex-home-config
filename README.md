@@ -31,10 +31,13 @@ The installer starts with an interactive menu:
 - `Q. Quit`
 
 `Update config` writes into `$HOME/.codex`, installs `managed/config.toml`, installs `managed/AGENTS.md` as `.codex/AGENTS.md`, and replaces `managed/skills/jiangxiaoxu` into `.codex/skills/jiangxiaoxu`.
+During `Update config`, all local `config.toml` `[projects.*]` blocks are preserved on the local machine and are not overwritten by the repository snapshot.
 `Restore config` restores the components contained in the selected local backup snapshot.
+During `Restore config`, the current local `[projects.*]` blocks are still preserved when `config.toml` is installed. If the current target has no `[projects.*]` blocks, the installer falls back to the backup snapshot copy.
 `-Components` accepts `Config`, `AgentFile`, and `Skill`. If omitted, `Update config` still updates all three components.
 `-Components` applies to `Update config` only. `Restore config` uses the selected backup version as-is.
 All backups created during one update run are grouped under `.codex/sync_codex-home-config_backup/<timestamp>/`.
+Local backups still keep the full `config.toml`, including any `[projects.*]` blocks.
 Partial updates back up only the selected components before installation, and `Restore config` restores whatever components exist in the selected backup version.
 After a successful update, the installer keeps only the latest 5 backup versions and moves older ones to the Recycle Bin when possible.
 
@@ -99,6 +102,7 @@ Sync `config.toml` and `AGENTS.md` only:
 
 The sync script requires `pwsh` 7+ as well. If it is started from an older PowerShell host, it relaunches itself in `pwsh.exe` and then continues.
 The sync script uses `$HOME/.codex` as the managed content source and defaults `RepoPath` to the repository root where the script lives.
+When publishing `config.toml`, all `[projects.*]` blocks are stripped from the repository snapshot, so local project trust settings are never committed.
 `-Components` accepts `Config`, `AgentFile`, and `Skill`. If omitted, the sync script still publishes all three managed components.
 The same `-Components` values apply here: `Config` -> `config.toml`, `AgentFile` -> `AGENTS.md`, `Skill` -> `skills/jiangxiaoxu`.
 
