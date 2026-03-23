@@ -50,5 +50,3 @@ hide_full_access_warning = true
 
 [windows]
 sandbox = "elevated"
-
-
