@@ -48,8 +48,5 @@ hide_full_access_warning = true
 "gpt-5.1-codex-mini" = "gpt-5.3-codex"
 
 
-[history]
-max_bytes = 409600000   # 400 MiB
-
 [windows]
 sandbox = "elevated"
