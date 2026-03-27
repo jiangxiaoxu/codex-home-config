@@ -1,9 +1,9 @@
 model = "gpt-5.4"
-model_reasoning_effort = "xhigh"
+model_reasoning_effort = "medium"
 
 sandbox_mode = "danger-full-access"
 
-approval_policy = "on-request"
+approval_policy = "never"
 
 
 suppress_unstable_features_warning = true
@@ -48,7 +48,8 @@ hide_full_access_warning = true
 "gpt-5.1-codex-mini" = "gpt-5.3-codex"
 
 
-
+[history]
+max_bytes = 409600000   # 400 MiB
 
 [windows]
 sandbox = "elevated"
