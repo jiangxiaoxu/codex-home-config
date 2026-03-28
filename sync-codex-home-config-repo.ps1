@@ -14,7 +14,10 @@ param(
 
     [Parameter()]
     [ValidateSet('Config', 'AgentFile', 'Skill')]
-    [string[]]$Components = @('Config', 'AgentFile', 'Skill')
+    [string[]]$Components = @('Config', 'AgentFile', 'Skill'),
+
+    [Parameter(DontShow = $true)]
+    [switch]$SkipInitialPull
 )
 
 function Get-ComponentSelection {
@@ -74,6 +77,11 @@ function Get-PowerShell7Executable {
 }
 
 function Get-RelaunchArgumentList {
+    param(
+        [Parameter()]
+        [switch]$IncludeSkipInitialPull
+    )
+
     $arguments = @('-NoProfile')
     if ($env:OS -eq 'Windows_NT') {
         $arguments += @('-ExecutionPolicy', 'Bypass')
@@ -81,21 +89,44 @@ function Get-RelaunchArgumentList {
 
     $arguments += @('-File', $PSCommandPath)
 
-    foreach ($parameterName in @('SourceCodexPath', 'RepoPath', 'RepoUrl', 'CommitMessage', 'Components')) {
-        if ($PSBoundParameters.ContainsKey($parameterName)) {
-            $arguments += "-$parameterName"
-
-            $parameterValue = $PSBoundParameters[$parameterName]
-            if ($parameterValue -is [System.Array]) {
+    foreach ($parameterName in @('SourceCodexPath', 'RepoPath', 'RepoUrl', 'CommitMessage', 'Components', 'SkipInitialPull')) {
+        if ($script:PSBoundParameters.ContainsKey($parameterName)) {
+            $parameterValue = $script:PSBoundParameters[$parameterName]
+            if ($parameterValue -is [System.Management.Automation.SwitchParameter] -or $parameterValue -is [bool]) {
+                if ([bool]$parameterValue) {
+                    $arguments += "-$parameterName"
+                }
+            }
+            elseif ($parameterValue -is [System.Array]) {
+                $arguments += "-$parameterName"
                 $arguments += @($parameterValue | ForEach-Object { [string]$_ })
             }
             else {
+                $arguments += "-$parameterName"
                 $arguments += [string]$parameterValue
             }
         }
     }
 
+    if ($IncludeSkipInitialPull -and -not $script:PSBoundParameters.ContainsKey('SkipInitialPull')) {
+        $arguments += '-SkipInitialPull'
+    }
+
     return $arguments
+}
+
+function Get-RepoHeadCommit {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RepoPath
+    )
+
+    $headCommit = (& git -C $RepoPath rev-parse HEAD 2>$null).Trim()
+    if (($LASTEXITCODE -ne 0) -and ($LASTEXITCODE -ne 128)) {
+        throw "git rev-parse HEAD failed in $RepoPath"
+    }
+
+    return $headCommit
 }
 
 function Copy-ItemIfDifferentPath {
@@ -348,6 +379,71 @@ if (-not (Test-Path -LiteralPath (Join-Path $RepoPath '.git') -PathType Containe
     throw "Target repo path is not a git repository: $RepoPath"
 }
 
+if ($SkipInitialPull) {
+    $postPullStatusOutput = & git -C $RepoPath status --porcelain
+    if ($LASTEXITCODE -ne 0) {
+        throw "git status failed in $RepoPath"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace(($postPullStatusOutput | Out-String))) {
+        throw "Repository '$RepoPath' has uncommitted changes. Commit or discard them before syncing."
+    }
+}
+else {
+    $preSyncStatusOutput = & git -C $RepoPath status --porcelain
+    if ($LASTEXITCODE -ne 0) {
+        throw "git status failed in $RepoPath"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace(($preSyncStatusOutput | Out-String))) {
+        throw "Repository '$RepoPath' has uncommitted changes. Commit or discard them before syncing."
+    }
+
+    $currentBranch = (& git -C $RepoPath branch --show-current).Trim()
+    if ($LASTEXITCODE -ne 0) {
+        throw "git branch --show-current failed in $RepoPath"
+    }
+
+    if ($currentBranch -ne 'main') {
+        & git -C $RepoPath checkout -B main
+        if ($LASTEXITCODE -ne 0) {
+            throw "git checkout -B main failed in $RepoPath"
+        }
+    }
+
+    & git -C $RepoPath ls-remote --exit-code --heads origin main *> $null
+    $remoteMainCheckExitCode = $LASTEXITCODE
+    if (($remoteMainCheckExitCode -ne 0) -and ($remoteMainCheckExitCode -ne 2)) {
+        throw "git ls-remote failed for origin/main in $RepoPath"
+    }
+
+    if ($remoteMainCheckExitCode -eq 0) {
+        $prePullHead = Get-RepoHeadCommit -RepoPath $RepoPath
+
+        & git -C $RepoPath pull --rebase origin main
+        if ($LASTEXITCODE -ne 0) {
+            throw "git pull --rebase origin main failed in $RepoPath"
+        }
+
+        $postPullHead = Get-RepoHeadCommit -RepoPath $RepoPath
+        if ($prePullHead -ne $postPullHead) {
+            $repoSyncScriptPath = Join-Path $RepoPath 'sync-codex-home-config-repo.ps1'
+            if (-not (Test-Path -LiteralPath $repoSyncScriptPath -PathType Leaf)) {
+                throw "Updated sync script was not found: $repoSyncScriptPath"
+            }
+
+            Write-Output "Repository updated after pull; relaunching latest sync script from $repoSyncScriptPath"
+
+            & $repoSyncScriptPath @(Get-RelaunchArgumentList -IncludeSkipInitialPull)
+            if ($LASTEXITCODE -ne 0) {
+                exit $LASTEXITCODE
+            }
+
+            return
+        }
+    }
+}
+
 $sourceInstallerPath = Join-Path $RepoPath 'install-codex-home-config.ps1'
 
 if (-not [string]::IsNullOrWhiteSpace($PSCommandPath) -and (Test-Path -LiteralPath $PSCommandPath -PathType Leaf)) {
@@ -360,40 +456,6 @@ else {
 foreach ($requiredScriptPath in @($sourceInstallerPath, $sourceSyncScriptPath)) {
     if (-not (Test-Path -LiteralPath $requiredScriptPath -PathType Leaf)) {
         throw "Required script path was not found: $requiredScriptPath"
-    }
-}
-
-$preSyncStatusOutput = & git -C $RepoPath status --porcelain
-if ($LASTEXITCODE -ne 0) {
-    throw "git status failed in $RepoPath"
-}
-
-if (-not [string]::IsNullOrWhiteSpace(($preSyncStatusOutput | Out-String))) {
-    throw "Repository '$RepoPath' has uncommitted changes. Commit or discard them before syncing."
-}
-
-$currentBranch = (& git -C $RepoPath branch --show-current).Trim()
-if ($LASTEXITCODE -ne 0) {
-    throw "git branch --show-current failed in $RepoPath"
-}
-
-if ($currentBranch -ne 'main') {
-    & git -C $RepoPath checkout -B main
-    if ($LASTEXITCODE -ne 0) {
-        throw "git checkout -B main failed in $RepoPath"
-    }
-}
-
-& git -C $RepoPath ls-remote --exit-code --heads origin main *> $null
-$remoteMainCheckExitCode = $LASTEXITCODE
-if (($remoteMainCheckExitCode -ne 0) -and ($remoteMainCheckExitCode -ne 2)) {
-    throw "git ls-remote failed for origin/main in $RepoPath"
-}
-
-if ($remoteMainCheckExitCode -eq 0) {
-    & git -C $RepoPath pull --rebase origin main
-    if ($LASTEXITCODE -ne 0) {
-        throw "git pull --rebase origin main failed in $RepoPath"
     }
 }
 

@@ -102,6 +102,7 @@ Sync `config.toml` and `AGENTS.md` only:
 
 The sync script requires `pwsh` 7+ as well. If it is started from an older PowerShell host, it relaunches itself in `pwsh.exe` and then continues.
 The sync script uses `$HOME/.codex` as the managed content source and defaults `RepoPath` to the repository root where the script lives.
+Before it publishes managed content, the sync script verifies that the repository is clean, pulls `origin/main`, and relaunches itself from the repository copy when that pull updates the local `HEAD`.
 When publishing `config.toml`, all `[projects.*]` blocks are stripped from the repository snapshot, so local project trust settings are never committed.
 `-Components` accepts `Config`, `AgentFile`, and `Skill`. If omitted, the sync script still publishes all three managed components.
 The same `-Components` values apply here: `Config` -> `config.toml`, `AgentFile` -> `AGENTS.md`, `Skill` -> `skills/jiangxiaoxu`.

@@ -11,7 +11,7 @@
 * Prefer the public `-Action Update` one-liner when the user wants a direct update into the default `$HOME\.codex`.
 * When the user asks to sync the current local Codex configuration to GitHub, prefer:
   `.\sync-codex-home-config-repo.ps1`
-* That script treats `$HOME\.codex` as the source of truth, defaults `RepoPath` to the current repository root, relaunches itself in `pwsh` 7+ if needed, checks that the repo is clean, runs `git pull --rebase origin main`, copies the managed files into `managed/`, then commits and pushes.
+* That script treats `$HOME\.codex` as the source of truth, defaults `RepoPath` to the current repository root, relaunches itself in `pwsh` 7+ if needed, checks that the repo is clean, runs `git pull --rebase origin main`, relaunches from the repository copy if that pull updates local `HEAD`, copies the managed files into `managed/`, then commits and pushes.
 * When the user asks to download or install the latest repository content into a local Codex home, prefer:
   `.\install-codex-home-config.ps1`
 * For a custom target directory, use:
