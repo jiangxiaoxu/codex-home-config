@@ -9,7 +9,7 @@ description: lmToolsBridge routing guide for workspace search and VS Code IDE ac
   - Call `lmToolsBridge.requestWorkspaceMCPServer` to bind workspace and validate scope.
   - Follow the returned `guidance` from `requestWorkspaceMCPServer` as binding-specific instructions.
   - Do not use `list_mcp_resources` or `list_mcp_resource_templates` as a routine post-bind step. Only use them for diagnostics, discovery troubleshooting, or explicit visibility checks.
-  - Read `lm-tools://schema/{name}` directly from `lm_tools_bridge` only for tools expected in the current task; otherwise load lazily before first use.
+  - Read `lm-tools://tool/{name}` directly from `lm_tools_bridge` only for tools expected in the current task; otherwise load lazily before first use.
 - Reuse a valid bind across calls; do not handshake again before every tool call.
 - Re-run initialization when the workspace target changes.
 
@@ -24,7 +24,7 @@ flowchart TD
     B --> C[Validate scope]
     C --> D{Request fits vscode-tools scope?}
     D -- No --> E[Use normal assistant behavior]
-    D -- Yes --> F[Read required schema from lm_tools_bridge]
+    D -- Yes --> F[Read required tool definition from lm_tools_bridge]
     F --> G[Choose lmToolsBridge tool]
     G --> H[Build args from inputSchema]
     H --> I[Call tool]
@@ -36,7 +36,7 @@ flowchart TD
 
 1. Bind the workspace and validate scope.
 2. Confirm the request belongs to workspace search, workspace inspection, or VS Code IDE actions handled by vscode-tools.
-3. Read the required `lm-tools://schema/{name}` directly from `lm_tools_bridge`.
+3. Read the required `lm-tools://tool/{name}` directly from `lm_tools_bridge`.
 4. Prefer lmToolsBridge tools before shell fallback for matching requests.
 5. Build arguments strictly from the retrieved `inputSchema` and invoke via `lmToolsBridge.callTool`.
 6. Return the result when the call succeeds and the result is usable.
@@ -64,4 +64,3 @@ flowchart TD
 - Multi-root narrowing: "Search only in `ClientApp/...` for `callTool`" -> use `ClientApp/...` when the user clearly narrows to one root; otherwise keep cross-root scope.
 - VS Code IDE action: "Open the file that defines `qgrepSearch` in VS Code" -> prefer the lmToolsBridge tool that operates on the IDE, not a shell workaround.
 - Outside workspace or failed tool: "Search `D:\\temp\\notes` for `TODO`" -> do not use vscode-tools outside validated roots; label the result as `non-lmToolsBridge scope`, state the exact path, and include the fallback `reason`.
-
