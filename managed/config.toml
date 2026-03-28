@@ -1,5 +1,5 @@
 model = "gpt-5.4"
-model_reasoning_effort = "xhigh"
+model_reasoning_effort = "high"
 
 sandbox_mode = "danger-full-access"
 
@@ -30,7 +30,6 @@ enabled = false
 [features]
 runtime_metrics = true
 guardian_approval = true
-js_repl = true
 apps = false
 
 unified_exec = true
