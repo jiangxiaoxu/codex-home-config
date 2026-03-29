@@ -16,6 +16,10 @@ plan_mode_reasoning_effort = "xhigh"
 approvals_reviewer = "guardian_subagent"
 service_tier = "fast"
 
+developer_instructions = """
+If AGENTS.md or another active user-scoped instruction file explicitly requires, authorizes, or directs the use of spawn_agent, treat that as the user explicitly asking for sub-agents, delegation, or parallel agent work.
+"""
+
 [mcp_servers.lm_tools_bridge]
 command = "powershell.exe"
 args = ["-NoProfile", "-Command", 'node "$env:LOCALAPPDATA\lm-tools-bridge\stdioManager.js"']
