@@ -23,8 +23,6 @@ tool_timeout_sec = 120.0
 
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"
-enabled = false
-
 
 
 [features]
