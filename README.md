@@ -4,7 +4,7 @@ Public Codex home configuration for the installable content under `managed/` and
 
 ## Install
 
-Copy and run one of these in PowerShell.
+Copy and run one of these in PowerShell. `Node.js 18+` is required for both install and restore because `config.toml` is merged through the repository Node helper. The published installer zip already includes the TOML runtime files, so online install does not need a separate `npm install`.
 
 Interactive install menu:
 
@@ -31,13 +31,13 @@ The installer starts with an interactive menu:
 - `Q. Quit`
 
 `Update config` writes into `$HOME/.codex`, installs `managed/config.toml`, installs `managed/AGENTS.md` as `.codex/AGENTS.md`, and replaces `managed/skills/jiangxiaoxu` into `.codex/skills/jiangxiaoxu`.
-During `Update config`, all local `config.toml` `[projects.*]` blocks are preserved on the local machine and are not overwritten by the repository snapshot.
+During `Update config`, the installer performs a structured TOML merge. Repository-managed top-level scalars and top-level tables replace the local values, unmanaged local paths are preserved, and the local `projects` table is always kept as-is.
 `Restore config` restores the components contained in the selected local backup snapshot.
-During `Restore config`, the current local `[projects.*]` blocks are still preserved when `config.toml` is installed. If the current target has no `[projects.*]` blocks, the installer falls back to the backup snapshot copy.
+During `Restore config`, `config.toml` uses the same structured TOML merge. Backup-managed top-level scalars and top-level tables replace the current local values, unmanaged local paths are preserved, and the current local `projects` table is still kept as-is.
 `-Components` accepts `Config`, `AgentFile`, and `Skill`. If omitted, `Update config` still updates all three components.
-`-Components` applies to `Update config` only. `Restore config` uses the selected backup version as-is.
+`-Components` applies to `Update config` only. `Restore config` restores the components that exist in the selected backup version.
 All backups created during one update run are grouped under `.codex/sync_codex-home-config_backup/<timestamp>/`.
-Local backups still keep the full `config.toml`, including any `[projects.*]` blocks.
+Local backups still keep the full `config.toml`, including any `projects` entries.
 Partial updates back up only the selected components before installation, and `Restore config` restores whatever components exist in the selected backup version.
 After a successful update, the installer keeps only the latest 5 backup versions and moves older ones to the Recycle Bin when possible.
 
@@ -100,12 +100,28 @@ Sync `config.toml` and `AGENTS.md` only:
 .\sync-codex-home-config-repo.ps1 -Components Config,AgentFile
 ```
 
-The sync script requires `pwsh` 7+ as well. If it is started from an older PowerShell host, it relaunches itself in `pwsh.exe` and then continues.
+The sync script requires `pwsh` 7+ and `Node.js 18+`. If it is started from an older PowerShell host, it relaunches itself in `pwsh.exe` and then continues.
 The sync script uses `$HOME/.codex` as the managed content source and defaults `RepoPath` to the repository root where the script lives.
 Before it publishes managed content, the sync script verifies that the repository is clean, pulls `origin/main`, and relaunches itself from the repository copy when that pull updates the local `HEAD`.
-When publishing `config.toml`, all `[projects.*]` blocks are stripped from the repository snapshot, so local project trust settings are never committed.
+When publishing `config.toml`, the sync script uses the current `managed/config.toml` top-level keys as the allowlist. Only those managed paths are copied from the local Codex home, the local `projects` table is never committed, and the top-level keys `model` plus `model_reasoning_effort` are always excluded from sync.
 `-Components` accepts `Config`, `AgentFile`, and `Skill`. If omitted, the sync script still publishes all three managed components.
 The same `-Components` values apply here: `Config` -> `config.toml`, `AgentFile` -> `AGENTS.md`, `Skill` -> `skills/jiangxiaoxu`.
+
+## Development
+
+Install dependencies and run the TOML helper tests:
+
+```powershell
+npm install
+npm test
+```
+
+The Node helper provides these explicit interfaces:
+
+```powershell
+node .\tools\config-toml-ops.cjs merge-install --source <path> --target <path> --output <path>
+node .\tools\config-toml-ops.cjs publish-sync --local <path> --managed <path> --output <path>
+```
 
 If you are using Codex inside this repository, the repository root `AGENTS.md` contains the preferred workflow for:
 

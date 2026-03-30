@@ -24,6 +24,11 @@ $maxBackupVersions = 5
 $backupState = [pscustomobject]@{
     SessionPath = ''
 }
+$runtimeState = [pscustomobject]@{
+    SupportRepositoryRoot = ''
+    SupportTempRoot       = ''
+    NodeExecutable        = ''
+}
 
 function Get-ComponentSelection {
     param(
@@ -89,6 +94,147 @@ function Get-ApiErrorMessage {
     }
 
     return $ErrorRecord.ToString().Trim()
+}
+
+function Get-NodeExecutable {
+    if (-not [string]::IsNullOrWhiteSpace($runtimeState.NodeExecutable)) {
+        return $runtimeState.NodeExecutable
+    }
+
+    $candidatePaths = [System.Collections.Generic.List[string]]::new()
+    $nodeCommand = Get-Command node -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -ne $nodeCommand) {
+        foreach ($propertyName in @('Source', 'Path')) {
+            $property = $nodeCommand.PSObject.Properties[$propertyName]
+            if ($null -ne $property -and -not [string]::IsNullOrWhiteSpace($property.Value)) {
+                $candidatePaths.Add($property.Value)
+            }
+        }
+    }
+
+    $defaultNodePath = Join-Path $env:ProgramFiles 'nodejs\node.exe'
+    if (-not [string]::IsNullOrWhiteSpace($defaultNodePath)) {
+        $candidatePaths.Add($defaultNodePath)
+    }
+
+    foreach ($candidatePath in @($candidatePaths | Select-Object -Unique)) {
+        if (Test-Path -LiteralPath $candidatePath -PathType Leaf) {
+            $runtimeState.NodeExecutable = $candidatePath
+            return $candidatePath
+        }
+    }
+
+    return $null
+}
+
+function Assert-NodeEnvironment {
+    $nodeExecutable = Get-NodeExecutable
+    if ([string]::IsNullOrWhiteSpace($nodeExecutable)) {
+        throw 'Node.js 18 or later is required. Install Node.js from https://nodejs.org/ and retry.'
+    }
+
+    $versionText = (& $nodeExecutable --version 2>$null | Out-String).Trim()
+    $versionMatch = [regex]::Match($versionText, '^v?(?<major>\d+)')
+    if (-not $versionMatch.Success -or [int]$versionMatch.Groups['major'].Value -lt 18) {
+        throw "Node.js 18 or later is required. Found: $versionText"
+    }
+
+    $runtimeState.NodeExecutable = $nodeExecutable
+    return $nodeExecutable
+}
+
+function Get-RepositorySupportRoot {
+    if (-not [string]::IsNullOrWhiteSpace($runtimeState.SupportRepositoryRoot)) {
+        return $runtimeState.SupportRepositoryRoot
+    }
+
+    $candidateRoots = [System.Collections.Generic.List[string]]::new()
+    foreach ($candidateRoot in @($PSScriptRoot, $(if (-not [string]::IsNullOrWhiteSpace($PSCommandPath)) { Split-Path -Parent $PSCommandPath }))) {
+        if ([string]::IsNullOrWhiteSpace($candidateRoot)) {
+            continue
+        }
+
+        $candidateRoots.Add($candidateRoot)
+    }
+
+    foreach ($candidateRoot in @($candidateRoots | Select-Object -Unique)) {
+        $toolPath = Join-Path $candidateRoot 'tools\config-toml-ops.cjs'
+        if (Test-Path -LiteralPath $toolPath -PathType Leaf) {
+            $runtimeState.SupportRepositoryRoot = $candidateRoot
+            return $candidateRoot
+        }
+    }
+
+    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-home-config-support-" + [guid]::NewGuid().ToString('N'))
+    $archivePath = Join-Path $tempRoot 'codex-home-config.zip'
+    $extractPath = Join-Path $tempRoot 'extract'
+    $null = New-Item -ItemType Directory -Path $tempRoot -Force
+
+    try {
+        Invoke-ArchiveDownload -Uri $archiveUri -OutFile $archivePath
+        Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
+
+        $repositoryPath = Get-ExtractedRepositoryPath -ExtractPath $extractPath
+        $toolPath = Join-Path $repositoryPath 'tools\config-toml-ops.cjs'
+        if (-not (Test-Path -LiteralPath $toolPath -PathType Leaf)) {
+            throw "Repository support file was not found: $toolPath"
+        }
+
+        $runtimeState.SupportRepositoryRoot = $repositoryPath
+        $runtimeState.SupportTempRoot = $tempRoot
+        return $repositoryPath
+    }
+    catch {
+        Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+        throw
+    }
+}
+
+function Get-ConfigTomlToolPath {
+    $supportRoot = Get-RepositorySupportRoot
+    $toolPath = Join-Path $supportRoot 'tools\config-toml-ops.cjs'
+    if (-not (Test-Path -LiteralPath $toolPath -PathType Leaf)) {
+        throw "Config TOML helper was not found: $toolPath"
+    }
+
+    return $toolPath
+}
+
+function Invoke-ConfigTomlTool {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Command,
+
+        [Parameter(Mandatory)]
+        [hashtable]$Arguments
+    )
+
+    $nodeExecutable = Assert-NodeEnvironment
+    $toolPath = Get-ConfigTomlToolPath
+    $argumentList = @($toolPath, $Command)
+    foreach ($argumentName in $Arguments.Keys) {
+        $argumentList += "--$argumentName"
+        $argumentList += [string]$Arguments[$argumentName]
+    }
+
+    & $nodeExecutable @argumentList
+    if ($LASTEXITCODE -ne 0) {
+        throw "Config TOML helper command failed: $Command"
+    }
+}
+
+function Remove-RepositorySupportTempRoot {
+    [CmdletBinding(SupportsShouldProcess)]
+    param()
+
+    if (-not [string]::IsNullOrWhiteSpace($runtimeState.SupportTempRoot) -and (Test-Path -LiteralPath $runtimeState.SupportTempRoot -PathType Container)) {
+        if ($PSCmdlet.ShouldProcess($runtimeState.SupportTempRoot, 'Remove temporary repository support files')) {
+            Remove-Item -LiteralPath $runtimeState.SupportTempRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    $runtimeState.SupportRepositoryRoot = ''
+    $runtimeState.SupportTempRoot = ''
 }
 
 function Invoke-ArchiveDownload {
@@ -368,26 +514,15 @@ function Install-ConfigFile {
         [string]$DestinationPath
     )
 
-    $sourceContent = [System.IO.File]::ReadAllText($SourcePath)
-    $sourceLayout = Split-ConfigTomlContent -Content $sourceContent
-    $localOnlyContent = ''
-
     if (Test-Path -LiteralPath $DestinationPath -PathType Container) {
         throw "Expected file path but found a directory: $DestinationPath"
     }
 
-    if (Test-Path -LiteralPath $DestinationPath -PathType Leaf) {
-        $destinationContent = [System.IO.File]::ReadAllText($DestinationPath)
-        $destinationLayout = Split-ConfigTomlContent -Content $destinationContent
-        $localOnlyContent = $destinationLayout.LocalOnlyContent
+    Invoke-ConfigTomlTool -Command 'merge-install' -Arguments @{
+        source = $SourcePath
+        target = $DestinationPath
+        output = $DestinationPath
     }
-
-    if ([string]::IsNullOrWhiteSpace($localOnlyContent)) {
-        $localOnlyContent = $sourceLayout.LocalOnlyContent
-    }
-
-    $mergedContent = Join-ConfigTomlContent -SharedContent $sourceLayout.SharedContent -LocalOnlyContent $localOnlyContent -NewLine $sourceLayout.NewLine
-    Write-Utf8File -Path $DestinationPath -Content $mergedContent
 }
 
 function Get-ExtractedRepositoryPath {
@@ -685,25 +820,12 @@ function Invoke-UpdateAction {
         [string[]]$SelectedComponents
     )
 
-    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-home-config-" + [guid]::NewGuid().ToString('N'))
-    $archivePath = Join-Path $tempRoot 'codex-home-config.zip'
-    $extractPath = Join-Path $tempRoot 'extract'
-    $null = New-Item -ItemType Directory -Path $tempRoot -Force
-
-    try {
-        Invoke-ArchiveDownload -Uri $archiveUri -OutFile $archivePath
-        Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
-
-        $repositoryPath = Get-ExtractedRepositoryPath -ExtractPath $extractPath
-        $managedPath = Join-Path $repositoryPath 'managed'
-        $snapshotInfo = Get-SnapshotInfo -RootPath $managedPath -Name 'repository'
-        Assert-SnapshotInfo -SnapshotInfo $snapshotInfo -SnapshotLabel 'Repository snapshot' -SelectedComponents $SelectedComponents
-        Install-Snapshot -SnapshotInfo $snapshotInfo -SelectedComponents $SelectedComponents -CreateBackup
-        Remove-OldBackupVersion
-    }
-    finally {
-        Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
-    }
+    $repositoryPath = Get-RepositorySupportRoot
+    $managedPath = Join-Path $repositoryPath 'managed'
+    $snapshotInfo = Get-SnapshotInfo -RootPath $managedPath -Name 'repository'
+    Assert-SnapshotInfo -SnapshotInfo $snapshotInfo -SnapshotLabel 'Repository snapshot' -SelectedComponents $SelectedComponents
+    Install-Snapshot -SnapshotInfo $snapshotInfo -SelectedComponents $SelectedComponents -CreateBackup
+    Remove-OldBackupVersion
 }
 
 function Invoke-RestoreAction {
@@ -726,6 +848,7 @@ if (Test-Path -LiteralPath $TargetCodexPath -PathType Leaf) {
     throw "Target path '$TargetCodexPath' points to a file."
 }
 
+$null = Assert-NodeEnvironment
 $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
 
 $selectedAction = $Action
@@ -733,9 +856,14 @@ if ($selectedAction -eq 'Prompt') {
     $selectedAction = Select-MainAction
 }
 
-switch ($selectedAction) {
-    'Update' { Invoke-UpdateAction -SelectedComponents $Components }
-    'Restore' { Invoke-RestoreAction }
-    'Quit' { Write-Output 'Operation cancelled.' }
-    default { throw "Unexpected action selection: $selectedAction" }
+try {
+    switch ($selectedAction) {
+        'Update' { Invoke-UpdateAction -SelectedComponents $Components }
+        'Restore' { Invoke-RestoreAction }
+        'Quit' { Write-Output 'Operation cancelled.' }
+        default { throw "Unexpected action selection: $selectedAction" }
+    }
+}
+finally {
+    Remove-RepositorySupportTempRoot
 }

@@ -1,0 +1,17 @@
+{
+  "name": "codex-home-config",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "esbuild tools/config-toml-ops.source.cjs --bundle --platform=node --format=cjs --target=node18 --outfile=tools/config-toml-ops.cjs",
+    "test": "npm run build && node --test"
+  },
+  "devDependencies": {
+    "@iarna/toml": "2.2.5",
+    "esbuild": "0.25.2"
+  }
+}

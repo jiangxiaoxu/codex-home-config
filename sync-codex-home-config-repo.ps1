@@ -115,6 +115,88 @@ function Get-RelaunchArgumentList {
     return $arguments
 }
 
+function Get-NodeExecutable {
+    $candidatePaths = [System.Collections.Generic.List[string]]::new()
+
+    $nodeCommand = Get-Command node -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -ne $nodeCommand) {
+        foreach ($propertyName in @('Source', 'Path')) {
+            $property = $nodeCommand.PSObject.Properties[$propertyName]
+            if ($null -ne $property -and -not [string]::IsNullOrWhiteSpace($property.Value)) {
+                $candidatePaths.Add($property.Value)
+            }
+        }
+    }
+
+    $defaultNodePath = Join-Path $env:ProgramFiles 'nodejs\node.exe'
+    if (-not [string]::IsNullOrWhiteSpace($defaultNodePath)) {
+        $candidatePaths.Add($defaultNodePath)
+    }
+
+    foreach ($candidatePath in @($candidatePaths | Select-Object -Unique)) {
+        if (Test-Path -LiteralPath $candidatePath -PathType Leaf) {
+            return $candidatePath
+        }
+    }
+
+    return $null
+}
+
+function Assert-NodeEnvironment {
+    $nodeExecutable = Get-NodeExecutable
+    if ([string]::IsNullOrWhiteSpace($nodeExecutable)) {
+        throw 'Node.js 18 or later is required. Install Node.js from https://nodejs.org/ and retry.'
+    }
+
+    $versionText = (& $nodeExecutable --version 2>$null | Out-String).Trim()
+    $versionMatch = [regex]::Match($versionText, '^v?(?<major>\d+)')
+    if (-not $versionMatch.Success -or [int]$versionMatch.Groups['major'].Value -lt 18) {
+        throw "Node.js 18 or later is required. Found: $versionText"
+    }
+
+    return $nodeExecutable
+}
+
+function Get-ConfigTomlToolPath {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RepositoryPath
+    )
+
+    $toolPath = Join-Path $RepositoryPath 'tools\config-toml-ops.cjs'
+    if (-not (Test-Path -LiteralPath $toolPath -PathType Leaf)) {
+        throw "Config TOML helper was not found: $toolPath"
+    }
+
+    return $toolPath
+}
+
+function Invoke-ConfigTomlTool {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RepositoryPath,
+
+        [Parameter(Mandatory)]
+        [string]$Command,
+
+        [Parameter(Mandatory)]
+        [hashtable]$Arguments
+    )
+
+    $nodeExecutable = Assert-NodeEnvironment
+    $toolPath = Get-ConfigTomlToolPath -RepositoryPath $RepositoryPath
+    $argumentList = @($toolPath, $Command)
+    foreach ($argumentName in $Arguments.Keys) {
+        $argumentList += "--$argumentName"
+        $argumentList += [string]$Arguments[$argumentName]
+    }
+
+    & $nodeExecutable @argumentList
+    if ($LASTEXITCODE -ne 0) {
+        throw "Config TOML helper command failed: $Command"
+    }
+}
+
 function Get-RepoHeadCommit {
     param(
         [Parameter(Mandatory)]
@@ -343,6 +425,7 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$null = Assert-NodeEnvironment
 
 if ([string]::IsNullOrWhiteSpace($RepoPath)) {
     if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
@@ -464,10 +547,12 @@ Copy-ItemIfDifferentPath -SourcePath $sourceInstallerPath -DestinationPath (Join
 $repoManagedPath = Join-Path $RepoPath 'managed'
 $null = New-Item -ItemType Directory -Path $repoManagedPath -Force
 if ($componentSelection.Config) {
-    $sourceConfigContent = [System.IO.File]::ReadAllText($sourceConfigPath)
-    $sourceConfigLayout = Split-ConfigTomlContent -Content $sourceConfigContent
-    $publishedConfigContent = Join-ConfigTomlContent -SharedContent $sourceConfigLayout.SharedContent -NewLine $sourceConfigLayout.NewLine
-    Write-Utf8FileIfDifferent -Path (Join-Path $repoManagedPath 'config.toml') -Content $publishedConfigContent
+    $managedConfigPath = Join-Path $repoManagedPath 'config.toml'
+    Invoke-ConfigTomlTool -RepositoryPath $RepoPath -Command 'publish-sync' -Arguments @{
+        local   = $sourceConfigPath
+        managed = $managedConfigPath
+        output  = $managedConfigPath
+    }
 }
 
 if ($componentSelection.AgentFile) {
