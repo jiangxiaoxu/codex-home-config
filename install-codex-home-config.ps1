@@ -30,6 +30,15 @@ $runtimeState = [pscustomobject]@{
     NodeExecutable        = ''
 }
 
+function Write-StageMessage {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Message
+    )
+
+    Write-Information "[codex-home-config] $Message" -InformationAction Continue
+}
+
 function Get-ComponentSelection {
     param(
         [Parameter(Mandatory)]
@@ -128,6 +137,7 @@ function Get-NodeExecutable {
 }
 
 function Assert-NodeEnvironment {
+    Write-StageMessage 'Checking Node.js runtime...'
     $nodeExecutable = Get-NodeExecutable
     if ([string]::IsNullOrWhiteSpace($nodeExecutable)) {
         throw 'Node.js 18 or later is required. Install Node.js from https://nodejs.org/ and retry.'
@@ -140,6 +150,7 @@ function Assert-NodeEnvironment {
     }
 
     $runtimeState.NodeExecutable = $nodeExecutable
+    Write-StageMessage "Using Node.js runtime: $versionText"
     return $nodeExecutable
 }
 
@@ -171,7 +182,9 @@ function Get-RepositorySupportRoot {
     $null = New-Item -ItemType Directory -Path $tempRoot -Force
 
     try {
+        Write-StageMessage 'Downloading repository snapshot...'
         Invoke-ArchiveDownload -Uri $archiveUri -OutFile $archivePath
+        Write-StageMessage 'Extracting repository snapshot...'
         Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
 
         $repositoryPath = Get-ExtractedRepositoryPath -ExtractPath $extractPath
@@ -182,6 +195,7 @@ function Get-RepositorySupportRoot {
 
         $runtimeState.SupportRepositoryRoot = $repositoryPath
         $runtimeState.SupportTempRoot = $tempRoot
+        Write-StageMessage 'Loaded repository support files.'
         return $repositoryPath
     }
     catch {
@@ -746,6 +760,7 @@ function Install-Snapshot {
             throw "Expected file path but found a directory: $destinationPath"
         }
 
+        Write-StageMessage "Installing $($fileInfo.Name)..."
         if ($fileInfo.Component -eq 'Config') {
             Install-ConfigFile -SourcePath $fileInfo.SourcePath -DestinationPath $destinationPath
         }
@@ -771,6 +786,7 @@ function Install-Snapshot {
         Remove-Item -LiteralPath $targetSkillPath -Recurse -Force
     }
 
+    Write-StageMessage 'Installing skills...'
     Copy-Item -LiteralPath $SnapshotInfo.SkillPath -Destination $targetSkillsParentPath -Recurse -Force
     Write-Output "Installed skills to $targetSkillPath"
 }
@@ -820,15 +836,18 @@ function Invoke-UpdateAction {
         [string[]]$SelectedComponents
     )
 
+    Write-StageMessage 'Preparing repository snapshot...'
     $repositoryPath = Get-RepositorySupportRoot
     $managedPath = Join-Path $repositoryPath 'managed'
     $snapshotInfo = Get-SnapshotInfo -RootPath $managedPath -Name 'repository'
     Assert-SnapshotInfo -SnapshotInfo $snapshotInfo -SnapshotLabel 'Repository snapshot' -SelectedComponents $SelectedComponents
+    Write-StageMessage 'Installing selected components...'
     Install-Snapshot -SnapshotInfo $snapshotInfo -SelectedComponents $SelectedComponents -CreateBackup
     Remove-OldBackupVersion
 }
 
 function Invoke-RestoreAction {
+    Write-StageMessage 'Loading backup list...'
     $snapshotInfo = Select-BackupSnapshot
     if ($null -eq $snapshotInfo) {
         Write-Output 'Restore cancelled.'
@@ -840,6 +859,7 @@ function Invoke-RestoreAction {
         throw "Backup version '$($snapshotInfo.Name)' is empty."
     }
 
+    Write-StageMessage "Restoring backup version: $($snapshotInfo.Name)"
     Install-Snapshot -SnapshotInfo $snapshotInfo -SelectedComponents $availableComponents
     Write-Output "Restored backup version: $($snapshotInfo.Name)"
 }
