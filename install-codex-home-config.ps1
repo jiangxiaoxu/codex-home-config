@@ -28,6 +28,7 @@ $runtimeState = [pscustomobject]@{
     SupportRepositoryRoot = ''
     SupportTempRoot       = ''
     NodeExecutable        = ''
+    NodeVersionText       = ''
 }
 
 function Write-StageMessage {
@@ -137,6 +138,10 @@ function Get-NodeExecutable {
 }
 
 function Assert-NodeEnvironment {
+    if (-not [string]::IsNullOrWhiteSpace($runtimeState.NodeExecutable) -and -not [string]::IsNullOrWhiteSpace($runtimeState.NodeVersionText)) {
+        return $runtimeState.NodeExecutable
+    }
+
     Write-StageMessage 'Checking Node.js runtime...'
     $nodeExecutable = Get-NodeExecutable
     if ([string]::IsNullOrWhiteSpace($nodeExecutable)) {
@@ -150,6 +155,7 @@ function Assert-NodeEnvironment {
     }
 
     $runtimeState.NodeExecutable = $nodeExecutable
+    $runtimeState.NodeVersionText = $versionText
     Write-StageMessage "Using Node.js runtime: $versionText"
     return $nodeExecutable
 }
