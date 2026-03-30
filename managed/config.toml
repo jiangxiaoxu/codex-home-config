@@ -1,49 +1,41 @@
-model = "gpt-5.4"
-model_reasoning_effort = "medium"
-
 sandbox_mode = "danger-full-access"
-
 approval_policy = "never"
-
-
 suppress_unstable_features_warning = true
-
-web_search = "live"  
+web_search = "live"
 personality = "pragmatic"
-
-background_terminal_max_timeout = 1800000
+background_terminal_max_timeout = 1_800_000
 plan_mode_reasoning_effort = "xhigh"
 approvals_reviewer = "guardian_subagent"
 service_tier = "fast"
 
 [mcp_servers.lm_tools_bridge]
 command = "powershell.exe"
-args = ["-NoProfile", "-Command", 'node "$env:LOCALAPPDATA\lm-tools-bridge\stdioManager.js"']
-tool_timeout_sec = 120.0
+args = [
+  "-NoProfile",
+  "-Command",
+  "node \"$env:LOCALAPPDATA\\lm-tools-bridge\\stdioManager.js\""
+]
+tool_timeout_sec = 120
 
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"
-
 
 [features]
 runtime_metrics = true
 guardian_approval = true
 apps = false
-
 unified_exec = true
 default_mode_request_user_input = true
 
 [sandbox_workspace_write]
 network_access = true
 
-
 [notice]
 hide_full_access_warning = true
 
-[notice.model_migrations]
-"gpt-5.1-codex-max" = "gpt-5.3-codex"
-"gpt-5.1-codex-mini" = "gpt-5.3-codex"
-
+  [notice.model_migrations]
+  "gpt-5.1-codex-max" = "gpt-5.3-codex"
+  "gpt-5.1-codex-mini" = "gpt-5.3-codex"
 
 [windows]
 sandbox = "elevated"
