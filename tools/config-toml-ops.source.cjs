@@ -10,6 +10,12 @@ const syncExcludedTopLevelKeys = new Set([
   'model',
   'model_reasoning_effort'
 ])
+const installRemovedNestedPaths = [
+  ['notice', 'model_migrations']
+]
+const syncExcludedNestedPaths = [
+  ['notice', 'model_migrations']
+]
 
 function hasOwn (object, key) {
   return Object.prototype.hasOwnProperty.call(object, key)
@@ -96,6 +102,7 @@ function buildMergeInstallConfig (sourceConfig, targetConfig) {
     mergedConfig.projects = targetConfig.projects
   }
 
+  removeNestedPaths(mergedConfig, installRemovedNestedPaths)
   return mergedConfig
 }
 
@@ -110,7 +117,60 @@ function buildPublishedSyncConfig (localConfig, managedConfig) {
     publishedConfig[key] = localConfig[key]
   }
 
+  removeNestedPaths(publishedConfig, syncExcludedNestedPaths)
   return publishedConfig
+}
+
+function removeNestedPaths (config, nestedPaths) {
+  for (const pathSegments of nestedPaths) {
+    removeNestedPath(config, pathSegments)
+  }
+}
+
+function removeNestedPath (config, pathSegments) {
+  if (pathSegments.length === 0) {
+    return
+  }
+
+  const [topLevelKey, ...restPath] = pathSegments
+  if (!hasOwn(config, topLevelKey) || restPath.length === 0) {
+    return
+  }
+
+  if (config[topLevelKey] === null || typeof config[topLevelKey] !== 'object') {
+    return
+  }
+
+  removeNestedPathFromObject(config, config[topLevelKey], topLevelKey, restPath)
+}
+
+function removeNestedPathFromObject (rootConfig, currentValue, currentKey, remainingPath) {
+  if (remainingPath.length === 0) {
+    return
+  }
+
+  const [nextKey, ...restPath] = remainingPath
+  if (!hasOwn(currentValue, nextKey)) {
+    return
+  }
+
+  if (restPath.length === 0) {
+    delete currentValue[nextKey]
+  } else {
+    const nextValue = currentValue[nextKey]
+    if (nextValue === null || typeof nextValue !== 'object') {
+      return
+    }
+
+    removeNestedPathFromObject(rootConfig, nextValue, nextKey, restPath)
+    if (Object.keys(nextValue).length === 0) {
+      delete currentValue[nextKey]
+    }
+  }
+
+  if (Object.keys(currentValue).length === 0) {
+    delete rootConfig[currentKey]
+  }
 }
 
 function mergeInstallConfig ({ sourcePath, targetPath, outputPath }) {
@@ -166,6 +226,8 @@ module.exports = {
   mergeInstallConfig,
   parseArguments,
   publishSyncConfig,
+  installRemovedNestedPaths,
+  syncExcludedNestedPaths,
   syncExcludedTopLevelKeys
 }
 

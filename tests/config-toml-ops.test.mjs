@@ -71,7 +71,36 @@ test('merge-install replaces managed tables, preserves unmanaged keys, and keeps
   );
 });
 
-test('publish-sync only emits managed allowlist keys and skips projects', () => {
+test('merge-install always removes notice.model_migrations from the installed result', () => {
+  const sourceConfig = {
+    features: {
+      runtime_metrics: true
+    }
+  };
+
+  const targetConfig = {
+    notice: {
+      hide_full_access_warning: true,
+      model_migrations: {
+        'gpt-5.1-codex-max': 'gpt-5.3-codex'
+      }
+    }
+  };
+
+  assert.deepStrictEqual(
+    buildMergeInstallConfig(sourceConfig, targetConfig),
+    {
+      features: {
+        runtime_metrics: true
+      },
+      notice: {
+        hide_full_access_warning: true
+      }
+    }
+  );
+});
+
+test('publish-sync only emits managed allowlist keys and skips projects plus notice.model_migrations', () => {
   const localConfig = {
     model: 'gpt-5.4',
     model_reasoning_effort: 'medium',
@@ -120,10 +149,7 @@ test('publish-sync only emits managed allowlist keys and skips projects', () => 
         guardian_approval: false
       },
       notice: {
-        hide_full_access_warning: true,
-        model_migrations: {
-          'gpt-5.1-codex-max': 'gpt-5.3-codex'
-        }
+        hide_full_access_warning: true
       }
     }
   );
@@ -254,17 +280,14 @@ test('publish-sync CLI drops managed keys that are missing locally', () => {
           runtime_metrics: true
         },
         notice: {
-          hide_full_access_warning: true,
-          model_migrations: {
-            'gpt-5.1-codex-max': 'gpt-5.3-codex'
-          }
+          hide_full_access_warning: true
         }
       }
     );
   });
 });
 
-test('publish-sync always excludes model keys even when they are in the managed allowlist', () => {
+test('publish-sync always excludes model keys and notice.model_migrations when they are in the managed allowlist', () => {
   const localConfig = {
     model: 'gpt-5.4',
     model_reasoning_effort: 'medium',
@@ -300,10 +323,7 @@ test('publish-sync always excludes model keys even when they are in the managed 
     {
       service_tier: 'fast',
       notice: {
-        hide_full_access_warning: true,
-        model_migrations: {
-          'gpt-5.1-codex-max': 'gpt-5.3-codex'
-        }
+        hide_full_access_warning: true
       },
       windows: {
         sandbox: 'elevated'
