@@ -7,8 +7,12 @@ const TOML = require('@iarna/toml')
 
 const minimumNodeMajorVersion = 18
 const syncExcludedTopLevelKeys = new Set([
+  'agents',
   'model',
   'model_reasoning_effort'
+])
+const installRemovedTopLevelKeys = new Set([
+  'agents'
 ])
 const installRemovedNestedPaths = [
   ['notice', 'model_migrations']
@@ -83,7 +87,7 @@ function buildMergeInstallConfig (sourceConfig, targetConfig) {
   const mergedConfig = {}
 
   for (const key of Object.keys(sourceConfig)) {
-    if (key === 'projects') {
+    if (key === 'projects' || installRemovedTopLevelKeys.has(key)) {
       continue
     }
 
@@ -91,7 +95,7 @@ function buildMergeInstallConfig (sourceConfig, targetConfig) {
   }
 
   for (const key of Object.keys(targetConfig)) {
-    if (key === 'projects' || hasOwn(sourceConfig, key)) {
+    if (key === 'projects' || installRemovedTopLevelKeys.has(key) || hasOwn(sourceConfig, key)) {
       continue
     }
 
@@ -226,6 +230,7 @@ module.exports = {
   mergeInstallConfig,
   parseArguments,
   publishSyncConfig,
+  installRemovedTopLevelKeys,
   installRemovedNestedPaths,
   syncExcludedNestedPaths,
   syncExcludedTopLevelKeys

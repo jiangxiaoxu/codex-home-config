@@ -100,10 +100,46 @@ test('merge-install always removes notice.model_migrations from the installed re
   );
 });
 
+test('merge-install always removes the local agents table from the installed result', () => {
+  const sourceConfig = {
+    features: {
+      runtime_metrics: true
+    }
+  };
+
+  const targetConfig = {
+    agents: {
+      reviewer: {
+        model: 'gpt-5.4'
+      }
+    },
+    windows: {
+      sandbox: 'elevated'
+    }
+  };
+
+  assert.deepStrictEqual(
+    buildMergeInstallConfig(sourceConfig, targetConfig),
+    {
+      features: {
+        runtime_metrics: true
+      },
+      windows: {
+        sandbox: 'elevated'
+      }
+    }
+  );
+});
+
 test('publish-sync only emits managed allowlist keys and skips projects plus notice.model_migrations', () => {
   const localConfig = {
     model: 'gpt-5.4',
     model_reasoning_effort: 'medium',
+    agents: {
+      reviewer: {
+        model: 'gpt-5.4'
+      }
+    },
     features: {
       runtime_metrics: true,
       guardian_approval: false
@@ -291,6 +327,11 @@ test('publish-sync always excludes model keys and notice.model_migrations when t
   const localConfig = {
     model: 'gpt-5.4',
     model_reasoning_effort: 'medium',
+    agents: {
+      reviewer: {
+        model: 'gpt-5.4'
+      }
+    },
     service_tier: 'fast',
     notice: {
       hide_full_access_warning: true,
@@ -304,6 +345,11 @@ test('publish-sync always excludes model keys and notice.model_migrations when t
   };
 
   const managedConfig = {
+    agents: {
+      reviewer: {
+        model: 'gpt-5.3-codex'
+      }
+    },
     model: 'gpt-5.3-codex',
     model_reasoning_effort: 'high',
     service_tier: 'default',

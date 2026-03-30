@@ -2006,8 +2006,12 @@ var process = require("node:process");
 var TOML = require_toml();
 var minimumNodeMajorVersion = 18;
 var syncExcludedTopLevelKeys = /* @__PURE__ */ new Set([
+  "agents",
   "model",
   "model_reasoning_effort"
+]);
+var installRemovedTopLevelKeys = /* @__PURE__ */ new Set([
+  "agents"
 ]);
 var installRemovedNestedPaths = [
   ["notice", "model_migrations"]
@@ -2069,13 +2073,13 @@ function writeTomlFile(filePath, value) {
 function buildMergeInstallConfig(sourceConfig, targetConfig) {
   const mergedConfig = {};
   for (const key of Object.keys(sourceConfig)) {
-    if (key === "projects") {
+    if (key === "projects" || installRemovedTopLevelKeys.has(key)) {
       continue;
     }
     mergedConfig[key] = sourceConfig[key];
   }
   for (const key of Object.keys(targetConfig)) {
-    if (key === "projects" || hasOwn(sourceConfig, key)) {
+    if (key === "projects" || installRemovedTopLevelKeys.has(key) || hasOwn(sourceConfig, key)) {
       continue;
     }
     mergedConfig[key] = targetConfig[key];
@@ -2186,6 +2190,7 @@ module.exports = {
   mergeInstallConfig,
   parseArguments,
   publishSyncConfig,
+  installRemovedTopLevelKeys,
   installRemovedNestedPaths,
   syncExcludedNestedPaths,
   syncExcludedTopLevelKeys
