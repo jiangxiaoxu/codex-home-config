@@ -13,8 +13,8 @@ param(
     [string]$CommitMessage = ("Sync Codex home config " + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')),
 
     [Parameter()]
-    [ValidateSet('Config', 'AgentFile', 'Skill')]
-    [string[]]$Components = @('Config', 'AgentFile', 'Skill'),
+    [ValidateSet('Config', 'AgentFile', 'AgentFolder', 'Skill')]
+    [string[]]$Components = @('Config', 'AgentFile', 'AgentFolder', 'Skill'),
 
     [Parameter(DontShow = $true)]
     [switch]$SkipInitialPull
@@ -29,6 +29,7 @@ function Get-ComponentSelection {
     $componentSelection = @{
         Config    = $false
         AgentFile = $false
+        AgentFolder = $false
         Skill     = $false
     }
 
@@ -438,12 +439,14 @@ if ([string]::IsNullOrWhiteSpace($RepoPath)) {
 
 $sourceConfigPath = Join-Path $SourceCodexPath 'config.toml'
 $sourceAgentsPath = Join-Path $SourceCodexPath 'AGENTS.md'
+$sourceAgentDirectoryPath = Join-Path $SourceCodexPath 'agents'
 $sourceSkillPath = Join-Path $SourceCodexPath 'skills\\jiangxiaoxu'
 $componentSelection = Get-ComponentSelection -SelectedComponents $Components
 
 foreach ($requiredPath in @(
         @{ Path = $sourceConfigPath; Selected = $componentSelection.Config },
         @{ Path = $sourceAgentsPath; Selected = $componentSelection.AgentFile },
+        @{ Path = $sourceAgentDirectoryPath; Selected = $componentSelection.AgentFolder },
         @{ Path = $sourceSkillPath; Selected = $componentSelection.Skill }
     )) {
     if ($requiredPath.Selected -and -not (Test-Path -LiteralPath $requiredPath.Path)) {
@@ -559,6 +562,15 @@ if ($componentSelection.AgentFile) {
     Copy-ItemIfDifferentPath -SourcePath $sourceAgentsPath -DestinationPath (Join-Path $repoManagedPath 'AGENTS.md')
 }
 
+if ($componentSelection.AgentFolder) {
+    $repoAgentDirectoryPath = Join-Path $repoManagedPath 'agents'
+    if (Test-Path -LiteralPath $repoAgentDirectoryPath) {
+        Remove-Item -LiteralPath $repoAgentDirectoryPath -Recurse -Force
+    }
+
+    Copy-Item -LiteralPath $sourceAgentDirectoryPath -Destination $repoManagedPath -Recurse -Force
+}
+
 Copy-ItemIfDifferentPath -SourcePath $sourceSyncScriptPath -DestinationPath (Join-Path $RepoPath 'sync-codex-home-config-repo.ps1')
 
 $legacyConfigPath = Join-Path $RepoPath 'config.toml'
@@ -585,6 +597,11 @@ if ($componentSelection.Skill) {
 $legacyRootSkillsPath = Join-Path $RepoPath 'skills'
 if (Test-Path -LiteralPath $legacyRootSkillsPath -PathType Container) {
     Remove-Item -LiteralPath $legacyRootSkillsPath -Recurse -Force
+}
+
+$legacyRootAgentsPath = Join-Path $RepoPath 'agents'
+if (Test-Path -LiteralPath $legacyRootAgentsPath -PathType Container) {
+    Remove-Item -LiteralPath $legacyRootAgentsPath -Recurse -Force
 }
 
 $statusOutput = & git -C $RepoPath status --porcelain

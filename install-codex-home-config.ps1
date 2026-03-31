@@ -8,8 +8,8 @@ param(
     [string]$Action = 'Prompt',
 
     [Parameter()]
-    [ValidateSet('Config', 'AgentFile', 'Skill')]
-    [string[]]$Components = @('Config', 'AgentFile', 'Skill')
+    [ValidateSet('Config', 'AgentFile', 'AgentFolder', 'Skill')]
+    [string[]]$Components = @('Config', 'AgentFile', 'AgentFolder', 'Skill')
 )
 
 Set-StrictMode -Version Latest
@@ -49,6 +49,7 @@ function Get-ComponentSelection {
     $componentSelection = @{
         Config    = $false
         AgentFile = $false
+        AgentFolder = $false
         Skill     = $false
     }
 
@@ -351,6 +352,11 @@ function Backup-CurrentSnapshot {
         $backupSkillPath = Backup-ExistingPath -SourcePath $currentSnapshot.SkillPath -RelativeBackupPath 'skills\jiangxiaoxu' -Recurse
         Write-Output "Backed up $($currentSnapshot.SkillPath) to $backupSkillPath"
     }
+
+    if ($componentSelection.AgentFolder -and (Test-Path -LiteralPath $currentSnapshot.AgentDirectoryPath -PathType Container)) {
+        $backupAgentDirectoryPath = Backup-ExistingPath -SourcePath $currentSnapshot.AgentDirectoryPath -RelativeBackupPath 'agents' -Recurse
+        Write-Output "Backed up $($currentSnapshot.AgentDirectoryPath) to $backupAgentDirectoryPath"
+    }
 }
 
 function Get-ConfigTextNewLine {
@@ -569,11 +575,12 @@ function Get-SnapshotInfo {
     )
 
     return [pscustomobject]@{
-        Name       = $Name
-        RootPath    = $RootPath
-        ConfigPath  = (Join-Path $RootPath 'config.toml')
-        AgentsPath  = (Join-Path $RootPath 'AGENTS.md')
-        SkillPath   = (Join-Path $RootPath 'skills\jiangxiaoxu')
+        Name               = $Name
+        RootPath           = $RootPath
+        ConfigPath         = (Join-Path $RootPath 'config.toml')
+        AgentsPath         = (Join-Path $RootPath 'AGENTS.md')
+        AgentDirectoryPath = (Join-Path $RootPath 'agents')
+        SkillPath          = (Join-Path $RootPath 'skills\jiangxiaoxu')
     }
 }
 
@@ -583,7 +590,7 @@ function Test-SnapshotInfo {
         [pscustomobject]$SnapshotInfo,
 
         [Parameter()]
-        [string[]]$SelectedComponents = @('Config', 'AgentFile', 'Skill')
+        [string[]]$SelectedComponents = @('Config', 'AgentFile', 'AgentFolder', 'Skill')
     )
 
     $missingItems = [System.Collections.Generic.List[string]]::new()
@@ -595,6 +602,10 @@ function Test-SnapshotInfo {
 
     if ($componentSelection.AgentFile -and -not (Test-Path -LiteralPath $SnapshotInfo.AgentsPath -PathType Leaf)) {
         $missingItems.Add('AGENTS.md')
+    }
+
+    if ($componentSelection.AgentFolder -and -not (Test-Path -LiteralPath $SnapshotInfo.AgentDirectoryPath -PathType Container)) {
+        $missingItems.Add('agents')
     }
 
     if ($componentSelection.Skill -and -not (Test-Path -LiteralPath $SnapshotInfo.SkillPath -PathType Container)) {
@@ -617,7 +628,7 @@ function Assert-SnapshotInfo {
         [string]$SnapshotLabel,
 
         [Parameter()]
-        [string[]]$SelectedComponents = @('Config', 'AgentFile', 'Skill')
+        [string[]]$SelectedComponents = @('Config', 'AgentFile', 'AgentFolder', 'Skill')
     )
 
     $validationResult = Test-SnapshotInfo -SnapshotInfo $SnapshotInfo -SelectedComponents $SelectedComponents
@@ -640,6 +651,10 @@ function Get-AvailableSnapshotComponent {
 
     if (Test-Path -LiteralPath $SnapshotInfo.AgentsPath -PathType Leaf) {
         $components.Add('AgentFile')
+    }
+
+    if (Test-Path -LiteralPath $SnapshotInfo.AgentDirectoryPath -PathType Container) {
+        $components.Add('AgentFolder')
     }
 
     if (Test-Path -LiteralPath $SnapshotInfo.SkillPath -PathType Container) {
@@ -741,7 +756,7 @@ function Install-Snapshot {
         [pscustomobject]$SnapshotInfo,
 
         [Parameter()]
-        [string[]]$SelectedComponents = @('Config', 'AgentFile', 'Skill'),
+        [string[]]$SelectedComponents = @('Config', 'AgentFile', 'AgentFolder', 'Skill'),
 
         [switch]$CreateBackup
     )
@@ -775,6 +790,27 @@ function Install-Snapshot {
         }
 
         Write-Output "Installed $($fileInfo.Name) to $destinationPath"
+    }
+
+    if (-not $componentSelection.Skill) {
+        if (-not $componentSelection.AgentFolder) {
+            return
+        }
+    }
+
+    if ($componentSelection.AgentFolder) {
+        $targetAgentDirectoryPath = Join-Path $TargetCodexPath 'agents'
+        if (Test-Path -LiteralPath $targetAgentDirectoryPath -PathType Leaf) {
+            throw "Expected directory path but found a file: $targetAgentDirectoryPath"
+        }
+
+        if (Test-Path -LiteralPath $targetAgentDirectoryPath -PathType Container) {
+            Remove-Item -LiteralPath $targetAgentDirectoryPath -Recurse -Force
+        }
+
+        Write-StageMessage 'Installing agents...'
+        Copy-Item -LiteralPath $SnapshotInfo.AgentDirectoryPath -Destination $TargetCodexPath -Recurse -Force
+        Write-Output "Installed agents to $targetAgentDirectoryPath"
     }
 
     if (-not $componentSelection.Skill) {

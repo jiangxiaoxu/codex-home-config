@@ -27,7 +27,7 @@
 
 * Do not use any retired `Gist` workflow.
 * Do not treat the repository root `AGENTS.md` as the file to install into `.codex`.
-* Installable content lives under `managed/config.toml`, `managed/AGENTS.md`, and `managed/skills/`.
+* Installable content lives under `managed/config.toml`, `managed/AGENTS.md`, `managed/agents/`, and `managed/skills/`.
 * Backups created by `install-codex-home-config.ps1` are stored under `<TargetCodexPath>\sync_codex-home-config_backup\`.
 * The sync script is also allowed to assume `pwsh` 7+ after its bootstrap re-launch check.
 * `Update config -Components ...` should back up only the selected components before installation.
