@@ -9,7 +9,8 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const {
   buildMergeInstallConfig,
-  buildPublishedSyncConfig
+  buildPublishedSyncConfig,
+  orderTopLevelKeys
 } = require('../tools/config-toml-ops.cjs');
 const TOML = require('@iarna/toml');
 
@@ -131,10 +132,109 @@ test('merge-install always removes the local agents table from the installed res
   );
 });
 
+test('merge-install preserves local service_tier and plan_mode_reasoning_effort when the managed snapshot defines them', () => {
+  const sourceConfig = {
+    model: 'gpt-5.4',
+    model_reasoning_effort: 'high',
+    service_tier: 'default',
+    plan_mode_reasoning_effort: 'xhigh',
+    features: {
+      runtime_metrics: true
+    }
+  };
+
+  const targetConfig = {
+    model: 'gpt-5.3-codex',
+    model_reasoning_effort: 'medium',
+    service_tier: 'fast',
+    plan_mode_reasoning_effort: 'low',
+    windows: {
+      sandbox: 'elevated'
+    }
+  };
+
+  assert.deepStrictEqual(
+    buildMergeInstallConfig(sourceConfig, targetConfig),
+    {
+      model: 'gpt-5.4',
+      model_reasoning_effort: 'high',
+      features: {
+        runtime_metrics: true
+      },
+      service_tier: 'fast',
+      plan_mode_reasoning_effort: 'low',
+      windows: {
+        sandbox: 'elevated'
+      }
+    }
+  );
+});
+
+test('merge-install syncs managed mcp servers by server name and preserves unmanaged local servers', () => {
+  const sourceConfig = {
+    mcp_servers: {
+      lm_tools_bridge: {
+        command: 'powershell.exe',
+        args: [
+          '-NoProfile',
+          '-Command',
+          'node "managed.js"'
+        ],
+        tool_timeout_sec: 120
+      },
+      openaiDeveloperDocs: {
+        url: 'https://developers.openai.com/mcp'
+      }
+    }
+  };
+
+  const targetConfig = {
+    mcp_servers: {
+      lm_tools_bridge: {
+        command: 'pwsh.exe',
+        args: [
+          '-NoProfile',
+          '-Command',
+          'node "local.js"'
+        ],
+        tool_timeout_sec: 30
+      },
+      custom_local: {
+        url: 'https://localhost:4000/mcp'
+      }
+    }
+  };
+
+  assert.deepStrictEqual(
+    buildMergeInstallConfig(sourceConfig, targetConfig),
+    {
+      mcp_servers: {
+        lm_tools_bridge: {
+          command: 'powershell.exe',
+          args: [
+            '-NoProfile',
+            '-Command',
+            'node "managed.js"'
+          ],
+          tool_timeout_sec: 120
+        },
+        openaiDeveloperDocs: {
+          url: 'https://developers.openai.com/mcp'
+        },
+        custom_local: {
+          url: 'https://localhost:4000/mcp'
+        }
+      }
+    }
+  );
+});
+
 test('publish-sync only emits managed allowlist keys and skips projects plus notice.model_migrations', () => {
   const localConfig = {
     model: 'gpt-5.4',
     model_reasoning_effort: 'medium',
+    service_tier: 'fast',
+    plan_mode_reasoning_effort: 'low',
     agents: {
       reviewer: {
         model: 'gpt-5.4'
@@ -163,6 +263,8 @@ test('publish-sync only emits managed allowlist keys and skips projects plus not
   const managedConfig = {
     model: 'gpt-5.3-codex',
     model_reasoning_effort: 'high',
+    service_tier: 'default',
+    plan_mode_reasoning_effort: 'xhigh',
     features: {
       runtime_metrics: false
     },
@@ -236,6 +338,132 @@ test('merge-install CLI allows a missing target file and writes UTF-8 TOML outpu
           runtime_metrics: true
         }
       }
+    );
+  });
+});
+
+test('orderTopLevelKeys always places model keys before other top-level entries', () => {
+  assert.deepStrictEqual(
+    Object.keys(orderTopLevelKeys({
+      features: {
+        runtime_metrics: true
+      },
+      model_reasoning_effort: 'medium',
+      notice: {
+        hide_full_access_warning: true
+      },
+      model: 'gpt-5.4'
+    })),
+    [
+      'model',
+      'model_reasoning_effort',
+      'features',
+      'notice'
+    ]
+  );
+});
+
+test('publish-sync only emits managed mcp servers by server name', () => {
+  const localConfig = {
+    mcp_servers: {
+      lm_tools_bridge: {
+        command: 'powershell.exe',
+        args: [
+          '-NoProfile',
+          '-Command',
+          'node "local.js"'
+        ]
+      },
+      custom_local: {
+        url: 'https://localhost:4000/mcp'
+      }
+    }
+  };
+
+  const managedConfig = {
+    mcp_servers: {
+      lm_tools_bridge: {
+        command: 'powershell.exe',
+        args: [
+          '-NoProfile',
+          '-Command',
+          'node "managed.js"'
+        ]
+      },
+      openaiDeveloperDocs: {
+        url: 'https://developers.openai.com/mcp'
+      }
+    }
+  };
+
+  assert.deepStrictEqual(
+    buildPublishedSyncConfig(localConfig, managedConfig),
+    {
+      mcp_servers: {
+        lm_tools_bridge: {
+          command: 'powershell.exe',
+          args: [
+            '-NoProfile',
+            '-Command',
+            'node "local.js"'
+          ]
+        }
+      }
+    }
+  );
+});
+
+test('merge-install CLI writes model keys at the top of the output file', () => {
+  withTempDir((tempDir) => {
+    const sourcePath = join(tempDir, 'source.toml');
+    const targetPath = join(tempDir, 'target.toml');
+    const outputPath = join(tempDir, 'output.toml');
+
+    writeFileSync(
+      sourcePath,
+      [
+        'approval_policy = "never"',
+        '',
+        '[features]',
+        'runtime_metrics = true',
+        ''
+      ].join('\n'),
+      'utf8'
+    );
+
+    writeFileSync(
+      targetPath,
+      [
+        'model = "gpt-5.4"',
+        'model_reasoning_effort = "medium"',
+        'service_tier = "fast"',
+        ''
+      ].join('\n'),
+      'utf8'
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        'tools/config-toml-ops.cjs',
+        'merge-install',
+        '--source',
+        sourcePath,
+        '--target',
+        targetPath,
+        '--output',
+        outputPath
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: 'utf8'
+      }
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(
+      readFileSync(outputPath, 'utf8'),
+      /^model = "gpt-5\.4"\nmodel_reasoning_effort = "medium"\napproval_policy = "never"/
     );
   });
 });
@@ -327,6 +555,7 @@ test('publish-sync always excludes model keys and notice.model_migrations when t
   const localConfig = {
     model: 'gpt-5.4',
     model_reasoning_effort: 'medium',
+    plan_mode_reasoning_effort: 'low',
     agents: {
       reviewer: {
         model: 'gpt-5.4'
@@ -353,6 +582,7 @@ test('publish-sync always excludes model keys and notice.model_migrations when t
     model: 'gpt-5.3-codex',
     model_reasoning_effort: 'high',
     service_tier: 'default',
+    plan_mode_reasoning_effort: 'xhigh',
     notice: {
       hide_full_access_warning: false,
       model_migrations: {
@@ -367,7 +597,6 @@ test('publish-sync always excludes model keys and notice.model_migrations when t
   assert.deepStrictEqual(
     buildPublishedSyncConfig(localConfig, managedConfig),
     {
-      service_tier: 'fast',
       notice: {
         hide_full_access_warning: true
       },

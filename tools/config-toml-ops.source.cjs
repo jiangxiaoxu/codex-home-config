@@ -6,10 +6,23 @@ const process = require('node:process')
 const TOML = require('@iarna/toml')
 
 const minimumNodeMajorVersion = 18
+const preferredTopLevelKeyOrder = [
+  'model',
+  'model_reasoning_effort'
+]
+const installPreservedTopLevelKeys = new Set([
+  'service_tier',
+  'plan_mode_reasoning_effort'
+])
+const partiallyManagedTopLevelTables = new Set([
+  'mcp_servers'
+])
 const syncExcludedTopLevelKeys = new Set([
   'agents',
   'model',
-  'model_reasoning_effort'
+  'model_reasoning_effort',
+  'service_tier',
+  'plan_mode_reasoning_effort'
 ])
 const installRemovedTopLevelKeys = new Set([
   'agents'
@@ -79,15 +92,82 @@ function readTomlFile (filePath, { allowMissing = false } = {}) {
 function writeTomlFile (filePath, value) {
   const resolvedPath = resolve(filePath)
   mkdirSync(dirname(resolvedPath), { recursive: true })
-  const content = TOML.stringify(value)
+  const content = TOML.stringify(orderTopLevelKeys(value))
   writeFileSync(resolvedPath, content, 'utf8')
+}
+
+function orderTopLevelKeys (config) {
+  const orderedConfig = {}
+
+  for (const key of preferredTopLevelKeyOrder) {
+    if (hasOwn(config, key)) {
+      orderedConfig[key] = config[key]
+    }
+  }
+
+  for (const key of Object.keys(config)) {
+    if (hasOwn(orderedConfig, key)) {
+      continue
+    }
+
+    orderedConfig[key] = config[key]
+  }
+
+  return orderedConfig
+}
+
+function isTomlObject (value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function mergeNamedChildEntries (preferredValue, fallbackValue) {
+  if (!isTomlObject(preferredValue) || !isTomlObject(fallbackValue)) {
+    return preferredValue
+  }
+
+  const mergedValue = {}
+  for (const key of Object.keys(preferredValue)) {
+    mergedValue[key] = preferredValue[key]
+  }
+
+  for (const key of Object.keys(fallbackValue)) {
+    if (hasOwn(preferredValue, key)) {
+      continue
+    }
+
+    mergedValue[key] = fallbackValue[key]
+  }
+
+  return mergedValue
+}
+
+function pickNamedChildEntriesByAllowlist (candidateValue, allowlistValue) {
+  if (!isTomlObject(candidateValue) || !isTomlObject(allowlistValue)) {
+    return candidateValue
+  }
+
+  const filteredValue = {}
+  for (const key of Object.keys(allowlistValue)) {
+    if (!hasOwn(candidateValue, key)) {
+      continue
+    }
+
+    filteredValue[key] = candidateValue[key]
+  }
+
+  return filteredValue
 }
 
 function buildMergeInstallConfig (sourceConfig, targetConfig) {
   const mergedConfig = {}
 
   for (const key of Object.keys(sourceConfig)) {
-    if (key === 'projects' || installRemovedTopLevelKeys.has(key)) {
+    if (key === 'projects' || installRemovedTopLevelKeys.has(key) || installPreservedTopLevelKeys.has(key)) {
+      continue
+    }
+
+    if (partiallyManagedTopLevelTables.has(key) && hasOwn(targetConfig, key)) {
+      mergedConfig[key] = mergeNamedChildEntries(sourceConfig[key], targetConfig[key])
       continue
     }
 
@@ -95,7 +175,16 @@ function buildMergeInstallConfig (sourceConfig, targetConfig) {
   }
 
   for (const key of Object.keys(targetConfig)) {
-    if (key === 'projects' || installRemovedTopLevelKeys.has(key) || hasOwn(sourceConfig, key)) {
+    if (key === 'projects' || installRemovedTopLevelKeys.has(key)) {
+      continue
+    }
+
+    if (installPreservedTopLevelKeys.has(key)) {
+      mergedConfig[key] = targetConfig[key]
+      continue
+    }
+
+    if (hasOwn(sourceConfig, key)) {
       continue
     }
 
@@ -115,6 +204,11 @@ function buildPublishedSyncConfig (localConfig, managedConfig) {
 
   for (const key of Object.keys(managedConfig)) {
     if (key === 'projects' || syncExcludedTopLevelKeys.has(key) || !hasOwn(localConfig, key)) {
+      continue
+    }
+
+    if (partiallyManagedTopLevelTables.has(key)) {
+      publishedConfig[key] = pickNamedChildEntriesByAllowlist(localConfig[key], managedConfig[key])
       continue
     }
 
@@ -228,12 +322,14 @@ module.exports = {
   buildPublishedSyncConfig,
   ensureSupportedNodeVersion,
   mergeInstallConfig,
+  orderTopLevelKeys,
   parseArguments,
   publishSyncConfig,
   installRemovedTopLevelKeys,
   installRemovedNestedPaths,
   syncExcludedNestedPaths,
-  syncExcludedTopLevelKeys
+  syncExcludedTopLevelKeys,
+  installPreservedTopLevelKeys
 }
 
 if (require.main === module) {
