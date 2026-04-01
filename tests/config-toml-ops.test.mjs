@@ -101,8 +101,13 @@ test('merge-install always removes notice.model_migrations from the installed re
   );
 });
 
-test('merge-install always removes the local agents table from the installed result', () => {
+test('merge-install preserves the managed agents table in the installed result', () => {
   const sourceConfig = {
+    agents: {
+      reviewer: {
+        model: 'gpt-5.4'
+      }
+    },
     features: {
       runtime_metrics: true
     }
@@ -110,8 +115,8 @@ test('merge-install always removes the local agents table from the installed res
 
   const targetConfig = {
     agents: {
-      reviewer: {
-        model: 'gpt-5.4'
+      stale_local: {
+        model: 'gpt-5.3-codex'
       }
     },
     windows: {
@@ -122,6 +127,11 @@ test('merge-install always removes the local agents table from the installed res
   assert.deepStrictEqual(
     buildMergeInstallConfig(sourceConfig, targetConfig),
     {
+      agents: {
+        reviewer: {
+          model: 'gpt-5.4'
+        }
+      },
       features: {
         runtime_metrics: true
       },
@@ -229,7 +239,7 @@ test('merge-install syncs managed mcp servers by server name and preserves unman
   );
 });
 
-test('publish-sync only emits managed allowlist keys and skips projects plus notice.model_migrations', () => {
+test('publish-sync emits agents from local config in addition to managed allowlist keys and skips projects plus notice.model_migrations', () => {
   const localConfig = {
     model: 'gpt-5.4',
     model_reasoning_effort: 'medium',
@@ -282,6 +292,11 @@ test('publish-sync only emits managed allowlist keys and skips projects plus not
   assert.deepStrictEqual(
     buildPublishedSyncConfig(localConfig, managedConfig),
     {
+      agents: {
+        reviewer: {
+          model: 'gpt-5.4'
+        }
+      },
       features: {
         runtime_metrics: true,
         guardian_approval: false
@@ -551,7 +566,7 @@ test('publish-sync CLI drops managed keys that are missing locally', () => {
   });
 });
 
-test('publish-sync always excludes model keys and notice.model_migrations when they are in the managed allowlist', () => {
+test('publish-sync includes agents while still excluding model keys and notice.model_migrations when they are in the managed allowlist', () => {
   const localConfig = {
     model: 'gpt-5.4',
     model_reasoning_effort: 'medium',
@@ -597,6 +612,11 @@ test('publish-sync always excludes model keys and notice.model_migrations when t
   assert.deepStrictEqual(
     buildPublishedSyncConfig(localConfig, managedConfig),
     {
+      agents: {
+        reviewer: {
+          model: 'gpt-5.4'
+        }
+      },
       notice: {
         hide_full_access_warning: true
       },

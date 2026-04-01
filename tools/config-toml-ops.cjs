@@ -2017,15 +2017,12 @@ var partiallyManagedTopLevelTables = /* @__PURE__ */ new Set([
   "mcp_servers"
 ]);
 var syncExcludedTopLevelKeys = /* @__PURE__ */ new Set([
-  "agents",
   "model",
   "model_reasoning_effort",
   "service_tier",
   "plan_mode_reasoning_effort"
 ]);
-var installRemovedTopLevelKeys = /* @__PURE__ */ new Set([
-  "agents"
-]);
+var installRemovedTopLevelKeys = /* @__PURE__ */ new Set([]);
 var installRemovedNestedPaths = [
   ["notice", "model_migrations"]
 ];
@@ -2163,8 +2160,11 @@ function buildMergeInstallConfig(sourceConfig, targetConfig) {
 }
 function buildPublishedSyncConfig(localConfig, managedConfig) {
   const publishedConfig = {};
+  if (hasOwn(localConfig, "agents")) {
+    publishedConfig.agents = localConfig.agents;
+  }
   for (const key of Object.keys(managedConfig)) {
-    if (key === "projects" || syncExcludedTopLevelKeys.has(key) || !hasOwn(localConfig, key)) {
+    if (key === "projects" || key === "agents" || syncExcludedTopLevelKeys.has(key) || !hasOwn(localConfig, key)) {
       continue;
     }
     if (partiallyManagedTopLevelTables.has(key)) {

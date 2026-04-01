@@ -18,15 +18,12 @@ const partiallyManagedTopLevelTables = new Set([
   'mcp_servers'
 ])
 const syncExcludedTopLevelKeys = new Set([
-  'agents',
   'model',
   'model_reasoning_effort',
   'service_tier',
   'plan_mode_reasoning_effort'
 ])
-const installRemovedTopLevelKeys = new Set([
-  'agents'
-])
+const installRemovedTopLevelKeys = new Set([])
 const installRemovedNestedPaths = [
   ['notice', 'model_migrations']
 ]
@@ -202,8 +199,12 @@ function buildMergeInstallConfig (sourceConfig, targetConfig) {
 function buildPublishedSyncConfig (localConfig, managedConfig) {
   const publishedConfig = {}
 
+  if (hasOwn(localConfig, 'agents')) {
+    publishedConfig.agents = localConfig.agents
+  }
+
   for (const key of Object.keys(managedConfig)) {
-    if (key === 'projects' || syncExcludedTopLevelKeys.has(key) || !hasOwn(localConfig, key)) {
+    if (key === 'projects' || key === 'agents' || syncExcludedTopLevelKeys.has(key) || !hasOwn(localConfig, key)) {
       continue
     }
 
