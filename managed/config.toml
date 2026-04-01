@@ -6,6 +6,10 @@ personality = "pragmatic"
 background_terminal_max_timeout = 1_800_000
 approvals_reviewer = "guardian_subagent"
 
+[agents]
+max_threads = 12
+max_depth = 1
+
 [mcp_servers.lm_tools_bridge]
 command = "powershell.exe"
 args = [
