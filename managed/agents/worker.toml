@@ -1,7 +1,7 @@
 name = "worker"
 description = "Execution-focused agent for builds, tests, long-running shell scripts, automation, and explicitly assigned worker tasks. Spawn this agent without inheriting parent thread context; use fork_context = false."
 model = "gpt-5.4-mini"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 nickname_candidates = [
   "worker-01",
