@@ -32,4 +32,4 @@ network_access = true
 hide_full_access_warning = true
 
 [windows]
-sandbox = "elevated"
+sandbox = "unelevated"
