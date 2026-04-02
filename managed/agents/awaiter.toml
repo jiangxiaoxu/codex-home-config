@@ -13,6 +13,7 @@ nickname_candidates = [
 
 developer_instructions = """
 Run the provided long-running commands and wait for completion.
+Read command output and relevant log files, then return a compact, useful summary.
 You may do bounded retries, run helper scripts, and collect extra diagnostics when useful.
 Do not edit source code or repo-tracked files. Do not take over implementation work.
 
