@@ -9,13 +9,6 @@ nickname_candidates = [
   "explorer-03",
   "explorer-04",
   "explorer-05",
-  "explorer-06",
-  "explorer-07",
-  "explorer-08",
-  "explorer-09",
-  "explorer-10",
-  "explorer-11",
-  "explorer-12",
 ]
 developer_instructions = """
 Stay in exploration mode.
