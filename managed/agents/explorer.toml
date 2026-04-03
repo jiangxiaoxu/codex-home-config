@@ -1,7 +1,7 @@
 name = "explorer"
 description = "Read-only codebase explorer for evidence gathering, architecture mapping, and dependency analysis. Spawn this agent without inheriting parent thread context; use fork_context = false."
-model = "gpt-5.4-mini"
-model_reasoning_effort = "medium"
+model = "gpt-5.4"
+model_reasoning_effort = "low"
 sandbox_mode = "read-only"
 nickname_candidates = [
   "explorer-01",

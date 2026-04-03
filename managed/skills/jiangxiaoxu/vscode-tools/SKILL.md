@@ -6,9 +6,9 @@ description: lmToolsBridge routing guide for workspace search and VS Code IDE ac
 ## Activation
 - Initialize lmToolsBridge binding once per activation/session:
   - The MCP server name used by this skill is fixed as `lm_tools_bridge`.
-  - Call `lmToolsBridge.requestWorkspaceMCPServer` to bind workspace and validate scope.
+  - Bind the workspace exactly once per activation by calling `mcp__lm_tools_bridge__lmToolsBridge_requestWorkspaceMCPServer`.
   - Follow the returned `guidance` from `requestWorkspaceMCPServer` as binding-specific instructions.
-  - Do not use `list_mcp_resources` or `list_mcp_resource_templates` as a routine post-bind step. Only use them for diagnostics, discovery troubleshooting, or explicit visibility checks.
+  - Do not use `list_mcp_resources` or `list_mcp_resource_templates` as a routine step after binding. Use them only for diagnostics or explicit visibility checks.
   - Read `lm-tools://tool/{name}` directly from `lm_tools_bridge` only for tools expected in the current task; otherwise load lazily before first use.
 - Reuse a valid bind across calls; do not handshake again before every tool call.
 - Re-run initialization when the workspace target changes.
