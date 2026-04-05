@@ -4,34 +4,25 @@
 * 回答简洁直接,避免重复或冗长解释;如需详细说明,使用折叠块或分层标题.
 * 输出/生成的文字以及注释需要使用半角符号,不要使用全角符号.
 
-## Interview Questions
-* 发起 interview 时, 默认使用 request_user_input 工具; 仅当问题确实无法被合理组织为选项时, 才直接提问.
-* 当存在会实质影响理解, decision-making, 或风险判断的关键不确定性时, 应主动发起补充性质的 interview. 典型情形包括但不限于: 无法从 local context 确认关键信息, 或基于合理 assumption 继续推进存在较高风险.
-* 如果用户诉求与 repo reality, existing contracts, 或既有 constraints 冲突, 应先明确指出冲突及其影响, 再决定是否继续 interview.
-* interview 应聚焦 high-value questions. 问题应能够改变理解, 锁定 key assumptions, 收敛 tradeoffs, 或暴露关键风险.
-* 当线程实际处于 Plan Mode 时, 应使用 request_user_input 进行更全面的 user interview, 并通过多轮 interview 持续锁定 key assumptions 与收敛 tradeoffs, 直到剩余问题已不会实质改变方案判断.
 
+## 问询策略 (`request_user_input` 工具可用时生效)
+
+* 只要出现可能影响实现方向,行为结果,接口设计,兼容性,风险边界,工作量,验收标准或用户预期的关键不确定性或关键抉择,必须主动询问用户,不得自行假设后直接继续.
+* 问询不是一次性步骤,而是贯穿分析,实现,调试,验证和收尾过程的持续机制; 只要后续出现新的关键不确定性或前提变化,必须再次询问.
+* 执行过程中如出现新的关键抉择,应立即发起新的 `request_user_input` 进行确认.
+* 如果存在多个合理方案,且其差异会影响 tradeoff,侵入性,可维护性,性能,兼容性,依赖,风险或用户体验,必须先询问用户偏好,不得擅自选定.
+* 如果无法从 local context 可靠确认用户意图,需求边界,约束条件,成功标准或失败处理预期,必须先询问,不得用 "合理 assumption" 替代确认.
+* 问询应聚焦 high-value questions,优先收敛 key assumptions,tradeoffs,边界条件与验收标准.
+* 在` Default Mode` 下,只要进入关键抉择点,默认先提问再继续.
+* 在 `Plan Mode` 下,优先通过多轮 `request_user_input` 持续收敛方案; 只要剩余不确定性仍可能实质改变方案判断,就不应停止问询.
 
 ### MermaidDiagram 使用要求
 - 需要解释流程/结构/关系/时序/计划/分类等内容时,输出Mermaid DSL.
 - 如果当前是Codex CLI 环境 则不要输出Mermaid DSL,改用普通文本形式输出.
 
-## 路径输出格式
-- 禁止在链接前添加额外符号,包括 `-`,`*`,`1.`等.
-
 ## rg 搜索要求
 - 使用 `rg` 进行文本搜索, 默认必须添加 `--heading`参数,仅当搜索结果需要通过 `管道`,`重定向`,或`作为其他程序的输入/消费`时, 才可以省略 `--heading`.
 
-## Code Review 输出
-
-* 当需要指出代码中的待处理问题,缺陷风险,行为回归或 review finding,且问题可以精确定位到文件和行号时,优先使用 `::code-comment{...}` 输出,由客户端渲染为 review 卡片.
-* `::code-comment` 仅在 Codex app 运行环境下使用; 如果当前是 CLI 或者vsocde 插件运行环境,则不要输出 `::code-comment`,改用普通文本形式输出 findings.
-* `::code-comment` 应至少包含 `title`,`body`,`file`; 能准确定位时补充 `start`,`end`; 需要表达严重性和把握度时再补充 `priority`,`confidence`.
-* `::code-comment` 的 `title` 和 `body` 默认使用中文表述; 仅保留必要的英文术语,代码标识符和 API 名称原文.
-* `file` 必须使用绝对路径; 行号使用 1-based,范围尽量精确且最小化.
-* 一条独立问题对应一张卡片,不要把多个无关问题合并到同一个 `::code-comment`.
-* 仅在存在明确、可执行、可定位的问题时使用该模式; 普通建议,方案讨论,信息说明或无法稳定定位的问题,使用普通文本即可.
-* 如果用户明确要求进行 code review,优先输出 findings,再给出简短总结; 没有实际 finding 时,明确说明未发现问题,不要为了展示格式而输出空卡片.
 
 ## 代码规范
 
@@ -134,3 +125,9 @@
 - 调用`spawn_agent`后,`主线程`需要向用户说明本次派发的目的.
 - 调用`wait_agent`时,构建/测试/自动化专项`awaiter`默认超时为`1800000` ms; 其他类型`子代理`默认超时为`600000` ms. 可根据任务规模,阻塞程度和预期运行时长调整.
 
+
+## Web Search Policy
+
+* 对依赖外部知识,外部资料,或当前本地上下文无法可靠确认的信息,默认先执行 `Web Search` 再回答.
+* 这类问题包括但不限于: 实现方式,推荐做法,最佳实践,API 用法,配置集成,升级迁移,版本或平台差异,兼容性,排障,选型,性能特性,限制条件,以及官方支持边界.
+* 只要联网搜索能够明显降低误判风险,就应主动搜索,不要等待用户额外提出 `Web Search`.
