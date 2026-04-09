@@ -27,10 +27,10 @@ function Get-ComponentSelection {
     )
 
     $componentSelection = @{
-        Config    = $false
-        AgentFile = $false
+        Config      = $false
+        AgentFile   = $false
         AgentFolder = $false
-        Skill     = $false
+        Skill       = $false
     }
 
     foreach ($component in $SelectedComponents) {
@@ -75,6 +75,59 @@ function Get-PowerShell7Executable {
     }
 
     return $null
+}
+
+function Sync-ManagedSkillDirectory {
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory)]
+        [string]$SourcePath,
+
+        [Parameter(Mandatory)]
+        [string]$DestinationPath
+    )
+
+    if (Test-Path -LiteralPath $SourcePath -PathType Leaf) {
+        throw "Expected directory path but found a file: $SourcePath"
+    }
+
+    if (Test-Path -LiteralPath $SourcePath -PathType Container) {
+        if (Test-Path -LiteralPath $DestinationPath -PathType Leaf) {
+            throw "Expected directory path but found a file: $DestinationPath"
+        }
+
+        if (Test-Path -LiteralPath $DestinationPath -PathType Container) {
+            Remove-Item -LiteralPath $DestinationPath -Recurse -Force
+        }
+
+        $destinationParentPath = Split-Path -Path $DestinationPath -Parent
+        $null = New-Item -ItemType Directory -Path $destinationParentPath -Force
+        Copy-Item -LiteralPath $SourcePath -Destination $destinationParentPath -Recurse -Force
+        Write-Output "Published skill to $DestinationPath"
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath $DestinationPath -PathType Container)) {
+        return
+    }
+
+    if (-not $PSCmdlet.ShouldProcess($DestinationPath, 'Remove managed skill directory')) {
+        return
+    }
+
+    Remove-Item -LiteralPath $DestinationPath -Recurse -Force
+    Write-Output "Removed skill at $DestinationPath"
+
+    $destinationParentPath = Split-Path -Path $DestinationPath -Parent
+    if (-not (Test-Path -LiteralPath $destinationParentPath -PathType Container)) {
+        return
+    }
+
+    $remainingEntries = @(Get-ChildItem -LiteralPath $destinationParentPath -Force)
+    if (($remainingEntries.Count -eq 0) -and $PSCmdlet.ShouldProcess($destinationParentPath, 'Remove empty managed skills directory')) {
+        Remove-Item -LiteralPath $destinationParentPath -Force
+        Write-Output "Removed empty managed skills directory at $destinationParentPath"
+    }
 }
 
 function Get-RelaunchArgumentList {
@@ -440,14 +493,13 @@ if ([string]::IsNullOrWhiteSpace($RepoPath)) {
 $sourceConfigPath = Join-Path $SourceCodexPath 'config.toml'
 $sourceAgentsPath = Join-Path $SourceCodexPath 'AGENTS.md'
 $sourceAgentDirectoryPath = Join-Path $SourceCodexPath 'agents'
-$sourceSkillPath = Join-Path $SourceCodexPath 'skills\\jiangxiaoxu'
+$sourceSkillDirectoryPath = Join-Path $SourceCodexPath 'skills\jiangxiaoxu'
 $componentSelection = Get-ComponentSelection -SelectedComponents $Components
 
 foreach ($requiredPath in @(
         @{ Path = $sourceConfigPath; Selected = $componentSelection.Config },
         @{ Path = $sourceAgentsPath; Selected = $componentSelection.AgentFile },
-        @{ Path = $sourceAgentDirectoryPath; Selected = $componentSelection.AgentFolder },
-        @{ Path = $sourceSkillPath; Selected = $componentSelection.Skill }
+        @{ Path = $sourceAgentDirectoryPath; Selected = $componentSelection.AgentFolder }
     )) {
     if ($requiredPath.Selected -and -not (Test-Path -LiteralPath $requiredPath.Path)) {
         throw "Required source path was not found: $($requiredPath.Path)"
@@ -571,6 +623,10 @@ if ($componentSelection.AgentFolder) {
     Copy-Item -LiteralPath $sourceAgentDirectoryPath -Destination $repoManagedPath -Recurse -Force
 }
 
+if ($componentSelection.Skill) {
+    Sync-ManagedSkillDirectory -SourcePath $sourceSkillDirectoryPath -DestinationPath (Join-Path $repoManagedPath 'skills\jiangxiaoxu')
+}
+
 Copy-ItemIfDifferentPath -SourcePath $sourceSyncScriptPath -DestinationPath (Join-Path $RepoPath 'sync-codex-home-config-repo.ps1')
 
 $legacyConfigPath = Join-Path $RepoPath 'config.toml'
@@ -581,17 +637,6 @@ if (Test-Path -LiteralPath $legacyConfigPath -PathType Leaf) {
 $legacyScriptsPath = Join-Path $RepoPath 'scripts'
 if (Test-Path -LiteralPath $legacyScriptsPath -PathType Container) {
     Remove-Item -LiteralPath $legacyScriptsPath -Recurse -Force
-}
-
-$repoSkillsParentPath = Join-Path $repoManagedPath 'skills'
-$repoSkillPath = Join-Path $repoSkillsParentPath 'jiangxiaoxu'
-$null = New-Item -ItemType Directory -Path $repoSkillsParentPath -Force
-if ($componentSelection.Skill) {
-    if (Test-Path -LiteralPath $repoSkillPath) {
-        Remove-Item -LiteralPath $repoSkillPath -Recurse -Force
-    }
-
-    Copy-Item -LiteralPath $sourceSkillPath -Destination $repoSkillsParentPath -Recurse -Force
 }
 
 $legacyRootSkillsPath = Join-Path $RepoPath 'skills'

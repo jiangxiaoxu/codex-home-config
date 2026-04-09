@@ -47,10 +47,10 @@ function Get-ComponentSelection {
     )
 
     $componentSelection = @{
-        Config    = $false
-        AgentFile = $false
+        Config      = $false
+        AgentFile   = $false
         AgentFolder = $false
-        Skill     = $false
+        Skill       = $false
     }
 
     foreach ($component in $SelectedComponents) {
@@ -348,14 +348,14 @@ function Backup-CurrentSnapshot {
         }
     }
 
-    if ($componentSelection.Skill -and (Test-Path -LiteralPath $currentSnapshot.SkillPath -PathType Container)) {
-        $backupSkillPath = Backup-ExistingPath -SourcePath $currentSnapshot.SkillPath -RelativeBackupPath 'skills\jiangxiaoxu' -Recurse
-        Write-Output "Backed up $($currentSnapshot.SkillPath) to $backupSkillPath"
-    }
-
     if ($componentSelection.AgentFolder -and (Test-Path -LiteralPath $currentSnapshot.AgentDirectoryPath -PathType Container)) {
         $backupAgentDirectoryPath = Backup-ExistingPath -SourcePath $currentSnapshot.AgentDirectoryPath -RelativeBackupPath 'agents' -Recurse
         Write-Output "Backed up $($currentSnapshot.AgentDirectoryPath) to $backupAgentDirectoryPath"
+    }
+
+    if ($componentSelection.Skill -and (Test-Path -LiteralPath $currentSnapshot.SkillDirectoryPath -PathType Container)) {
+        $backupSkillDirectoryPath = Backup-ExistingPath -SourcePath $currentSnapshot.SkillDirectoryPath -RelativeBackupPath 'skills\jiangxiaoxu' -Recurse
+        Write-Output "Backed up $($currentSnapshot.SkillDirectoryPath) to $backupSkillDirectoryPath"
     }
 }
 
@@ -580,7 +580,7 @@ function Get-SnapshotInfo {
         ConfigPath         = (Join-Path $RootPath 'config.toml')
         AgentsPath         = (Join-Path $RootPath 'AGENTS.md')
         AgentDirectoryPath = (Join-Path $RootPath 'agents')
-        SkillPath          = (Join-Path $RootPath 'skills\jiangxiaoxu')
+        SkillDirectoryPath = (Join-Path $RootPath 'skills\jiangxiaoxu')
     }
 }
 
@@ -606,10 +606,6 @@ function Test-SnapshotInfo {
 
     if ($componentSelection.AgentFolder -and -not (Test-Path -LiteralPath $SnapshotInfo.AgentDirectoryPath -PathType Container)) {
         $missingItems.Add('agents')
-    }
-
-    if ($componentSelection.Skill -and -not (Test-Path -LiteralPath $SnapshotInfo.SkillPath -PathType Container)) {
-        $missingItems.Add('skills\jiangxiaoxu')
     }
 
     return [pscustomobject]@{
@@ -657,7 +653,7 @@ function Get-AvailableSnapshotComponent {
         $components.Add('AgentFolder')
     }
 
-    if (Test-Path -LiteralPath $SnapshotInfo.SkillPath -PathType Container) {
+    if (Test-Path -LiteralPath $SnapshotInfo.SkillDirectoryPath -PathType Container) {
         $components.Add('Skill')
     }
 
@@ -792,12 +788,6 @@ function Install-Snapshot {
         Write-Output "Installed $($fileInfo.Name) to $destinationPath"
     }
 
-    if (-not $componentSelection.Skill) {
-        if (-not $componentSelection.AgentFolder) {
-            return
-        }
-    }
-
     if ($componentSelection.AgentFolder) {
         $targetAgentDirectoryPath = Join-Path $TargetCodexPath 'agents'
         if (Test-Path -LiteralPath $targetAgentDirectoryPath -PathType Leaf) {
@@ -813,24 +803,62 @@ function Install-Snapshot {
         Write-Output "Installed agents to $targetAgentDirectoryPath"
     }
 
-    if (-not $componentSelection.Skill) {
+    if ($componentSelection.Skill) {
+        Sync-SkillDirectory -SourcePath $SnapshotInfo.SkillDirectoryPath -DestinationPath (Join-Path $TargetCodexPath 'skills\jiangxiaoxu')
+    }
+}
+
+function Sync-SkillDirectory {
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory)]
+        [string]$SourcePath,
+
+        [Parameter(Mandatory)]
+        [string]$DestinationPath
+    )
+
+    if (Test-Path -LiteralPath $SourcePath -PathType Leaf) {
+        throw "Expected directory path but found a file: $SourcePath"
+    }
+
+    if (Test-Path -LiteralPath $SourcePath -PathType Container) {
+        if (Test-Path -LiteralPath $DestinationPath -PathType Leaf) {
+            throw "Expected directory path but found a file: $DestinationPath"
+        }
+
+        if (Test-Path -LiteralPath $DestinationPath -PathType Container) {
+            Remove-Item -LiteralPath $DestinationPath -Recurse -Force
+        }
+
+        Write-StageMessage 'Installing skill...'
+        $destinationParentPath = Split-Path -Path $DestinationPath -Parent
+        $null = New-Item -ItemType Directory -Path $destinationParentPath -Force
+        Copy-Item -LiteralPath $SourcePath -Destination $destinationParentPath -Recurse -Force
+        Write-Output "Installed skill to $DestinationPath"
         return
     }
 
-    $targetSkillsParentPath = Join-Path $TargetCodexPath 'skills'
-    $targetSkillPath = Join-Path $targetSkillsParentPath 'jiangxiaoxu'
-    if (Test-Path -LiteralPath $targetSkillPath -PathType Leaf) {
-        throw "Expected directory path but found a file: $targetSkillPath"
-    }
+    if (Test-Path -LiteralPath $DestinationPath -PathType Container) {
+        Write-StageMessage 'Removing skill...'
+        if (-not $PSCmdlet.ShouldProcess($DestinationPath, 'Remove skill directory')) {
+            return
+        }
 
-    $null = New-Item -ItemType Directory -Path $targetSkillsParentPath -Force
-    if (Test-Path -LiteralPath $targetSkillPath -PathType Container) {
-        Remove-Item -LiteralPath $targetSkillPath -Recurse -Force
-    }
+        Remove-Item -LiteralPath $DestinationPath -Recurse -Force
+        Write-Output "Removed skill at $DestinationPath"
 
-    Write-StageMessage 'Installing skills...'
-    Copy-Item -LiteralPath $SnapshotInfo.SkillPath -Destination $targetSkillsParentPath -Recurse -Force
-    Write-Output "Installed skills to $targetSkillPath"
+        $destinationParentPath = Split-Path -Path $DestinationPath -Parent
+        if (-not (Test-Path -LiteralPath $destinationParentPath -PathType Container)) {
+            return
+        }
+
+        $remainingEntries = @(Get-ChildItem -LiteralPath $destinationParentPath -Force)
+        if (($remainingEntries.Count -eq 0) -and $PSCmdlet.ShouldProcess($destinationParentPath, 'Remove empty skills directory')) {
+            Remove-Item -LiteralPath $destinationParentPath -Force
+            Write-Output "Removed empty skills directory at $destinationParentPath"
+        }
+    }
 }
 
 function Move-DirectoryToRecycleBin {
