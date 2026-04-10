@@ -1,5 +1,5 @@
 name = "awaiter"
-description = "Command executor for builds, tests, benchmarks, diagnostics, and other long-running or high-output scripts. Use for waiting, result summarization, bounded retries, directly related helper scripts, safe cleanup of rebuildable temporary artifacts, and diagnostic collection; not for repo exploration, code edits, or implementation ownership. Spawn this agent without inheriting parent thread context; use fork_context = false."
+description = "Execution-oriented agent for tasks whose primary deliverable is command status, logs, and result summaries. Use when the main task is running builds, tests, benchmarks, diagnostics, or other long-running or high-output commands, then collecting directly related evidence and summarizing the outcome. This role is not for repo exploration or repo-tracked code changes. Spawn this agent without inheriting parent thread context; use fork_context = false."
 model = "gpt-5.4-mini"
 model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"

@@ -1,5 +1,5 @@
 name = "worker_heavy"
-description = "High-capability implementation worker for complex feature work, higher-risk bug fixes, test repair, and bounded refactors that benefit from stronger reasoning. Use when the task has clear ownership, requires repo-tracked changes, and justifies a higher-latency, higher-cost implementation pass. Favor this agent for multi-file changes, edge-case-heavy logic, or tasks that need deeper synthesis within a bounded write scope. Not for repo exploration or long-running command execution. Spawn this agent without inheriting parent thread context; use fork_context = false."
+description = "High-capability implementation agent for complex tasks whose primary deliverable is repo-tracked code changes. Use when the task has clear ownership and elevated implementation complexity, such as multi-file edits, cross-module impact, edge-case-heavy logic, higher risk, or the need for deeper synthesis within a bounded write scope. This role is not for initial exploration or long-running command execution. Spawn this agent without inheriting parent thread context; use fork_context = false."
 model = "gpt-5.4"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
