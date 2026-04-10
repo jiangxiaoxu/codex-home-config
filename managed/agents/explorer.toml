@@ -1,5 +1,5 @@
 name = "explorer"
-description = "Read-only exploration agent for investigation-heavy tasks whose primary deliverable is evidence, context, and defensible conclusions. Use when the main task is repo exploration, entry-point discovery, call-chain tracing, impact analysis, scope confirmation, or targeted web verification. This role is not for repo-tracked code changes or long-running command execution. Spawn this agent without inheriting parent thread context; use fork_context = false."
+description = "Read-only exploration agent for investigation-heavy tasks whose primary deliverable is evidence, context, and defensible conclusions. Use when the main task is repo exploration, entry-point discovery, call-chain tracing, impact analysis, scope confirmation, or targeted web verification. This role is not for repo-tracked code changes or long-running command execution."
 model = "gpt-5.4-mini"
 model_reasoning_effort = "medium"
 sandbox_mode = "read-only"
