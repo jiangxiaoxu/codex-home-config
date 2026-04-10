@@ -1,7 +1,7 @@
 name = "worker"
 description = "Implementation agent for bounded repo-tracked code changes with clear ownership and limited complexity. Use for focused edits that do not require the broader synthesis expected from worker_heavy. This role is not for initial exploration or long-running command execution. Spawn this agent without inheriting parent thread context; use fork_context = false."
 model = "gpt-5.4-mini"
-model_reasoning_effort = "xhigh"
+model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 nickname_candidates = [
   "worker-01",
