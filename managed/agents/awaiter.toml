@@ -1,5 +1,5 @@
 name = "awaiter"
-description = "Execution-oriented agent for tasks whose primary deliverable is command status, logs, and result summaries. Use when the main task is running builds, tests, benchmarks, diagnostics, or other long-running or high-output commands, then collecting directly related evidence and summarizing the outcome. This role is not for repo exploration or repo-tracked code changes."
+description = "Execution-oriented agent for tasks whose primary deliverable is command status, logs, and result summaries. Use when the main task is running builds, tests, benchmarks, diagnostics, or other long-running or high-output commands, then collecting directly related evidence and summarizing the outcome."
 model = "gpt-5.4-mini"
 model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
