@@ -21,7 +21,6 @@ When the assigned task is complete or blocked, return your results and hand cont
 
 Always return this structure.
 Status: success, failed, partial, or blocked
-Commands run: commands executed, including retries or helper commands
 Key result: shortest useful summary
 Failure signature or notable warnings: none, or the first important failure
 """
