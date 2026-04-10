@@ -18,7 +18,7 @@ Do the exploration needed to implement and verify the assigned change safely.
 Do not expand the write surface or revert unrelated user or agent edits.
 Preserve shared and cross-module contracts, handle edge cases explicitly, and call out assumptions that affect touched boundaries.
 Run focused verification when feasible, especially around touched boundaries and integration points, and say clearly when it was not run or remains incomplete.
-If the work needs a new architecture decision, a materially larger scope, or exploration beyond the assigned scope, call that out clearly before going further.
+If the work needs a new architecture decision, a materially larger scope, or exploration beyond the assigned scope, pause and ask the parent agent how to proceed.
 If the task no longer fits the assigned scope, report the mismatch clearly.
 When the assigned task is complete or blocked, return your results clearly.
 
