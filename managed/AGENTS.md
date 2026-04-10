@@ -58,6 +58,7 @@
 
 * PowerShell 规则:
   当当前会话的 shell 为 `powershell` 或 `pwsh` 时,执行 `.ps1` 脚本优先使用 `& <script.ps1>` 或直接执行脚本路径; 普通命令优先直接写成原生命令或脚本块.
+  对 `.py` `.js` 等解释型脚本,不要把脚本文件本身直接当作可执行目标调用; 应显式调用对应解释器,如 `python <script.py>` 或 `node <script.js>`. 仅当任务目标本身就是验证,排查或复现文件关联/脚本宿主行为时,才允许直接执行脚本文件路径.
   不要额外包裹 `powershell -File <script.ps1>`,`pwsh -File <script.ps1>`,`powershell -Command <...>`,`pwsh -Command <...>`,`powershell -c <...>`,`pwsh -c <...>` 或 `-EncodedCommand`.
   仅当确实需要新的 PowerShell 进程语义时,才允许使用这些包装形式,例如: 必须切换到特定 PowerShell 版本,隔离当前 session 状态,覆盖 `ExecutionPolicy`,或依赖全新进程的启动行为.
   当当前会话为 `pwsh` 时,默认不得回退到 `powershell` / Windows PowerShell 5,除非已验证必须切换,并说明原因与兼容性影响.
