@@ -105,7 +105,6 @@
 - 所有`子代理`只能由`主线程`创建,调度和回收,且子代理线程不得再次调用`spawn_agent`.
 - 调用`spawn_agent`时必须显式设置`fork_context`.
 - `implementation` 子代理默认优先使用 `fork_context=true`,以复用主线程上下文; 仅当任务高度独立,或复用主线程历史会带来明显上下文污染风险时,才改用 `false`.
-- 在 `implementation` 任务的派发判断中,默认把 `fork_context=true` 视为低损耗的上下文分叉方式.
 - 其他非 `implementation` 类型子代理维持 `fork_context=false`,以减少无关线程历史注入并保持专项上下文稳定.
 - 调用`wait_agent`时,`Execution-oriented` `子代理`默认超时为`1800000` ms,其他类型默认为`600000` ms; 该长超时主要用于承载长命令和持续输出.
 
