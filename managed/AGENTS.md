@@ -67,16 +67,17 @@
 
 - `Read-only exploration`: 只读摸底,入口定位,调用链追踪,影响范围确认和外部资料核实.
 - `implementation`: `repo-tracked` 代码修改,局部修复,受控重构.
-- `Execution-oriented`: 运行 `build`,`test`,`benchmark`,`diagnostic` 并汇总结果.
+- `Execution-oriented`: 负责 `build`,`test`,`benchmark`,`diagnostic` 等执行类任务,也可承接验证,复现,回归确认或性能确认等阶段性执行工作; 主要交付命令结果与执行证据的汇总,不负责代码修改.
 - 当前可用子代理与分类对应为: `explorer` -> `Read-only exploration`; `worker`,`worker_heavy` -> `implementation`; `awaiter` -> `Execution-oriented`.
 
 ### 派发规则
 
-- 默认按主类型在 `Read-only exploration`,`implementation`,`Execution-oriented` 中三选一; 证据和结论归 `Read-only exploration`,代码改动归 `implementation`,命令结果和日志摘要归 `Execution-oriented`.
+- 默认按当前阶段的主交付物在 `Read-only exploration`,`implementation`,`Execution-oriented` 中三选一; 证据和结论归 `Read-only exploration`,代码改动归 `implementation`,命令执行与结果归纳归 `Execution-oriented`.
 - 同类多子代理时选最合适者; 若仍有歧义,优先能力更强的子代理.
 - `implementation` 任务默认优先派发 `implementation` 子代理,由`主线程`负责编排,决策,整合和验收; 仅当任务极小,边界清晰且主线程明显更快时才直行.
 - 只要 `implementation` 任务表现出多文件,跨模块,边界条件多,风险高或上下文收集成本高,一律派发 `implementation` 子代理.
 - `Read-only exploration` 和 `Execution-oriented` 默认优先派发对应子代理.
+- 当当前阶段核心在于运行命令,验证变更,复现问题,确认回归,测量性能或收集失败证据时,默认优先考虑 `Execution-oriented` 子代理.
 
 ### 术语定义
 
@@ -96,7 +97,7 @@
 - 每批`子代理`全部返回并整合后,`主线程`必须对每个`子代理`显式决定复用或 `close_agent`; 凡不复用者,均应显式 `close_agent`.
 - `Read-only exploration` `子代理`默认不复用; 仅在同一调查目标下且延续现有上下文明显更有利时保留,否则应 `close_agent`.
 - `implementation` `子代理`默认不复用; 仅当仍在同一目标问题,同一写入范围,且延续既有工作态明显更有利时,才允许短暂复用,否则应 `close_agent`.
-- `Execution-oriented` `子代理`在同一目标问题下可优先复用; 若目标切换,职责变化,关键前提变化或存在上下文污染风险,则 `close_agent` 并改派.
+- `Execution-oriented` `子代理`在同一目标问题下可优先复用; 尤其在同一验证或复现链路仍连续推进时,应优先延续既有运行态; 若目标切换,前提变化明显或存在上下文污染风险,则 `close_agent` 并改派.
 - 已关闭的`子代理`仅在恢复既有运行态确有帮助时才恢复; 否则默认新建.
 
 ### `spawn_agent` 约束
@@ -105,8 +106,8 @@
 - 调用`spawn_agent`时必须显式设置`fork_context`.
 - `implementation` 子代理默认优先使用 `fork_context=true`,以复用主线程上下文; 仅当任务高度独立,或复用主线程历史会带来明显上下文污染风险时,才改用 `false`.
 - 在 `implementation` 任务的派发判断中,默认把 `fork_context=true` 视为低损耗的上下文分叉方式.
-- 其他类型子代理维持 `fork_context=false`,以减少无关线程历史注入并保持专项上下文稳定.
-- 调用`wait_agent`时,`Execution-oriented` `子代理`默认超时为`1800000` ms,其他类型默认为`600000` ms.
+- 其他非 `implementation` 类型子代理维持 `fork_context=false`,以减少无关线程历史注入并保持专项上下文稳定.
+- 调用`wait_agent`时,`Execution-oriented` `子代理`默认超时为`1800000` ms,其他类型默认为`600000` ms; 该长超时主要用于承载长命令和持续输出.
 
 
 ## Web Search Policy
