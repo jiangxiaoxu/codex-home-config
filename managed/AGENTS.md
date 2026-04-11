@@ -60,50 +60,53 @@
 
 ## 子代理调度
 
-- 当前 `AGENTS.md` 或其他 active user-scoped instruction file 中,对 `spawn_agent`,`子代理`,委托或并行代理工作的明确授权,均视为用户已明确允许`主线程`自主调用 `spawn_agent`.
-- `主线程`负责拆分任务,选择角色,整理参数,等待结果,整合结论并对外说明; 默认优先承担编排和决策,将适合委托的工作交给`子代理`.
+- 当前 `AGENTS.md` 或其他 active user-scoped instruction file 中,对 `spawn_agent`,`子代理`,委托或并行代理工作的明确授权,均视为用户已允许`主线程`直接调用 `spawn_agent`.
+- `主线程`负责拆分,选择,等待,整合和说明; 默认把适合委托的工作交给`子代理`.
 
 ### 子代理分类
 
-- `Read-only exploration`: 只读摸底,入口定位,调用链追踪,影响范围确认和必要的外部资料核实.
-- `implementation`: `repo-tracked` 代码修改,局部修复,受控重构等以代码交付物为主的任务.
-- `Execution-oriented`: 运行 `build`,`test`,`benchmark`,`diagnostic` 等命令或脚本,等待完成并汇总结果.
+- `Read-only exploration`: 只读摸底,入口定位,调用链追踪,影响范围确认和外部资料核实.
+- `implementation`: `repo-tracked` 代码修改,局部修复,受控重构.
+- `Execution-oriented`: 运行 `build`,`test`,`benchmark`,`diagnostic` 并汇总结果.
 - 当前可用子代理与分类对应为: `explorer` -> `Read-only exploration`; `worker`,`worker_heavy` -> `implementation`; `awaiter` -> `Execution-oriented`.
 
 ### 派发规则
 
-- 默认先按任务主类型在 `Read-only exploration`,`implementation`,`Execution-oriented` 中三选一. 当主类型不明显时,按主要交付物判断: 证据与结论归 `Read-only exploration`,代码改动归 `implementation`,命令结果与日志摘要归 `Execution-oriented`.
-- 同一分类下若有多个可用子代理,`主线程`应选择最合适者; 若仍有歧义,默认保守升级到能力更强的子代理.
-- 对 `implementation` 任务,低复杂度时`主线程`可直接处理; 任务一旦表现出多文件,跨模块,边界条件多,风险高,需要更深推理或上下文收集成本高等任一显著特征,即按高复杂度处理并派发 `implementation` `子代理`.
-- 对 `Read-only exploration` 任务,默认优先派发对应`子代理`; 仅当范围极小且`主线程`立即完成明显更快时才允许直行,通常限于单文件定位,单符号确认,单条轻量检索等局部验证. 对高上下文开销且彼此独立的问题,默认按批次并行派发并等待该批`全部返回`.
-- 对 `Execution-oriented` 任务,默认优先派发对应`子代理`,包括 `build`,`test`,`benchmark`,`diagnostic` 及其他日志量大,运行时间长或需要等待与汇总结果的命令或脚本.
+- 默认按主类型在 `Read-only exploration`,`implementation`,`Execution-oriented` 中三选一; 证据和结论归 `Read-only exploration`,代码改动归 `implementation`,命令结果和日志摘要归 `Execution-oriented`.
+- 同类多子代理时选最合适者; 若仍有歧义,优先能力更强的子代理.
+- `implementation` 任务默认优先派发 `implementation` 子代理,由`主线程`负责编排,决策,整合和验收; 仅当任务极小,边界清晰且主线程明显更快时才直行.
+- 只要 `implementation` 任务表现出多文件,跨模块,边界条件多,风险高或上下文收集成本高,一律派发 `implementation` 子代理.
+- `Read-only exploration` 和 `Execution-oriented` 默认优先派发对应子代理.
 
 ### 术语定义
 
-- `同一目标问题`: `主线程`当前阶段要解决的直接阻塞目标,边界由下一步决策,直接交付物或验收条件决定; 这些发生变化时,视为新的目标问题.
-- `一批子代理`: `主线程`为同一目标问题在同一轮同时派发的那组`子代理`; 完成该轮结果整合后,即使仍是同一目标问题,后续派发也属于下一批.
-- `全部返回`: 一批中的每个`子代理`都已达到最终状态,或被`主线程`显式 `close_agent`; 不要求每个`子代理`都自然返回.
+- `同一目标问题`: `主线程`当前阶段要解决的直接阻塞目标,边界由下一步决策,直接交付物或验收条件决定.
+- `一批子代理`: `主线程`为同一目标问题在同一轮同时派发的那组`子代理`.
+- `全部返回`: 一批中的每个`子代理`都已达到最终状态,或被`主线程`显式 `close_agent`.
 
 ### 主线程约束
 
-- `主线程`为当前目标问题派发一批`子代理`后,默认需要等待该批达到`全部返回`,才能继续推进当前目标问题.
-- 在当前批次达到`全部返回`前,`主线程`仅可进行状态等待,结果接收和面向用户的进度说明,不得继续分析,探索,实现,验证,也不得追加派发属于同一目标问题的`子代理`.
-- 当前批次达到`全部返回`后,`主线程`再继续判断,整合,并按需发起下一批`子代理`或转入后续步骤.
+- `主线程`派发一批后,默认等该批全部返回再推进同一目标问题.
+- 在当前批次全部返回前,`主线程`只做等待,接收结果和进度说明,不再分析,实现,验证或追加同一目标问题的`子代理`.
+- 当前批次全部返回后,再决定是否发起下一批或转入后续步骤.
 
 
 ### 生命周期与复用
 
-- 每批`子代理`达到`全部返回`并完成整合后,`主线程`必须对该批每个`子代理`显式决定: 复用或 `close_agent`.
-- `Read-only exploration` `子代理`默认不复用; 仅当仍在同一调查目标下且延续现有上下文明显更有利时,才短暂保留.
-- `implementation` 和 `Execution-oriented` `子代理`在同一目标问题下可优先复用; 若目标问题切换,职责类型变化,关键前提变化,或继续保留会带来明显的上下文污染风险,则应优先 `close_agent` 并改派新的合适类型`子代理`.
-- 已关闭的`子代理`仅在恢复其既有运行态或专项上下文明显有益时才恢复; 否则默认新建实例.
+- 每批`子代理`全部返回并整合后,`主线程`必须对每个`子代理`显式决定复用或 `close_agent`; 凡不复用者,均应显式 `close_agent`.
+- `Read-only exploration` `子代理`默认不复用; 仅在同一调查目标下且延续现有上下文明显更有利时保留,否则应 `close_agent`.
+- `implementation` `子代理`默认不复用; 仅当仍在同一目标问题,同一写入范围,且延续既有工作态明显更有利时,才允许短暂复用,否则应 `close_agent`.
+- `Execution-oriented` `子代理`在同一目标问题下可优先复用; 若目标切换,职责变化,关键前提变化或存在上下文污染风险,则 `close_agent` 并改派.
+- 已关闭的`子代理`仅在恢复既有运行态确有帮助时才恢复; 否则默认新建.
 
 ### `spawn_agent` 约束
 
 - 所有`子代理`只能由`主线程`创建,调度和回收,且子代理线程不得再次调用`spawn_agent`.
-- 调用`spawn_agent`时,必须显式使用`fork_context=false`,以减少无关线程历史注入并保持专项上下文稳定.
-- 调用`spawn_agent`后,`主线程`需要向用户说明本次派发的目的.
-- 调用`wait_agent`时,`Execution-oriented` `子代理`默认超时为`1800000` ms,其他类型默认为`600000` ms; 可根据任务规模,阻塞程度和预期运行时长调整.
+- 调用`spawn_agent`时必须显式设置`fork_context`.
+- `implementation` 子代理默认优先使用 `fork_context=true`,以复用主线程上下文; 仅当任务高度独立,或复用主线程历史会带来明显上下文污染风险时,才改用 `false`.
+- 在 `implementation` 任务的派发判断中,默认把 `fork_context=true` 视为低损耗的上下文分叉方式.
+- 其他类型子代理维持 `fork_context=false`,以减少无关线程历史注入并保持专项上下文稳定.
+- 调用`wait_agent`时,`Execution-oriented` `子代理`默认超时为`1800000` ms,其他类型默认为`600000` ms.
 
 
 ## Web Search Policy
