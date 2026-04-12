@@ -38,7 +38,7 @@
 
 ## 工具使用
 
-* 使用 `apply_patch` 编辑文件时,应优先保持单次修改足够小且易于拆分. 对普通代码文本,单次改动控制在约 `700` 行以内通常较安全,可降低命令过长触发 Win32 `CreateProcess` 长度限制而导致编辑失败的风险.
+* 使用 `apply_patch` 编辑文件时,应优先保持单次修改足够小且易于拆分. 对普通代码文本,单次改动控制在约 `500` 行以内通常较安全,可降低命令过长触发 Win32 `CreateProcess` 长度限制而导致编辑失败的风险.
 
 * 执行总则:
   当前会话的 shell 是所有命令执行约束的判定基准; `powershell` 与 `pwsh` 视为同类 shell.
@@ -106,7 +106,7 @@
 - 调用`spawn_agent`时必须显式设置`fork_context`.
 - `implementation` 子代理默认优先使用 `fork_context=true`,以复用主线程上下文; 仅当任务高度独立,或复用主线程历史会带来明显上下文污染风险时,才改用 `false`.
 - 其他非 `implementation` 类型子代理维持 `fork_context=false`,以减少无关线程历史注入并保持专项上下文稳定.
-- 调用`wait_agent`时,`Execution-oriented` `子代理`默认超时为`1800000` ms,其他类型默认为`600000` ms; 该长超时主要用于承载长命令和持续输出.
+- 调用`wait_agent`时,`子代理`默认超时为`1800000` ms; 该长超时主要用于承载长命令和持续输出.
 
 
 ## Web Search Policy
