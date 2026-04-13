@@ -1,13 +1,21 @@
 ---
 name: subagent-dispatch
-description: Subagent dispatch rules for Codex. Use only when the current thread has subagent capabilities available, and when the user explicitly enables `$subagent-dispatch`, mentions `子代理` or subagent delegation, or, in plan mode, issues `Implement plan` or an equivalent action for a previously output or agreed plan and wants structured subagent orchestration, reuse, verification handoff, lifecycle management, or invocation control.
+description: Subagent dispatch rules for Codex. Use only when the current thread has subagent capabilities available, and when the user explicitly enables `$subagent-dispatch`, mentions `子代理` or subagent delegation, or later issues `Implement plan` for a concrete plan that was produced in Plan Mode after the thread has returned to Default mode.
 ---
 
 # Subagent Dispatch
 
 Use this skill only when the current thread has subagent capabilities available. If subagent tools are unavailable in the current thread, do not apply this skill.
 
-When subagent capabilities are available, use this skill after the user explicitly enables `$subagent-dispatch`, or when the request implicitly signals structured subagent orchestration, such as mentioning `子代理`, asking for subagent delegation, or, in plan mode, issuing `Implement plan` or an equivalent action for a previously output or agreed plan.
+When subagent capabilities are available, use this skill after the user explicitly enables `$subagent-dispatch`, or when the request implicitly signals structured subagent orchestration, such as mentioning `子代理`, asking for subagent delegation, or later issuing `Implement plan` for a concrete plan that was produced in Plan Mode after the thread has returned to Default mode.
+
+For the `Implement plan` family, auto-apply this skill only when:
+
+- the thread already contains a concrete plan produced in `Plan Mode`
+- the visible context shows that the thread is now in `Default mode`
+- the `Implement plan` style instruction clearly refers to that prior plan
+
+Otherwise, `Implement plan` alone does not trigger this skill.
 
 ## Authorization
 
