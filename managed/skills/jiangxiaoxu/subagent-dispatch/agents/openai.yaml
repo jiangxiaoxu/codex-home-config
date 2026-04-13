@@ -1,6 +1,6 @@
 interface:
   display_name: "Subagent Dispatch"
-  short_description: "Subagent orchestration with explicit and post-plan implement triggers"
+  short_description: "Subagent orchestration with explicit enablement and mandatory execute-plan auto-trigger"
 
 policy:
   allow_implicit_invocation: true

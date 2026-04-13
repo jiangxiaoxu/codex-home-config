@@ -1,21 +1,34 @@
 ---
 name: subagent-dispatch
-description: Subagent dispatch rules for Codex. Use only when the current thread has subagent capabilities available, and when the user explicitly enables `$subagent-dispatch`, mentions `子代理` or subagent delegation, or later issues `Implement plan` for a concrete plan that was produced in Plan Mode after the thread has returned to Default mode.
+description: Subagent dispatch rules for Codex. Use when subagent capabilities are available and the user explicitly enables `$subagent-dispatch`, mentions `子代理` or subagent delegation, or uses an execute-plan phrase such as `Implement plan` to execute an already-generated concrete plan.
 ---
 
 # Subagent Dispatch
 
 Use this skill only when the current thread has subagent capabilities available. If subagent tools are unavailable in the current thread, do not apply this skill.
 
-When subagent capabilities are available, use this skill after the user explicitly enables `$subagent-dispatch`, or when the request implicitly signals structured subagent orchestration, such as mentioning `子代理`, asking for subagent delegation, or later issuing `Implement plan` for a concrete plan that was produced in Plan Mode after the thread has returned to Default mode.
+Apply this skill when the user explicitly enables `$subagent-dispatch`, mentions `子代理`, asks for subagent delegation, or uses an execute-plan phrase such as `Implement plan` to execute a concrete prior plan after the thread has returned to `Default`.
 
-For the `Implement plan` family, auto-apply this skill only when:
+Treat short execute-plan phrases such as `Implement plan`, `PLEASE IMPLEMENT THIS PLAN`, `execute plan`, `start implementing the plan`, `按这个计划开始做`, `开始按计划执行`, `"Implement plan"`, `回复: Implement plan`, and `Implement plan;` as equivalent signals when they refer to a visible prior plan.
 
-- the thread already contains a concrete plan produced in `Plan Mode`
-- the visible context shows that the thread is now in `Default mode`
-- the `Implement plan` style instruction clearly refers to that prior plan
+## TL;DR
 
-Otherwise, `Implement plan` alone does not trigger this skill.
+- Use this skill only when subagent tools are available and the user clearly authorized delegation.
+- Split work by primary deliverable: evidence -> `Read-only exploration`, code changes -> `implementation`, command execution -> `Execution-oriented`.
+- Prefer parallel dispatch for independent sidecar work that does not block the next local step.
+- Reuse a suitable active subagent before creating a new one.
+- Let the main thread keep doing non-overlapping work after dispatch; wait only when the next critical-path step depends on a subagent result.
+- Keep integration, prioritization, and final explanation on the main thread.
+
+## Quick Dispatch Table
+
+| Task shape | Default owner |
+| --- | --- |
+| Read code, trace call chains, confirm scope, collect evidence | `Read-only exploration` |
+| Localized repo-tracked edit with clear write scope | `implementation` |
+| Build, test, reproduce, benchmark, collect logs | `Execution-oriented` |
+| Tiny edit or tiny lookup with no meaningful handoff overhead | Main thread |
+| Cross-module change plus separate verification phase | `implementation`, then `Execution-oriented` |
 
 ## Authorization
 
@@ -41,14 +54,18 @@ Otherwise, `Implement plan` alone does not trigger this skill.
 - If the current phase is mainly about running commands, validating changes, reproducing issues, confirming regressions, measuring performance, or collecting failure evidence, prefer `Execution-oriented`.
 - If a task mixes code modification and script-based verification, split it into two phases: finish the `implementation` phase first, then handle the execution-heavy phase through an `Execution-oriented` subagent instead of the main thread.
 - If implementation work finishes and the next step still requires command execution, log observation, or failure-evidence collection, reuse a suitable active `Execution-oriented` subagent when available; otherwise create a new one.
+- Prefer dispatching multiple independent sidecar tasks in parallel when they do not share a write scope and do not block the same immediate next step.
+- Keep the immediate critical-path step on the main thread unless a subagent can do it materially better without creating avoidable waiting.
 
 ## Main Thread Constraints
 
-- After launching a batch of subagents, default to waiting for the entire batch to return before continuing.
-- Before the current batch has fully returned, limit the main thread to waiting, receiving results, and giving progress updates. Do not continue analysis, implementation, validation, or additional delegation during that time.
-- After the current batch has fully returned, decide whether to launch the next batch or continue to the next step.
+- After launching subagents, continue with meaningful non-overlapping work on the main thread whenever such work exists.
+- Wait only when the next critical-path step requires a subagent result, or when integration would otherwise duplicate unresolved delegated work.
+- Do not wait by reflex immediately after dispatch if the main thread can still advance the task safely.
+- If multiple subagents are running, prefer waiting for the subset whose results are now needed instead of forcing a full-batch barrier.
+- Do not redo delegated work on the main thread while that delegated task is still in flight.
 - If the previous batch was `implementation` and the next step requires command execution, log observation, or failure-evidence collection, handle that step through an `Execution-oriented` subagent rather than the main thread.
-
+- After auto-applying this skill, announce the activation and state the planned delegation split before spawning subagents.
 
 ## Lifecycle And Reuse
 
