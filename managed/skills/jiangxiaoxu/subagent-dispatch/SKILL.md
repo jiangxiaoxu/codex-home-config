@@ -5,81 +5,84 @@ description: Subagent dispatch rules for Codex. Use when subagent capabilities a
 
 # Subagent Dispatch
 
-Use this skill only when the current thread has subagent capabilities available. If subagent tools are unavailable in the current thread, do not apply this skill.
+## Activation
 
-Apply this skill when the user explicitly enables `$subagent-dispatch`, mentions `子代理`, asks for subagent delegation, or uses an execute-plan phrase such as `Implement plan` to execute a concrete prior plan after the thread has returned to `Default`.
+Use this skill only when the current thread can create and manage subagents, and the user clearly authorized delegation.
 
-Treat short execute-plan phrases such as `Implement plan`, `PLEASE IMPLEMENT THIS PLAN`, `execute plan`, `start implementing the plan`, `按这个计划开始做`, `开始按计划执行`, `"Implement plan"`, `回复: Implement plan`, and `Implement plan;` as equivalent signals when they refer to a visible prior plan.
+Authorization includes explicit enablement of `$subagent-dispatch`, mention of `子代理` or subagent delegation, explicit authorization in an active user-scoped instruction file, or a short execute-plan utterance that clearly refers to a visible prior plan, such as `Implement plan` or `PLEASE IMPLEMENT THIS PLAN`.
 
-## TL;DR
+Keep decomposition, prioritization, waiting, integration, and the final explanation on the main thread.
 
-- Use this skill only when subagent tools are available and the user clearly authorized delegation.
-- Split work by primary deliverable: evidence -> `Read-only exploration`, code changes -> `implementation`, command execution -> `Execution-oriented`.
-- Prefer parallel dispatch for independent sidecar work that does not block the next local step.
-- Reuse a suitable active subagent before creating a new one.
-- Let the main thread keep doing non-overlapping work after dispatch; wait only when the next critical-path step depends on a subagent result.
-- Keep integration, prioritization, and final explanation on the main thread.
+## Core Model
 
-## Quick Dispatch Table
+Classify each phase by its primary deliverable:
 
-| Task shape | Default owner |
-| --- | --- |
-| Read code, trace call chains, confirm scope, collect evidence | `Read-only exploration` |
-| Localized repo-tracked edit with clear write scope | `implementation` |
-| Build, test, reproduce, benchmark, collect logs | `Execution-oriented` |
-| Tiny edit or tiny lookup with no meaningful handoff overhead | Main thread |
-| Cross-module change plus separate verification phase | `implementation`, then `Execution-oriented` |
+- `Read-only exploration`: evidence, scope, entry points, call chains, impact analysis, `Web Search`, and external verification.
+- `implementation`: repo-tracked code changes, local fixes, and controlled refactors.
+- `Execution-oriented`: command execution, validation, reproduction, logs, benchmarks, and regression evidence.
+- `default`: general-purpose delegated work that does not fit the classes above, but still benefits from handoff.
 
-## Authorization
+Tiny local exception: keep work on the main thread for one quick lookup, or a trivial tightly scoped change with clear boundaries, low coordination cost, and no separate verification phase.
 
-- Apply this skill only when the current thread can actually call and manage subagent features.
-- Treat explicit enablement of `$subagent-dispatch`, or any explicit authorization in an active user-scoped instruction file, as permission for the main thread to create and manage subagents.
-- Keep responsibility for decomposition, agent selection, waiting, integration, and explanation in the main thread.
-- Default to delegating work that is suitable for subagents.
+Expected outputs:
 
-## Agent Classes
+- `Read-only exploration`: evidence and a conclusion.
+- `implementation`: changed scope plus assumptions or risks.
+- `Execution-oriented`: commands run, status, and a failure summary when relevant.
+- `default`: the requested deliverable plus concise status, assumptions, and open questions.
 
-- Use `Read-only exploration` for read-only discovery, entry-point location, call-chain tracing, impact analysis, and external verification.
-- Use `implementation` for repo-tracked code changes, local fixes, and controlled refactors.
-- Use `Execution-oriented` for `build`, `test`, `benchmark`, `diagnostic`, reproduction, regression confirmation, performance checks, and other command-running tasks whose primary deliverable is execution evidence.
-- Match the available subagent options in the current environment to these three classes by their primary deliverable and expected depth, without depending on any specific agent label names.
+Match available subagent options to these classes by primary deliverable and expected depth, without relying on specific agent label names. Use `default` only as a fallback when the specialized classes do not fit cleanly.
 
-## Dispatch Rules
+## Decision Policy
 
-- Classify work by the current phase's primary deliverable: evidence and conclusions belong to `Read-only exploration`, code changes belong to `implementation`, and command execution plus result summaries belong to `Execution-oriented`.
-- If more than one subagent in the same class fits, choose the most suitable one; if still ambiguous, prefer the stronger agent.
-- Default to assigning `implementation` work to an `implementation` subagent. Only keep it on the main thread when the task is extremely small, the boundary is clear, and the main thread is obviously faster.
-- If an `implementation` task spans multiple files, crosses modules, has notable edge cases, carries higher risk, or requires expensive context gathering, always delegate it to an `implementation` subagent.
-- Default to assigning `Read-only exploration` and `Execution-oriented` work to their matching subagent classes.
-- If the current phase is mainly about running commands, validating changes, reproducing issues, confirming regressions, measuring performance, or collecting failure evidence, prefer `Execution-oriented`.
-- If a task mixes code modification and script-based verification, split it into two phases: finish the `implementation` phase first, then handle the execution-heavy phase through an `Execution-oriented` subagent instead of the main thread.
-- If implementation work finishes and the next step still requires command execution, log observation, or failure-evidence collection, reuse a suitable active `Execution-oriented` subagent when available; otherwise create a new one.
-- Prefer dispatching multiple independent sidecar tasks in parallel when they do not share a write scope and do not block the same immediate next step.
-- Keep the immediate critical-path step on the main thread unless a subagent can do it materially better without creating avoidable waiting.
+If this skill is active, the main thread is authorized to dispatch subagents under the activation criteria.
 
-## Main Thread Constraints
+Use this precedence:
 
-- After launching subagents, continue with meaningful non-overlapping work on the main thread whenever such work exists.
-- Wait only when the next critical-path step requires a subagent result, or when integration would otherwise duplicate unresolved delegated work.
-- Do not wait by reflex immediately after dispatch if the main thread can still advance the task safely.
-- If multiple subagents are running, prefer waiting for the subset whose results are now needed instead of forcing a full-batch barrier.
-- Do not redo delegated work on the main thread while that delegated task is still in flight.
-- If the previous batch was `implementation` and the next step requires command execution, log observation, or failure-evidence collection, handle that step through an `Execution-oriented` subagent rather than the main thread.
-- After auto-applying this skill, announce the activation and state the planned delegation split before spawning subagents.
+1. Apply the tiny local exception if it clearly fits.
+2. Otherwise assign by primary deliverable.
+3. Then optimize for reuse, parallelism, and waiting.
 
-## Lifecycle And Reuse
+Prefer delegating suitable `implementation` work.
 
-- Do not close subagents immediately after a batch returns if they may still be reusable in the following steps.
-- Before dispatching any new task, check whether there is an existing active subagent of any class that has not been closed and is suitable for reuse.
-- If a suitable active subagent exists, reuse it instead of spawning a new one.
-- If no active subagent is suitable for reuse and a new subagent is still required, explicitly review the active subagents of the same class, keep the ones that are still worth preserving, close the ones that are not, and only then create the new one.
-- Do not rely on reopening closed subagents. Once a subagent is closed, treat it as terminal and unavailable for future reuse.
+Prefer an `implementation` subagent when the task spans files, crosses modules, has meaningful edge cases or risk, or requires expensive context gathering.
 
-## Subagent Invocation Constraints
+Prefer matching `Read-only exploration` and `Execution-oriented` work to their own classes.
 
-- Allow only the main thread to create, schedule, and close subagents.
-- Do not allow subagents to create additional subagents.
-- Always make the context-inheritance choice explicit when creating a subagent.
-- For `implementation`, default to inheriting the main thread context; switch to isolated context only when the task is highly independent or inherited history would materially pollute the context.
-- For non-`implementation` work, default to isolated context to reduce irrelevant history injection and preserve focused context.
-- Use a long default wait timeout, about 30 minutes, unless the task clearly needs a different bound.
+If no specialized class fits cleanly but delegation is still useful, use `default` for general-purpose delegated work.
+
+If a task mixes code changes and command-heavy verification, split it into phases: finish `implementation` first, then use `Execution-oriented` for verification.
+
+If multiple subagents fit, choose the most suitable one. If still ambiguous, prefer the stronger agent.
+
+Prefer parallel dispatch for independent sidecar tasks with separate write scopes that do not block the same immediate next step.
+
+## Execution Conventions
+
+Before creating a new subagent, reuse a suitable active one when practical.
+
+If no active subagent is suitable, review same-class active subagents, keep reusable ones, close stale ones, then create a new one.
+
+Treat closed subagents as terminal and unavailable for reuse.
+
+Only the main thread may create, schedule, and close subagents. Subagents must not create additional subagents.
+
+Always choose context inheritance explicitly: prefer inherited context for `implementation`, and isolated context for non-`implementation` work unless shared history is clearly useful.
+
+When using `default`, give a tighter task contract than usual: state the requested deliverable, constraints, and success condition explicitly.
+
+Prefer a long wait timeout, about 30 minutes, unless the task clearly needs a different bound.
+
+If a subagent times out or returns low-signal output, redirect once with a tighter scope or switch to a better-scoped or stronger subagent. Do not treat timeout as completion.
+
+## Main Thread Ownership
+
+After dispatch, keep advancing non-overlapping work on the main thread when possible.
+
+Wait only when the next critical-path step depends on a subagent result, and wait only for the subset now needed.
+
+Do not redo delegated work on the main thread while that delegated task is still in flight.
+
+Prefer an `Execution-oriented` subagent when the next phase after `implementation` is command execution, validation, or evidence collection.
+
+After auto-applying this skill, announce activation and the planned delegation split before spawning subagents.
