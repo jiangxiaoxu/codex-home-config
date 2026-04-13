@@ -38,73 +38,13 @@
 
 ## 工具使用
 
-* 使用 `apply_patch` 编辑文件时,应优先保持单次修改足够小且易于拆分. 对普通代码文本,单次改动控制在约 `500` 行以内通常较安全,可降低命令过长触发 Win32 `CreateProcess` 长度限制而导致编辑失败的风险.
+* `apply_patch`: 单次修改保持小而可拆分. 普通代码文本建议控制在约 `500` 行以内,以降低命令过长触发 Win32 `CreateProcess` 限制而失败的风险.
 
-* 执行总则:
-  当前会话的 shell 是所有命令执行约束的判定基准; `powershell` 与 `pwsh` 视为同类 shell.
-  这些规则既适用于 shell 原生命令,也适用于通过当前 shell 启动的解释器或外部程序,如 `python`,`node`,`bash`,`cmd` 等.
-  已知当前 shell 时,优先直接执行其可原生运行的命令,脚本块,脚本路径或目标解释器 / 程序本身; 不要为转义,拼接或套模板再额外包一层同类 shell.
+* 执行总则: 以当前会话 shell 为准,`powershell` 与 `pwsh` 视为同类. 规则同时适用于 shell 原生命令及其启动的 `python`,`node`,`bash`,`cmd` 等程序. 已知当前 shell 时,优先直接使用其原生可执行形式,不要为转义,拼接或套模板再额外包一层同类 shell.
 
-* 长命令,复杂嵌套与临时文件:
-  命令涉及复杂字符串嵌套,多层引号 / 转义,JSON,正则,模板文本,或其他易因解析顺序出错的内容时,默认优先拆成当前 shell 可原生执行的多个简单步骤; 可先将中间结果,片段字符串,路径,参数数组或脚本块赋给变量,再在后续语句中消费.
-  若分步执行后仍过长,包含多行脚本块,复杂条件 / 循环,较多管道与重定向,或整体误解析风险仍高,再写入临时脚本文件,并由当前会话以原生方式执行.
-  对 `python -c`,`node -e` 同样适用: 简短,低风险的单行命令可直接执行; 若存在明显嵌套或转义风险,优先改写为 shell-native 分步执行,必要时再改为临时 `.py` / `.js` 文件.
-  不要机械拆分所有命令; 对天然流式,短小,低风险且直接执行更清晰的命令,保持原样. 这类临时文件默认执行后删除,仅在调试,复盘或复现确有必要时才保留并说明原因.
+* 长命令与临时文件: 遇到复杂引号,转义,JSON,正则,模板文本等高误解析风险场景时,先拆成当前 shell 可原生执行的简单步骤,必要时用变量承载中间结果; 若仍过长,包含多行脚本块,复杂控制流,或较多管道与重定向,再写入临时脚本并以当前 shell 原生执行. `python -c`,`node -e` 同样遵循此规则. 对短小,低风险,天然流式的命令保持原样. 临时文件默认执行后删除,仅在调试,复盘或复现确有必要时保留并说明原因.
 
-* PowerShell 规则:
-  当当前会话的 shell 为 `powershell` 或 `pwsh` 时,执行 `.ps1` 脚本优先使用 `& <script.ps1>` 或直接执行脚本路径; 普通命令优先直接写成原生命令或脚本块.
-  对 `.py` `.js` 等解释型脚本,不要把脚本文件本身直接当作可执行目标调用; 应显式调用对应解释器,如 `python <script.py>` 或 `node <script.js>`. 仅当任务目标本身就是验证,排查或复现文件关联 / 脚本宿主行为时,才允许直接执行脚本文件路径.
-  不要额外包裹 `powershell -File <script.ps1>`,`pwsh -File <script.ps1>`,`powershell -Command <...>`,`pwsh -Command <...>`,`powershell -c <...>`,`pwsh -c <...>` 或 `-EncodedCommand`.
-  仅当确实需要新的 PowerShell 进程语义时,才允许使用这些包装形式,例如必须切换到特定 PowerShell 版本,隔离当前 session 状态,覆盖 `ExecutionPolicy`,或依赖全新进程的启动行为.
-  当当前会话为 `pwsh` 时,默认不得回退到 `powershell` / Windows PowerShell 5,除非已验证必须切换,并说明原因与兼容性影响.
-
-## 子代理调度
-
-- 当前 `AGENTS.md` 或其他 active user-scoped instruction file 中,对 `spawn_agent`,`子代理`,委托或并行代理工作的明确授权,均视为用户已允许`主线程`直接调用 `spawn_agent`.
-- `主线程`负责拆分,选择,等待,整合和说明; 默认把适合委托的工作交给`子代理`.
-
-### 子代理分类
-
-- `Read-only exploration`: 只读摸底,入口定位,调用链追踪,影响范围确认和外部资料核实.
-- `implementation`: `repo-tracked` 代码修改,局部修复,受控重构.
-- `Execution-oriented`: 负责 `build`,`test`,`benchmark`,`diagnostic` 等执行类任务,也可承接验证,复现,回归确认或性能确认等阶段性执行工作; 主要交付命令结果与执行证据的汇总,不负责代码修改.
-- 当前可用子代理与分类对应为: `explorer` -> `Read-only exploration`; `worker`,`worker_heavy` -> `implementation`; `awaiter` -> `Execution-oriented`.
-
-### 派发规则
-
-- 默认按当前阶段的主交付物在 `Read-only exploration`,`implementation`,`Execution-oriented` 中三选一; 证据和结论归 `Read-only exploration`,代码改动归 `implementation`,命令执行与结果归纳归 `Execution-oriented`.
-- 同类多子代理时选最合适者; 若仍有歧义,优先能力更强的子代理.
-- `implementation` 任务默认优先派发 `implementation` 子代理,由`主线程`负责编排,决策,整合和验收; 仅当任务极小,边界清晰且主线程明显更快时才直行.
-- 只要 `implementation` 任务表现出多文件,跨模块,边界条件多,风险高或上下文收集成本高,一律派发 `implementation` 子代理.
-- `Read-only exploration` 和 `Execution-oriented` 默认优先派发对应子代理.
-- 当当前阶段核心在于运行命令,验证变更,复现问题,确认回归,测量性能或收集失败证据时,默认优先考虑 `Execution-oriented` 子代理.
-- 当任务同时包含代码修改与脚本验证时,默认拆成两个批次: 先派发 `implementation` 子代理完成修改,等待该批全部返回,再由`主线程`单独派发 `Execution-oriented` 子代理执行 `build`,`test`,`benchmark`,`diagnostic` 或其他需要观察 log 的脚本.
-- 如果 `implementation` 子代理返回时明确把验证交回主线程,或其结果显示仍需运行脚本来收集证据,`主线程`不得让该 `implementation` 子代理继续执行该脚本,也不应由主线程自己直接运行; 应改派合适的 `Execution-oriented` 子代理承接.
-
-### 主线程约束
-
-- `主线程`派发一批`子代理`后,默认等该批全部返回再继续推进工作.
-- 在当前批次全部返回前,`主线程`只做等待,接收结果和进度说明,不再分析,实现,验证或追加`子代理`.
-- 当前批次全部返回后,再决定是否发起下一批或转入后续步骤.
-- 当上一批是 `implementation` 且下一步需要命令执行,日志观察或失败证据收集时,`主线程`的默认动作是发起新的 `Execution-oriented` 批次,而不是自己运行命令.
-
-
-### 生命周期与复用
-
-- 每批`子代理`全部返回并完成整合后,`主线程`必须对该批每个`子代理`立即执行 `close_agent`.
-- 当后续需要再次派发某一类型的`子代理`时,`主线程`可先检查是否存在适合复用的同类型已关闭`子代理`.
-- 如果存在适合复用的同类型已关闭`子代理`,`主线程`应优先 `resume_agent` 其中最合适的一个; 如果不存在,则派发新的同类型`子代理`.
-
-
-
-### `spawn_agent` 约束
-
-- 所有`子代理`只能由`主线程`创建,调度和回收,且子代理线程不得再次调用`spawn_agent`.
-- 调用`spawn_agent`时必须显式设置`fork_context`.
-- `implementation` 子代理默认优先使用 `fork_context=true`,以复用主线程上下文; 仅当任务高度独立,或复用主线程历史会带来明显上下文污染风险时,才改用 `false`.
-- 其他非 `implementation` 类型子代理维持 `fork_context=false`,以减少无关线程历史注入并保持专项上下文稳定.
-- 调用`wait_agent`时,`子代理`默认超时为`1800000` ms; 该长超时主要用于承载长命令和持续输出.
-
+* PowerShell: 在 `powershell` 或 `pwsh` 中,`.ps1` 优先用 `& <script.ps1>` 或直接脚本路径执行,普通命令直接写成原生命令或脚本块. `.py`,`js` 等解释型脚本应显式经解释器执行,如 `python <script.py>` 或 `node <script.js>`,除非任务本身就是验证文件关联或脚本宿主行为. 不要额外包裹 `powershell` 或 `pwsh` 的 `-File`,`-Command`,`-c`,`-EncodedCommand`; 仅在确需新进程语义时使用,如切换 PowerShell 版本,隔离 session,覆盖 `ExecutionPolicy`,或依赖全新进程启动行为. 当前会话为 `pwsh` 时,默认不得回退到 `powershell` / Windows PowerShell 5,除非已验证必须切换,并说明原因与兼容性影响.
 
 ## Web Search Policy
 

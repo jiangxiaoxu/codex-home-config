@@ -1,0 +1,7 @@
+interface:
+  display_name: "Subagent Dispatch"
+  short_description: "Subagent orchestration with explicit and plan-mode triggers"
+  default_prompt: "Use `$subagent-dispatch` when the user explicitly enables it, mentions subagents, or, in plan mode, issues `Implement plan` or an equivalent action for a previously output or agreed plan."
+
+policy:
+  allow_implicit_invocation: true
