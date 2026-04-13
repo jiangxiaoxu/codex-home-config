@@ -41,6 +41,8 @@ Prefer an `implementation` subagent when the task spans files, crosses modules, 
 
 Prefer matching `Read-only exploration` and `Execution-oriented` work to their own classes.
 
+For `Read-only exploration`, prefer narrow, conclusion-oriented task slices over broad surveys. A good default is one focused question, or one tightly related mini-cluster whose result can be consumed independently.
+
 Use `default` only as a fallback when the specialized classes do not fit cleanly, and give it a tighter task contract than usual: requested deliverable, constraints, and success condition.
 
 If multiple subagents fit the same task, choose the most suitable one. If the choice is still ambiguous, prefer the stronger agent.
@@ -49,9 +51,13 @@ If a task mixes code changes and command-heavy verification, split it into phase
 
 Prefer parallel dispatch only for independent sidecar tasks with clearly separate scopes that do not block the same immediate next step.
 
+For `Read-only exploration`, prefer small-batch parallelism over single large exploration tasks when the questions can be split cleanly. Favor more, narrower explorations when that is likely to produce earlier decision-useful results, but avoid duplicate or highly overlapping asks that only increase integration cost.
+
 Before creating a new subagent, review active same-class subagents first. Keep reusable ones, close open agents that are stale or no longer fit the current goal, then create a new subagent only if none of the remaining active agents fit the current goal.
 
 Reuse `Read-only exploration` and `Execution-oriented` subagents when their class, topic, and success condition still fit. Reuse an `implementation` subagent only when the task remains `implementation`, its write scope is unchanged, its success condition still fits, and it has not been interrupted. Treat closed subagents as terminal.
+
+Do not dispatch exploration work that the main thread is unlikely to consume in the current turn. If an exploration result will probably not affect the current decision window, defer it or narrow it further before dispatch.
 
 ## Implementation Scope Contract
 
@@ -106,13 +112,23 @@ Do not keep completed `implementation` subagents open for speculative reuse. Tre
 
 After dispatch, keep advancing non-overlapping work on the main thread when possible.
 
-Wait only when the next critical-path step depends on a subagent result, only for the subset now needed, and with `timeout_ms=1800000` by default unless the task explicitly requires a different bound.
+Wait only when the next critical-path step depends on a subagent result, and wait only for the subset now needed, not for every in-flight subagent by default. For `Read-only exploration`, the goal is usually enough information to make the next decision safely, not full exploration completion.
+
+Apply that flexibility differently by class. For `implementation`, default to waiting for completion or explicit wrap-up before integration, overlapping edits, result-dependent validation, or the final answer. Do not proceed past those checkpoints as if the implementation result were settled while it is still in flight.
+
+For `Execution-oriented`, do not require unconditional waiting immediately after dispatch, but do wait before using its evidence to declare pass or fail, close out validation, or present a final outcome. The main thread may continue unrelated preparation while the command work is running.
+
+Treat `enough information` as the point where the next step is unlikely to change materially if additional in-flight exploration finishes later. Prefer waiting at decision checkpoints such as approach selection, implementation direction changes, validation conclusions, and the final answer.
 
 Do not redo delegated work on the main thread while that delegated task is still in flight.
+
+If enough information has arrived, the main thread may continue while other exploration work remains in flight, but it must keep a clear plan for each remaining subagent: continue as a sidecar, steer to wrap up, or close it.
 
 If the main thread takes over an overlapping write scope, stop delegated write work before continuing. Main-thread integration does not justify leaving overlapping `implementation` agents running.
 
 Prefer an `Execution-oriented` subagent when the next phase after `implementation` is command execution, validation, or evidence collection.
+
+If later exploration disproves the direction chosen from earlier partial results, explicitly replan instead of silently continuing on the stale path.
 
 If a subagent times out or returns low-signal output, redirect once with a tighter scope or switch to a better-scoped or stronger subagent. Do not treat timeout as completion.
 
