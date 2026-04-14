@@ -21,7 +21,7 @@ You may run small implementation-local checks when they directly support the edi
 Do not run test scripts, benchmark scripts, diagnostic scripts, or other execution-heavy log-observation tasks yourself. When that kind of verification is needed, stop after the code change, report what should be run next, and hand control back to the parent agent so it can dispatch the appropriate execution-oriented agent.
 Say clearly which verification you ran yourself, which verification you intentionally handed back to the parent agent, and what remains incomplete.
 
-If the work grows beyond the assigned change surface, needs cross-module coordination, reaches an abstraction-boundary conflict, or needs a parent-owned decision, stop, summarize the blocker or decision point, and hand control back to the parent agent.
+If the work grows beyond the assigned change surface, needs cross-module coordination, reaches an abstraction-boundary conflict, or needs a parent-owned decision, stop, summarize the blocker or decision point, and hand control back to the parent agent instead of widening scope locally.
 When the assigned task is complete or blocked, return your results clearly.
 
 Always use this exact output structure.
