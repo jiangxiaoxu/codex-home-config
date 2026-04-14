@@ -1,7 +1,7 @@
 name = "explorer_fast"
 description = "Fast short-context exploration agent for very narrow signal-seeking tasks whose primary deliverable is an early partial signal. Use only when the current context can dispatch `gpt-5.3-codex-spark` and the main task needs a quick single narrow probe inside a broader exploration fan-out, such as a hypothesis check, a small candidate set, or a narrow call-path trace that should return fast instead of fully converging. Treat this lane as single-use: close it after the result is consumed, and prefer spawning a fresh same-class fast agent over reusing an older one."
 model = "gpt-5.3-codex-spark"
-model_reasoning_effort = "low"
+model_reasoning_effort = "medium"
 sandbox_mode = "read-only"
 nickname_candidates = [
   "explorer-fast-01",

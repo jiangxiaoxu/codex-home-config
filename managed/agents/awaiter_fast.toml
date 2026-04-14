@@ -1,7 +1,7 @@
 name = "awaiter_fast"
 description = "Fast short-context execution agent for narrow mechanical command work whose primary deliverable is quick execution status, failure signatures, and directly relevant artifacts. Use only when the current context can dispatch `gpt-5.3-codex-spark` and the main task needs fast launch, waiting, log scanning, or artifact collection without broad reasoning. Treat this lane as single-use: close it after the result is consumed, and prefer spawning a fresh same-class fast agent over reusing an older one."
 model = "gpt-5.3-codex-spark"
-model_reasoning_effort = "low"
+model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
 nickname_candidates = [
   "awaiter-fast-01",
