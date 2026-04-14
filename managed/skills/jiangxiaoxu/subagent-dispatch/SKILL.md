@@ -1,6 +1,6 @@
 ---
 name: subagent-dispatch
-description: Subagent dispatch rules for Codex. Use when subagents are available and the user explicitly enables `$subagent-dispatch`, asks to `派发子代理` or `使用子代理` for a task, or uses an execute-plan phrase such as `Implement plan`, `PLEASE IMPLEMENT THIS PLAN`, `按这个计划实现`, or `按计划执行` to execute an already-generated concrete plan.
+description: Subagent dispatch rules for Codex. Use when subagents are available and the user explicitly enables `$subagent-dispatch`, asks to `派发子代理` or `使用子代理` for a task, uses an execute-plan phrase such as `Implement plan`, `PLEASE IMPLEMENT THIS PLAN`, `按这个计划实现`, or `按计划执行`, or is in or entering `Plan Mode` information gathering for a concrete task that needs information retrieval for the next planning decision.
 ---
 
 # Subagent Dispatch
@@ -14,17 +14,21 @@ Activate this skill when one of these is true:
 - explicit enablement of `$subagent-dispatch`
 - the user asks to `派发子代理` or `使用子代理` for a task
 - the user uses a short execute-plan utterance that clearly targets a visible prior plan, such as `Implement plan`, `PLEASE IMPLEMENT THIS PLAN`, `按这个计划实现`, or `按计划执行`
+- the current task is in or entering `Plan Mode` information gathering, has a concrete deliverable, and needs bounded information retrieval that can change the next planning decision
 - the conversation is specifically about subagent routing or workflow design
 
 Bare mentions of `子代理` do not count as delegation intent.
 
 Discussion about routing, workflow design, or subagent policy loads this skill for analysis only. It does not by itself authorize spawning subagents for the current task.
 
+`Plan Mode` automatic dispatch is limited to concrete-task information gathering. Pure policy, workflow, routing, or prompting discussion still stays analysis-only.
+
 Current-task delegation requires one of these:
 
 - explicit enablement of `$subagent-dispatch`
 - the user explicitly asks to `派发子代理` or `使用子代理` for the current task
 - explicit authorization in an active user-scoped instruction file
+- the current task is in or entering `Plan Mode` information gathering, needs bounded information retrieval for the next planning decision, and the dispatch stays on the `exploration` lane
 - a short execute-plan utterance that clearly targets a visible prior plan, such as `Implement plan`, `PLEASE IMPLEMENT THIS PLAN`, `按这个计划实现`, or `按计划执行`
 
 Default posture:
@@ -34,6 +38,15 @@ Default posture:
 - stay local when local work is faster and cheaper than delegation
 
 If the current task is delegated, announce activation and the planned delegation split before spawning subagents.
+
+For `Plan Mode` auto-dispatch, all of these must hold:
+
+- the task has a concrete deliverable instead of only workflow or policy discussion
+- the current step needs bounded information retrieval that can change the next planning decision
+- the main thread already completed one local triage pass
+- bounded unknowns can change the next planning decision
+- further local exploration would noticeably bloat main-thread context
+- the dispatch remains read-only and stays within the `exploration` lane
 
 ## Ownership
 
@@ -50,10 +63,12 @@ Only the main thread may decide:
 ## Main-Thread Modes
 
 - `Chat`: default mode; do not dispatch
-- `Exploration-enhanced`: use only when bounded unknowns can change the next decision and local exploration would noticeably bloat main-thread context; fan out as many independent narrow fast exploration tasks as useful within the current thread budget and keep at most `2` normal exploration agents active only when they own disjoint broader search surfaces
+- `Exploration-enhanced`: use only when bounded unknowns can change the next decision and local exploration would noticeably bloat main-thread context; fan out independent narrow exploration tasks as useful within the current thread budget and keep at most `2` exploration agents active only when they own disjoint broader search surfaces
 - `Slow-execution`: use when the next critical-path step is long mechanical execution such as build, test, script, benchmark, or diagnostics; keep at most one execution agent active
 - `Long-implementation`: use when the task is clearly implementation-heavy and the main thread needs to preserve decision and integration context
 - `Parallel-implementation`: use only after both path ownership and abstraction ownership are explicitly split
+
+In `Plan Mode`, automatic dispatch may enter only `Exploration-enhanced`. Do not auto-enter `Slow-execution`, `Long-implementation`, or `Parallel-implementation`.
 
 Allow `Long-implementation` or `Parallel-implementation` auto-escalation only after the main thread has done one local triage pass and confirmed all of these:
 
@@ -64,15 +79,23 @@ Allow `Long-implementation` or `Parallel-implementation` auto-escalation only af
 
 Dispatch by return semantics:
 
-- `exploration`: use only for bounded unknowns whose early signal can change the next step; split independent narrow probes across fast routes when useful, try to run fast and normal exploration together when broader retained context may still matter, keep at most `2` normal exploration routes active only when they cover disjoint broader search surfaces, and do not hand off broad open-ended research
+- `exploration`: use only for bounded unknowns whose early signal can change the next step; split independent narrow probes across exploration routes when useful, keep at most `2` exploration routes active only when they cover disjoint broader search surfaces, and do not hand off broad open-ended research
 - `execution`: use for mechanical runs; the main thread owns policy changes and decision forks
 - `implementation`: use only with an explicit write-scope contract and owned abstraction boundary
 
 `execution` and `implementation` are mutually exclusive lanes. Do not keep both active at the same time.
 
+When the trigger is `Plan Mode` information gathering, dispatch only `exploration`. Do not auto-dispatch `execution` or `implementation`.
+
 If a task mixes code changes and heavy validation, dispatch `implementation` first and `execution` second.
 
-Prefer fresh or isolated context for `exploration` and `execution`. Prefer inherited context for `implementation` only when the current main-thread history is actually needed.
+Use explicit `fork_context` defaults when dispatching:
+
+- `exploration`: prefer `fork_context=true` unless the parent agent wants an intentionally independent probe or a scoped briefing is clearly sufficient
+- `execution`: prefer `fork_context=false`; use `fork_context=true` only when the command depends on recent thread state that cannot be reliably compressed
+- `implementation`: prefer `fork_context=true` unless a scoped briefing is clearly sufficient and the current main-thread history is not actually needed
+
+`fork_context=true` may reduce briefing size, but it never replaces an explicit task contract. Always state the concrete mission, owned scope, success condition, and stop or hand-back triggers for the subagent.
 
 ## Wait And Reuse
 
@@ -98,7 +121,7 @@ Use `summarize-first` when reuse would save time but context pollution is rising
 
 Treat interrupted `implementation` agents as `terminal` for repo-tracked write work.
 
-Treat completed fast-lane agents as single-use. Once their result is consumed or their decision window closes, close them instead of keeping them warm for reuse.
+Treat completed exploration agents as `terminal` once their result is consumed, superseded, or their decision window closes.
 
 If ambiguity, retained-context needs, or write responsibility grows, upgrade the route instead of stretching a fast or narrow lane too far.
 

@@ -5,7 +5,7 @@ This document is a maintenance companion for `SKILL.md`. Keep runtime behavior i
 ## Mode Guide
 
 - `Chat`: ordinary chat, direct Q&A, and trivial edits; stay local
-- `Exploration-enhanced`: bounded unknowns can change the next main-thread decision; fan out independent narrow fast probes as useful within the thread budget and keep at most `2` normal exploration agents active only when they own disjoint broader search surfaces
+- `Exploration-enhanced`: bounded unknowns can change the next main-thread decision; fan out independent narrow exploration probes as useful within the thread budget and keep at most `2` exploration agents active only when they own disjoint broader search surfaces
 - `Slow-execution`: the next critical-path step is long mechanical execution; use at most one execution agent
 - `Long-implementation`: the task is clearly implementation-heavy and the main thread should preserve decision and integration context
 - `Parallel-implementation`: only after both path ownership and abstraction ownership are explicitly split
@@ -29,22 +29,49 @@ Useful positive signals:
 
 Do not auto-dispatch when the user is only discussing workflow design, prompting strategy, or subagent policy.
 
+## Plan Mode Exploration Auto-Dispatch
+
+Allow `Plan Mode` auto-dispatch only when all of these are true:
+
+- the task has a concrete deliverable instead of only workflow or policy discussion
+- the current task is in or entering `Plan Mode` information gathering
+- the current step needs bounded information retrieval that can change the next planning decision
+- the main thread already completed one local triage pass
+- bounded unknowns remain and further local exploration would noticeably bloat main-thread context
+- the delegated work can stay fully read-only
+
+Positive signals:
+
+- repo exploration, entry-point discovery, call-path tracing, or targeted web verification can narrow the next planning fork
+- the work can be split into narrow probes or a small number of disjoint broader exploration surfaces
+- early partial signal is enough to keep planning moving
+
+Negative signals:
+
+- the user is only discussing workflow design, routing strategy, prompting strategy, or subagent policy
+- the exchange is ordinary Q&A without a concrete delivery target
+- the unknowns are too broad for bounded exploration
+- the next useful step is execution or implementation rather than exploration
+
+When this path is active:
+
+- enter only `Exploration-enhanced`
+- dispatch only the `exploration` lane
+- do not auto-upgrade into `execution` or `implementation`
+
 ## Routing Checklist
 
-- `exploration -> explorer_fast` when a larger exploration problem can be split into independent single-hypothesis checks, tiny candidate searches, or narrow call-path traces; fan these out in parallel when useful
-- `exploration -> explorer` when the search surface, ambiguity, or retained context is too large for a fast lane; keep at most `2` normal exploration routes active at a time, and only when they cover disjoint broader search surfaces
-- `execution -> awaiter_fast` only for one command family, one watch loop, or narrow artifact/log collection
-- `execution -> awaiter` when logs are large, diagnosis needs more context, or the command family is long-lived
-- `implementation -> worker` for one module or tightly bounded local ownership
-- `implementation -> worker_heavy` for multi-file or cross-module work inside a still-controlled ownership boundary
+- `exploration -> explorer` when the task needs bounded repo exploration, entry-point discovery, call-path tracing, impact analysis, scope confirmation, or targeted web verification; keep at most `2` exploration routes active at a time, and only when they cover disjoint broader search surfaces
+- `execution -> awaiter` for mechanical runs, watch loops, or artifact and log collection
+- `implementation -> worker` for implementation work inside a controlled ownership boundary, including multi-file or cross-module edits that still have explicit ownership
 
 `execution` and `implementation` are mutually exclusive lanes. Finish, stop, or hand back one before starting the other.
 
 For mixed exploration routing:
 
-- prefer fast fan-out first when the problem can be decomposed into narrow independent probes
-- when broader retained context still seems necessary, start or keep up to `2` normal exploration routes alongside the fast fan-out instead of serializing them
-- only use multiple normal exploration routes when their broader search surfaces are meaningfully disjoint
+- prefer bounded fan-out when the problem can be decomposed into narrow independent probes
+- when broader retained context still seems necessary, start or keep up to `2` exploration routes instead of serializing them
+- only use multiple exploration routes when their broader search surfaces are meaningfully disjoint
 - if any exploration results already provide enough decision-useful signal, stop waiting on the remaining exploration routes and wrap them up or interrupt them
 
 Upgrade immediately when any of these appear:
@@ -53,28 +80,17 @@ Upgrade immediately when any of these appear:
 - the task needs cross-module synthesis
 - multiple candidates must be weighed together
 - write ownership or abstraction ownership is not yet stable
-- the fast route would need a second redirect
+- the current route would need a second redirect
 
-## Spark-Safe Checklist
+## Context Inheritance
 
-Use `gpt-5.3-codex-spark` only when every item below is true:
+Use explicit `fork_context` defaults instead of implicit wording:
 
-- the current context can actually dispatch `gpt-5.3-codex-spark`
-- the task is narrow and single-pass
-- the expected output is a quick signal, failure signature, or small candidate set
-- the search or execution surface is explicitly bounded
-- the task does not own repo-tracked writes
-- a wrong first route is cheap to recover from
+- `exploration`: prefer `fork_context=true` unless the parent agent wants an intentionally independent probe or a scoped briefing is clearly sufficient
+- `execution`: prefer `fork_context=false`; use `fork_context=true` only when the command depends on recent thread state that cannot be reliably compressed
+- `implementation`: prefer `fork_context=true` unless a scoped briefing is clearly sufficient and the current main-thread history is not actually needed
 
-If that model is unavailable, fall back to the non-fast same-class route instead of forcing the fast lane.
-
-Do not use Spark for:
-
-- broad repo exploration
-- long-lived retained context
-- cross-module implementation
-- shared contract preservation
-- final synthesis or architecture judgment
+`fork_context=true` may reduce briefing size, but it never replaces an explicit task contract. The parent agent must still specify the concrete mission, owned scope, success condition, and stop or hand-back triggers.
 
 ## Reuse States
 
@@ -83,7 +99,7 @@ Do not use Spark for:
 - `terminal`: wrong class, wrong goal, invalidated context, or interrupted repo write ownership
 
 Treat interrupted `implementation` agents as `terminal`.
-Treat completed fast-lane agents as `terminal` once their result is consumed.
+Treat completed exploration agents as `terminal` once their result is consumed, superseded, or their decision window closes.
 
 ## State Capsule Template
 
