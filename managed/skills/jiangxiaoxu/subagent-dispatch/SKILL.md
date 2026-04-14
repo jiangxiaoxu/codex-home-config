@@ -1,11 +1,11 @@
 ---
 name: subagent-dispatch
-description: Subagent dispatch rules for Codex. Use when subagent capabilities are available and the user explicitly enables `$subagent-dispatch`, mentions `子代理` or subagent delegation, or uses an execute-plan phrase such as `Implement plan` to execute an already-generated concrete plan.
+description: Subagent dispatch rules for Codex. Use when subagents are available and the user explicitly enables `$subagent-dispatch`, mentions `子代理` or subagent delegation, or uses an execute-plan phrase such as `Implement plan` to execute an already-generated concrete plan.
 ---
 
 # Subagent Dispatch
 
-## Activation And Ownership
+## Activation
 
 Use this skill only when subagents are available and the user clearly authorized delegation.
 
@@ -16,120 +16,118 @@ Authorization includes:
 - explicit authorization in an active user-scoped instruction file
 - a short execute-plan utterance that clearly refers to a visible prior plan, such as `Implement plan`
 
-Keep decomposition, prioritization, waiting, integration, the final explanation, and all subagent lifecycle control on the main thread. Only the main thread may create, schedule, steer, interrupt, and close subagents. Subagents must not create additional subagents.
+Default-off posture:
 
-Prefer inherited context for `implementation` and isolated context for non-`implementation` work unless shared history is clearly useful.
+- ordinary chat, direct Q&A, and trivial edits stay on the main thread
+- subagents are opt-in or clearly justified, not the default response shape
+- the skill defines dispatch semantics and escalation rules
+- agent instructions define task-local contract details and output shape
 
-## Task Selection
+After auto-applying this skill, announce activation and the planned delegation split before spawning subagents.
 
-Classify delegated work by primary deliverable:
+## Ownership
 
-- `Read-only exploration`: evidence, scope, call chains, impact analysis, `Web Search`, external verification, plus a conclusion
-- `implementation`: repo-tracked code changes, localized fixes, controlled refactors, plus changed scope and assumptions or risks
-- `Execution-oriented`: commands, validation, reproduction, logs, benchmarks, regression evidence, plus status and failure summary when relevant
-- `default`: general delegated work that does not fit the classes above, plus the requested deliverable, concise status, assumptions, and open questions
+Only the main thread may create, steer, interrupt, wait on, close, and integrate subagents.
 
-Tiny local exception: keep the work on the main thread for one quick lookup or a trivial tightly scoped change with low coordination cost.
+Only the main thread may decide:
 
-Use this order:
+- whether a partial result is already enough
+- whether direction changes are required
+- whether implementation results are ready to integrate
+- what final judgment to present
 
-1. Apply the tiny local exception if it clearly fits.
-2. Otherwise assign by primary deliverable.
-3. Then optimize for reuse, parallelism, and waiting.
+Subagents must not create additional subagents.
 
-Prefer an `implementation` subagent when the task spans files, crosses modules, has meaningful edge cases or risk, or needs expensive context gathering.
+Prefer fresh or isolated context for `exploration` and `execution`. Prefer inherited context for `implementation` only when the current main-thread history is actually needed.
 
-Prefer matching `Read-only exploration` and `Execution-oriented` work to their own classes.
+## Dispatch
 
-For `Read-only exploration`, prefer narrow, conclusion-oriented task slices over broad surveys. A good default is one focused question, or one tightly related mini-cluster whose result can be consumed independently.
+Stay local for:
 
-Use `default` only as a fallback when the specialized classes do not fit cleanly, and give it a tighter task contract than usual: requested deliverable, constraints, and success condition.
+- one quick lookup that is faster locally than via dispatch
+- a trivial tightly scoped edit with low coordination cost
+- exploration whose result is unlikely to affect the current decision window
 
-If multiple subagents fit the same task, choose the most suitable one. If the choice is still ambiguous, prefer the stronger agent.
+Escalate only when delegation is likely to save main-thread context, wall-clock time, or both.
 
-If a task mixes code changes and command-heavy verification, split it into phases: finish `implementation` first, then use `Execution-oriented` for validation.
+Classify delegated work by return semantics:
 
-Prefer parallel dispatch only for independent sidecar tasks with clearly separate scopes that do not block the same immediate next step.
+- `exploration`: return partial signal quickly so the main thread can decide what to do next
+- `execution`: run mechanical command work until completion or until a decision fork must be handed back
+- `implementation`: own a bounded write scope and return only when that owned scope is complete or blocked
+- `default`: fallback only when the specialized classes do not fit cleanly
 
-For `Read-only exploration`, prefer small-batch parallelism over single large exploration tasks when the questions can be split cleanly. Favor more, narrower explorations when that is likely to produce earlier decision-useful results, but avoid duplicate or highly overlapping asks that only increase integration cost.
+If a task mixes code changes and heavy validation, finish `implementation` first, then use `execution`.
 
-Before creating a new subagent, review active same-class subagents first. Keep reusable ones, close open agents that are stale or no longer fit the current goal, then create a new subagent only if none of the remaining active agents fit the current goal.
+## Class Semantics
 
-Reuse `Read-only exploration` and `Execution-oriented` subagents when their class, topic, and success condition still fit. Reuse an `implementation` subagent only when the task remains `implementation`, its write scope is unchanged, its success condition still fits, and it has not been interrupted. Treat closed subagents as terminal.
+Parent agents must provide an explicit bounded contract before dispatch.
 
-Do not dispatch exploration work that the main thread is unlikely to consume in the current turn. If an exploration result will probably not affect the current decision window, defer it or narrow it further before dispatch.
+For `exploration`:
 
-## Implementation Scope Contract
+- the goal is partial signal, not full closure
+- use it only for bounded questions
+- enough signal is enough; return early
+- if broader synthesis is needed or the decision window closes, stop or hand control back
 
-Before spawning any `implementation` subagent, define a write scope contract on the main thread.
+For `execution`:
 
-The contract must state:
+- it owns mechanical run, not policy decisions
+- a decision fork must be surfaced to the main thread immediately
+- the main thread must wait for its evidence before claiming validation conclusions
 
-- allowed files or directories
-- out-of-bounds files or directories
-- success condition
-- whether incidental compile, format, or test fixes are allowed
+For `implementation`:
 
-If the scope cannot be stated clearly enough to prevent overlap, do not dispatch parallel `implementation` work.
+- require an explicit write scope contract before dispatch
+- default to waiting for completion or a real blocker
+- if scope expansion, abstraction conflict, or architecture decision appears, hand control back
+- parallel implementation is allowed only when both path ownership and abstraction ownership are disjoint
 
-If the main thread expects to continue editing repo-tracked files while `implementation` subagents are active, define the main thread's own write scope first, keep it disjoint from every active `implementation` scope, do not edit an active subagent's scope, and continue only with non-overlapping edits, read-only analysis, documentation, validation preparation, or integration planning.
+## Reuse And Routing
 
-If the main thread needs to enter that scope, stop delegated write work first, then continue locally.
+Review active same-class subagents before creating a new one.
 
-## Steer, Interrupt, And Close
+Treat each active subagent as one of these states:
 
-The main thread may steer an active subagent by sending additional input.
+- `warm-reusable`
+- `summarize-first`
+- `terminal`
 
-Prefer controlled wrap-up steering over interrupt when there is no urgent scope conflict and the goal is to stop expansion, collect the current result, and return control cleanly.
+Direct reuse is allowed only when class, goal, and success condition still fit and the old context is unlikely to bias the next step incorrectly.
 
-Use wrap-up steering to ask the subagent to:
+Use `summarize-first` when reuse would save time but context pollution risk is rising: request a short state capsule, then continue from that capsule instead of the full old history.
 
-- stop taking on new work
-- finish the current bounded step if the cost is low
-- summarize completed work
-- report remaining risks, assumptions, and unfinished items
-- return control to the main thread
+Treat interrupted `implementation` agents as `terminal` for repo-tracked write work.
 
-For `implementation` subagents, wrap-up steering is preferred only while the task remains within the same write scope and task class.
+Prefer stable defaults plus dynamic escalation:
 
-Interrupt an `implementation` subagent only for a clear reason:
+- `exploration -> balanced`, but very narrow exploration can use a fast short-context model
+- `execution -> fast short-context` when the task is mostly launch, waiting, log scanning, or artifact collection
+- `implementation -> balanced/strong` depending on scope and coupling
 
-- the scope was defined incorrectly and overlap now exists or is imminent
-- the subagent is working on the wrong target
-- the subagent is stuck and the main thread has a better immediate path
-- validation disproves the current implementation direction
-- the user explicitly requests a stop or redirect
+If ambiguity, search surface, retained-context needs, or write responsibility grows, escalate to the stronger route instead of stretching a narrow or fast route too far.
 
-Do not interrupt implementation work merely for convenience or opportunistic local edits.
-
-Once an `implementation` subagent is interrupted, treat it as terminal for all repo-tracked write work. Do not reuse or reassign it. If more implementation or documentation work is needed, spawn a new subagent with a fresh contract.
-
-Do not use steering to silently repurpose an active `implementation` subagent into a different write scope or task class.
-
-Do not keep completed `implementation` subagents open for speculative reuse. Treat `still open` as a short-lived transitional condition, not a steady state. Close a subagent immediately once its result is integrated, superseded, or no longer needed, and close a completed subagent in the same handling phase unless it is being immediately reused under an allowed reuse rule.
-
-## Execution Flow
+## Wait, Interrupt, And Close
 
 After dispatch, keep advancing non-overlapping work on the main thread when possible.
 
-Wait only when the next critical-path step depends on a subagent result, and wait only for the subset now needed, not for every in-flight subagent by default. For `Read-only exploration`, the goal is usually enough information to make the next decision safely, not full exploration completion.
+Wait only for the subset of subagent results that the next critical-path step now depends on.
 
-Apply that flexibility differently by class. For `implementation`, default to waiting for completion or explicit wrap-up before integration, overlapping edits, result-dependent validation, or the final answer. Do not proceed past those checkpoints as if the implementation result were settled while it is still in flight.
+Apply that by class:
 
-For `Execution-oriented`, do not require unconditional waiting immediately after dispatch, but do wait before using its evidence to declare pass or fail, close out validation, or present a final outcome. The main thread may continue unrelated preparation while the command work is running.
+- `exploration`: enough signal is enough
+- `execution`: wait before using its evidence for validation conclusions
+- `implementation`: wait for completion or blocker before integration, overlapping edits, result-dependent validation, or the final answer
 
-Treat `enough information` as the point where the next step is unlikely to change materially if additional in-flight exploration finishes later. Prefer waiting at decision checkpoints such as approach selection, implementation direction changes, validation conclusions, and the final answer.
+Prefer wrap-up steering over interrupt when there is no urgent scope conflict.
 
-Do not redo delegated work on the main thread while that delegated task is still in flight.
+Interrupt only for a clear reason:
 
-If enough information has arrived, the main thread may continue while other exploration work remains in flight, but it must keep a clear plan for each remaining subagent: continue as a sidecar, steer to wrap up, or close it.
+- wrong scope, wrong target, or new overlap
+- the subagent is stuck and the main thread has a better immediate path
+- validation disproves the current direction
+- the user explicitly requests a stop or redirect
 
-If the main thread takes over an overlapping write scope, stop delegated write work before continuing. Main-thread integration does not justify leaving overlapping `implementation` agents running.
+If a subagent times out or returns low-signal output, redirect once with a tighter scope or switch to a better-scoped or stronger agent. Do not treat timeout as completion.
 
-Prefer an `Execution-oriented` subagent when the next phase after `implementation` is command execution, validation, or evidence collection.
-
-If later exploration disproves the direction chosen from earlier partial results, explicitly replan instead of silently continuing on the stale path.
-
-If a subagent times out or returns low-signal output, redirect once with a tighter scope or switch to a better-scoped or stronger subagent. Do not treat timeout as completion.
-
-After auto-applying this skill, announce activation and the planned delegation split before spawning subagents.
+Close a subagent immediately once its result is integrated, superseded, or no longer needed.
