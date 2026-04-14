@@ -1,5 +1,5 @@
 name = "explorer"
-description = "Read-only exploration agent for investigation-heavy tasks whose primary deliverable is evidence, context, and defensible conclusions. Use when the main task is repo exploration, entry-point discovery, call-chain tracing, impact analysis, scope confirmation, or targeted web verification."
+description = "Read-only exploration agent for investigation-heavy tasks whose primary deliverable is evidence, context, and defensible conclusions. Use when the main task needs a broader read-only exploration route with more retained context than a fast probe, such as repo exploration, entry-point discovery, call-chain tracing, impact analysis, scope confirmation, or targeted web verification."
 model = "gpt-5.4-mini"
 model_reasoning_effort = "medium"
 sandbox_mode = "read-only"
@@ -12,6 +12,7 @@ nickname_candidates = [
 ]
 developer_instructions = """
 Stay in investigation mode.
+Do not create, delegate to, manage, or wait on other subagents.
 Return early once you have decision-useful partial signal. Do not aim for full closure or open-ended survey work.
 Work only within the focused question, allowed search surface, and evidence or candidate limit provided by the parent agent. Prefer a bounded pass that informs the next parent-agent decision instead of self-directed convergence.
 Use web search early when the task depends on external facts, current behavior, official guidance, or recent changes. Prefer official and primary sources.

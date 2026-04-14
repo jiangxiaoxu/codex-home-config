@@ -47,12 +47,10 @@ Only the main thread may decide:
 - whether implementation results are ready to integrate
 - what final judgment to present
 
-Subagents must not create additional subagents.
-
 ## Main-Thread Modes
 
 - `Chat`: default mode; do not dispatch
-- `Exploration-enhanced`: use only when one bounded unknown can change the next decision and local exploration would noticeably bloat main-thread context; keep at most one exploration agent active
+- `Exploration-enhanced`: use only when bounded unknowns can change the next decision and local exploration would noticeably bloat main-thread context; fan out as many independent narrow fast exploration tasks as useful within the current thread budget and keep at most `2` normal exploration agents active only when they own disjoint broader search surfaces
 - `Slow-execution`: use when the next critical-path step is long mechanical execution such as build, test, script, benchmark, or diagnostics; keep at most one execution agent active
 - `Long-implementation`: use when the task is clearly implementation-heavy and the main thread needs to preserve decision and integration context
 - `Parallel-implementation`: use only after both path ownership and abstraction ownership are explicitly split
@@ -66,9 +64,11 @@ Allow `Long-implementation` or `Parallel-implementation` auto-escalation only af
 
 Dispatch by return semantics:
 
-- `exploration`: use only for bounded unknowns whose early signal can change the next step; do not hand off broad open-ended research
+- `exploration`: use only for bounded unknowns whose early signal can change the next step; split independent narrow probes across fast routes when useful, try to run fast and normal exploration together when broader retained context may still matter, keep at most `2` normal exploration routes active only when they cover disjoint broader search surfaces, and do not hand off broad open-ended research
 - `execution`: use for mechanical runs; the main thread owns policy changes and decision forks
 - `implementation`: use only with an explicit write-scope contract and owned abstraction boundary
+
+`execution` and `implementation` are mutually exclusive lanes. Do not keep both active at the same time.
 
 If a task mixes code changes and heavy validation, dispatch `implementation` first and `execution` second.
 
@@ -80,7 +80,7 @@ After dispatch, keep advancing non-overlapping work on the main thread when poss
 
 Wait only when the next critical-path step depends on that result:
 
-- `exploration`: wait only when its signal is needed for the next decision
+- `exploration`: wait only when its signal is needed for the next decision; if one or more exploration results already provide enough signal, do not wait for the remaining exploration routes to finish
 - `execution`: wait before using its evidence for validation claims
 - `implementation`: wait before integration, overlapping edits, result-dependent validation, or the final answer
 
@@ -98,6 +98,8 @@ Use `summarize-first` when reuse would save time but context pollution is rising
 
 Treat interrupted `implementation` agents as `terminal` for repo-tracked write work.
 
+Treat completed fast-lane agents as single-use. Once their result is consumed or their decision window closes, close them instead of keeping them warm for reuse.
+
 If ambiguity, retained-context needs, or write responsibility grows, upgrade the route instead of stretching a fast or narrow lane too far.
 
 ## Interrupt And Close
@@ -110,6 +112,7 @@ Interrupt only for a clear reason:
 - the subagent is stuck and the main thread has a better immediate path
 - validation disproves the current direction
 - the user explicitly requests a stop or redirect
+- enough exploration signal already closed the decision window
 
 If a subagent times out or returns low-signal output, redirect once with a tighter scope or a stronger route. Do not treat timeout as completion.
 

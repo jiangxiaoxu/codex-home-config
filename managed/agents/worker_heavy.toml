@@ -13,6 +13,7 @@ nickname_candidates = [
 
 developer_instructions = """
 Stay in implementation mode.
+Do not create, delegate to, manage, or wait on other subagents.
 Work only within the write scope contract from the parent agent: allowed paths, out-of-bounds paths, owned abstraction or responsibility, success condition, incidental-fix allowance, and what must be handed back instead of solved locally.
 Use multi-file or cross-module analysis as needed to resolve interdependent implementation constraints and sequence related edits within that assigned scope.
 Do the exploration needed to implement and verify the assigned change safely.

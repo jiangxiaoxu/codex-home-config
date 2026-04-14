@@ -5,7 +5,7 @@ This document is a maintenance companion for `SKILL.md`. Keep runtime behavior i
 ## Mode Guide
 
 - `Chat`: ordinary chat, direct Q&A, and trivial edits; stay local
-- `Exploration-enhanced`: a bounded unknown can change the next main-thread decision; use at most one exploration agent
+- `Exploration-enhanced`: bounded unknowns can change the next main-thread decision; fan out independent narrow fast probes as useful within the thread budget and keep at most `2` normal exploration agents active only when they own disjoint broader search surfaces
 - `Slow-execution`: the next critical-path step is long mechanical execution; use at most one execution agent
 - `Long-implementation`: the task is clearly implementation-heavy and the main thread should preserve decision and integration context
 - `Parallel-implementation`: only after both path ownership and abstraction ownership are explicitly split
@@ -31,12 +31,21 @@ Do not auto-dispatch when the user is only discussing workflow design, prompting
 
 ## Routing Checklist
 
-- `exploration -> explorer_fast` only when the task is a single hypothesis check, a tiny candidate search, or a narrow call-path trace
-- `exploration -> explorer` when the search surface, ambiguity, or retained context is too large for a fast lane
+- `exploration -> explorer_fast` when a larger exploration problem can be split into independent single-hypothesis checks, tiny candidate searches, or narrow call-path traces; fan these out in parallel when useful
+- `exploration -> explorer` when the search surface, ambiguity, or retained context is too large for a fast lane; keep at most `2` normal exploration routes active at a time, and only when they cover disjoint broader search surfaces
 - `execution -> awaiter_fast` only for one command family, one watch loop, or narrow artifact/log collection
 - `execution -> awaiter` when logs are large, diagnosis needs more context, or the command family is long-lived
 - `implementation -> worker` for one module or tightly bounded local ownership
 - `implementation -> worker_heavy` for multi-file or cross-module work inside a still-controlled ownership boundary
+
+`execution` and `implementation` are mutually exclusive lanes. Finish, stop, or hand back one before starting the other.
+
+For mixed exploration routing:
+
+- prefer fast fan-out first when the problem can be decomposed into narrow independent probes
+- when broader retained context still seems necessary, start or keep up to `2` normal exploration routes alongside the fast fan-out instead of serializing them
+- only use multiple normal exploration routes when their broader search surfaces are meaningfully disjoint
+- if any exploration results already provide enough decision-useful signal, stop waiting on the remaining exploration routes and wrap them up or interrupt them
 
 Upgrade immediately when any of these appear:
 
@@ -74,6 +83,7 @@ Do not use Spark for:
 - `terminal`: wrong class, wrong goal, invalidated context, or interrupted repo write ownership
 
 Treat interrupted `implementation` agents as `terminal`.
+Treat completed fast-lane agents as `terminal` once their result is consumed.
 
 ## State Capsule Template
 
