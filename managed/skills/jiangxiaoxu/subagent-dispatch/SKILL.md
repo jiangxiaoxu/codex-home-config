@@ -35,7 +35,8 @@ Default posture:
 
 - ordinary chat, direct Q&A, and trivial edits stay on the main thread
 - the main thread must do one local triage pass before dispatch
-- stay local when local work is faster and cheaper than delegation
+- for non-trivial execution work, prefer dispatch once the command family is minimally stable
+- for non-trivial implementation work, prefer dispatch once the write scope is minimally stable
 
 If the current task is delegated, announce activation and the planned delegation split before spawning subagents.
 
@@ -64,30 +65,53 @@ Only the main thread may decide:
 
 - `Chat`: default mode; do not dispatch
 - `Exploration-enhanced`: use only when bounded unknowns can change the next decision and local exploration would noticeably bloat main-thread context; fan out independent narrow exploration tasks as useful within the current thread budget and keep at most `2` exploration agents active only when they own disjoint broader search surfaces
-- `Slow-execution`: use when the next critical-path step is long mechanical execution such as build, test, script, benchmark, or diagnostics; keep at most one execution agent active
-- `Long-implementation`: use when the task is clearly implementation-heavy and the main thread needs to preserve decision and integration context
+- `Execution-oriented`: use when the next critical-path step is non-trivial mechanical execution and the command family is minimally stable; keep at most one execution agent active
+- `Long-implementation`: use when the task is non-trivial implementation work and the write scope is minimally stable; the main thread preserves decision and integration context
 - `Parallel-implementation`: use only after both path ownership and abstraction ownership are explicitly split
 
-In `Plan Mode`, automatic dispatch may enter only `Exploration-enhanced`. Do not auto-enter `Slow-execution`, `Long-implementation`, or `Parallel-implementation`.
+In `Plan Mode`, automatic dispatch may enter only `Exploration-enhanced`. Do not auto-enter `Execution-oriented`, `Long-implementation`, or `Parallel-implementation`.
 
 Allow `Long-implementation` or `Parallel-implementation` auto-escalation only after the main thread has done one local triage pass and confirmed all of these:
 
 - the user asked to implement, fix, refactor, or deliver work instead of only discussing it
+- the task is not a trivial edit
+- the write scope is at least minimally stable, even if the full plan is not yet finished
 - the task is multi-file, multi-step, validation-heavy, has an independent sidecar, or is already swelling main-thread context
+
+Allow `Execution-oriented` auto-escalation only after the main thread has done one local triage pass and confirmed all of these:
+
+- the next useful step is execution rather than exploration or implementation
+- the task is not a trivial check
+- the command family, success criteria, and key parameters are at least minimally stable
+- the task is long-running, high-output, validation-heavy, or a clearly independent execution sidecar
 
 ## Dispatch
 
 Dispatch by return semantics:
 
 - `exploration`: use only for bounded unknowns whose early signal can change the next step; split independent narrow probes across exploration routes when useful, keep at most `2` exploration routes active only when they cover disjoint broader search surfaces, and do not hand off broad open-ended research
-- `execution`: use for mechanical runs; the main thread owns policy changes and decision forks
-- `implementation`: use only with an explicit write-scope contract and owned abstraction boundary
+- `execution`: prefer `awaiter` once a controlled command family can be stated; keep the work on the main thread only for trivial checks or when execution scope, parameters, or success criteria are still materially unstable
+- `implementation`: prefer `worker` once a controlled write-scope contract can be stated; keep the work on the main thread only for trivial edits or when implementation architecture, ownership, or write scope are still materially unstable
 
 `execution` and `implementation` are mutually exclusive lanes. Do not keep both active at the same time.
 
 When the trigger is `Plan Mode` information gathering, dispatch only `exploration`. Do not auto-dispatch `execution` or `implementation`.
 
 If a task mixes code changes and heavy validation, dispatch `implementation` first and `execution` second.
+
+When implementation work is complete and the next step is primarily mechanical validation, prefer handing off to an `Execution-oriented` subagent by default.
+
+Keep execution work on the main thread only when one of these is true:
+
+- the check is trivial enough that dispatch overhead is not worth it
+- command-family choice, success criteria, or key execution parameters are still unresolved
+- the execution scope is still materially unstable after the local triage pass
+
+Keep implementation work on the main thread only when one of these is true:
+
+- the edit is trivial enough that dispatch overhead is not worth it
+- implementation architecture or ownership decisions are still unresolved
+- the write scope is still materially unstable after the local triage pass
 
 Use explicit `fork_context` defaults when dispatching:
 

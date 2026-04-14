@@ -6,8 +6,8 @@ This document is a maintenance companion for `SKILL.md`. Keep runtime behavior i
 
 - `Chat`: ordinary chat, direct Q&A, and trivial edits; stay local
 - `Exploration-enhanced`: bounded unknowns can change the next main-thread decision; fan out independent narrow exploration probes as useful within the thread budget and keep at most `2` exploration agents active only when they own disjoint broader search surfaces
-- `Slow-execution`: the next critical-path step is long mechanical execution; use at most one execution agent
-- `Long-implementation`: the task is clearly implementation-heavy and the main thread should preserve decision and integration context
+- `Execution-oriented`: the next critical-path step is non-trivial mechanical execution and the command family is minimally stable; use at most one execution agent
+- `Long-implementation`: the task is non-trivial implementation work, the write scope is minimally stable, and the main thread should preserve decision and integration context
 - `Parallel-implementation`: only after both path ownership and abstraction ownership are explicitly split
 
 Exit any enhanced mode when the critical path no longer depends on delegated work or the remaining work becomes cheaper locally.
@@ -18,12 +18,15 @@ Allow automatic dispatch only when all of these are true:
 
 - the user asked to implement, fix, refactor, or deliver work
 - the main thread already completed one local triage pass
+- the scope needed for the selected lane is at least minimally stable
 - delegation is likely to save main-thread context, wall-clock time, or both
 
 Useful positive signals:
 
+- the task is not a trivial edit
 - the task is multi-file or multi-step
 - long execution validation is clearly required
+- the command family is clear enough to hand off
 - there is an independent sidecar task
 - the main-thread context is already swelling
 
@@ -62,10 +65,16 @@ When this path is active:
 ## Routing Checklist
 
 - `exploration -> explorer` when the task needs bounded repo exploration, entry-point discovery, call-path tracing, impact analysis, scope confirmation, or targeted web verification; keep at most `2` exploration routes active at a time, and only when they cover disjoint broader search surfaces
-- `execution -> awaiter` for mechanical runs, watch loops, or artifact and log collection
-- `implementation -> worker` for implementation work inside a controlled ownership boundary, including multi-file or cross-module edits that still have explicit ownership
+- `execution -> awaiter` by default once a controlled command family can be stated, including mechanical runs, watch loops, artifact collection, and validation sidecars
+- `implementation -> worker` by default once a controlled write-scope contract can be stated, including multi-file or cross-module edits that still have explicit ownership
 
 `execution` and `implementation` are mutually exclusive lanes. Finish, stop, or hand back one before starting the other.
+
+When implementation work is complete and the next step is primarily mechanical validation, prefer switching to the `Execution-oriented` lane by default.
+
+Keep execution local only when the check is trivial, the execution scope is still materially unstable after triage, or command-family choice, success criteria, or key parameters are unresolved.
+
+Keep implementation local only when the edit is trivial, the write scope is still materially unstable after triage, or implementation architecture or ownership decisions are unresolved.
 
 For mixed exploration routing:
 
