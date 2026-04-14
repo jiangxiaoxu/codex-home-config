@@ -1,21 +1,20 @@
 ---
 name: subagent-dispatch
-description: Main-thread subagent dispatch rules for Codex. Use when the user explicitly authorizes delegation for the current task or uses an execute-plan phrase such as `Implement plan` or `PLEASE IMPLEMENT THIS PLAN`.
+description: Subagent dispatch rules for Codex. Use when subagents are available and the user explicitly enables `$subagent-dispatch`, asks to `派发子代理` or `使用子代理` for a task, otherwise clearly requests subagent delegation, or uses an execute-plan phrase such as `Implement plan` or `PLEASE IMPLEMENT THIS PLAN` to execute an already-generated concrete plan.
 ---
 
 # Subagent Dispatch
 
 ## Activation
 
-Use this skill only when subagents are available and the current task is delegated.
+Use this skill only when subagents are available and the conversation is about subagent dispatch or the current task is delegated.
 
-Delegation authorization includes:
+This skill can activate in two different ways:
 
-- explicit enablement of `$subagent-dispatch`
-- explicit authorization in an active user-scoped instruction file
-- a short execute-plan utterance that clearly targets a visible prior plan, such as `Implement plan` or `PLEASE IMPLEMENT THIS PLAN`
+- analysis activation: the user explicitly enables `$subagent-dispatch`, asks how to `派发子代理` or `使用子代理` for a task, otherwise clearly requests subagent delegation, or discusses subagent routing or workflow design
+- delegation authorization: the user explicitly enables `$subagent-dispatch`, explicitly asks to `派发子代理` or `使用子代理` for the current task, explicitly authorizes delegation in an active user-scoped instruction file, or uses a short execute-plan utterance that clearly targets a visible prior plan, such as `Implement plan` or `PLEASE IMPLEMENT THIS PLAN`
 
-Do not auto-activate just because the user is discussing `子代理`, routing, or workflow design.
+Bare mentions of `子代理` do not count as delegation intent. Discussion about routing, workflow design, or subagent policy can load this skill for analysis, but does not by itself authorize spawning subagents for the current task.
 
 Default posture:
 
@@ -23,7 +22,7 @@ Default posture:
 - the main thread must do one local triage pass before dispatch
 - stay local when local work is faster and cheaper than delegation
 
-After auto-applying this skill, announce activation and the planned delegation split before spawning subagents.
+If the current task is delegated, announce activation and the planned delegation split before spawning subagents.
 
 ## Ownership
 
