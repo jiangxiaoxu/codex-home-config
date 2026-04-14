@@ -1,6 +1,6 @@
 ---
 name: subagent-dispatch
-description: Subagent dispatch rules for Codex. Use when subagents are available and the user explicitly enables `$subagent-dispatch`, asks to `派发子代理` or `使用子代理` for a task, otherwise clearly requests subagent delegation, or uses an execute-plan phrase such as `Implement plan` or `PLEASE IMPLEMENT THIS PLAN` to execute an already-generated concrete plan.
+description: Subagent dispatch rules for Codex. Use when subagents are available and the user explicitly enables `$subagent-dispatch`, asks to `派发子代理` or `使用子代理` for a task, or uses an execute-plan phrase such as `Implement plan`, `PLEASE IMPLEMENT THIS PLAN`, `按这个计划实现`, or `按计划执行` to execute an already-generated concrete plan.
 ---
 
 # Subagent Dispatch
@@ -9,12 +9,23 @@ description: Subagent dispatch rules for Codex. Use when subagents are available
 
 Use this skill only when subagents are available and the conversation is about subagent dispatch or the current task is delegated.
 
-This skill can activate in two different ways:
+Activate this skill when one of these is true:
 
-- analysis activation: the user explicitly enables `$subagent-dispatch`, asks how to `派发子代理` or `使用子代理` for a task, otherwise clearly requests subagent delegation, or discusses subagent routing or workflow design
-- delegation authorization: the user explicitly enables `$subagent-dispatch`, explicitly asks to `派发子代理` or `使用子代理` for the current task, explicitly authorizes delegation in an active user-scoped instruction file, or uses a short execute-plan utterance that clearly targets a visible prior plan, such as `Implement plan` or `PLEASE IMPLEMENT THIS PLAN`
+- explicit enablement of `$subagent-dispatch`
+- the user asks to `派发子代理` or `使用子代理` for a task
+- the user uses a short execute-plan utterance that clearly targets a visible prior plan, such as `Implement plan`, `PLEASE IMPLEMENT THIS PLAN`, `按这个计划实现`, or `按计划执行`
+- the conversation is specifically about subagent routing or workflow design
 
-Bare mentions of `子代理` do not count as delegation intent. Discussion about routing, workflow design, or subagent policy can load this skill for analysis, but does not by itself authorize spawning subagents for the current task.
+Bare mentions of `子代理` do not count as delegation intent.
+
+Discussion about routing, workflow design, or subagent policy loads this skill for analysis only. It does not by itself authorize spawning subagents for the current task.
+
+Current-task delegation requires one of these:
+
+- explicit enablement of `$subagent-dispatch`
+- the user explicitly asks to `派发子代理` or `使用子代理` for the current task
+- explicit authorization in an active user-scoped instruction file
+- a short execute-plan utterance that clearly targets a visible prior plan, such as `Implement plan`, `PLEASE IMPLEMENT THIS PLAN`, `按这个计划实现`, or `按计划执行`
 
 Default posture:
 
