@@ -1,6 +1,0 @@
-interface:
-  display_name: "Subagent Dispatch"
-  short_description: "Subagent orchestration with explicit enablement, execute-plan auto-trigger, and Plan Mode information-gathering auto-trigger"
-
-policy:
-  allow_implicit_invocation: true
