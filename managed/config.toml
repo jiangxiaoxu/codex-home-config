@@ -17,7 +17,7 @@ args = [
   "-Command",
   "node \"$env:LOCALAPPDATA\\lm-tools-bridge\\stdioManager.js\""
 ]
-tool_timeout_sec = 120
+tool_timeout_sec = 180
 
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"

@@ -1,15 +1,30 @@
 ---
 name: subagent-dispatch
-description: Subagent dispatch rules for Codex. Use when subagents are available and the user explicitly enables `$subagent-dispatch`, asks to `派发子代理` or `使用子代理` for a task, uses an execute-plan phrase such as `Implement plan`, `PLEASE IMPLEMENT THIS PLAN`, `按这个计划实现`, or `按计划执行`, or is in or entering `Plan Mode` information gathering for a concrete task that needs information retrieval for the next planning decision.
+description: Dispatch workflow rules and trigger normalization for delegated subagent work. Use when the user explicitly references `$subagent-dispatch`, asks to use subagents, discusses subagent workflow design, or uses an execute-plan phrase such as `Implement plan`, `PLEASE IMPLEMENT THIS PLAN`, `按这个计划实现`, or `按计划执行`.
 ---
 
 # Subagent Dispatch
 
-## Activation
+## Purpose And Boundaries
 
-Use this skill only when subagents are available and the conversation is about subagent dispatch or the current task is delegated.
+Use this skill when subagents are available and the conversation needs subagent routing or dispatch workflow guidance.
 
-Activate this skill when one of these is true:
+Authorization and ownership come from higher-level instructions. This skill does not grant delegation permission by itself. Use it to:
+
+- normalize delegation-related triggers into a consistent workflow
+- choose the right route: `exploration`, `execution`, or `implementation`
+- define a concrete dispatch contract for each subagent
+- keep wait, reuse, interrupt, and close decisions consistent
+
+Use `analysis activation` when the conversation is only about routing, workflow, or subagent policy.
+
+Use `delegation activation` when the current task should enter dispatch workflow evaluation under the higher-level delegation rules.
+
+Bare mentions of `子代理` do not count as delegation intent.
+
+## Trigger Normalization
+
+Load this skill when one of these is true:
 
 - explicit enablement of `$subagent-dispatch`
 - the user asks to `派发子代理` or `使用子代理` for a task
@@ -17,141 +32,119 @@ Activate this skill when one of these is true:
 - the current task is in or entering `Plan Mode` information gathering, has a concrete deliverable, and needs bounded information retrieval that can change the next planning decision
 - the conversation is specifically about subagent routing or workflow design
 
-Bare mentions of `子代理` do not count as delegation intent.
+Normalize the trigger into one of these workflow states:
 
-Discussion about routing, workflow design, or subagent policy loads this skill for analysis only. It does not by itself authorize spawning subagents for the current task.
+- `analysis activation`: use for routing, workflow, or policy discussion only; analyze the workflow, but do not treat the discussion itself as a reason to dispatch unrelated implementation or execution work
+- `delegation activation`: use when the current task carries delegation intent and should enter route selection
 
-`Plan Mode` automatic dispatch is limited to concrete-task information gathering. Pure policy, workflow, routing, or prompting discussion still stays analysis-only.
+Additional normalization rules:
 
-Current-task delegation requires one of these:
+- explicit `$subagent-dispatch` means `delegation activation` for the current task unless the surrounding conversation is clearly only policy analysis
+- asking to `派发子代理` or `使用子代理` for the current task means `delegation activation`
+- an execute-plan phrase that clearly targets a visible prior plan means `delegation activation` for that planned task
+- `Plan Mode` information gathering for a concrete current task means `delegation activation` only for read-only `exploration`
+- routing, workflow, or policy discussion without a current-task delegation ask stays `analysis activation`
 
-- explicit enablement of `$subagent-dispatch`
-- the user explicitly asks to `派发子代理` or `使用子代理` for the current task
-- explicit authorization in an active user-scoped instruction file
-- the current task is in or entering `Plan Mode` information gathering, needs bounded information retrieval for the next planning decision, and the dispatch stays on the `exploration` lane
-- a short execute-plan utterance that clearly targets a visible prior plan, such as `Implement plan`, `PLEASE IMPLEMENT THIS PLAN`, `按这个计划实现`, or `按计划执行`
+## Route Entry Gates
 
-Default posture:
+Start from this default posture:
 
 - ordinary chat, direct Q&A, and trivial edits stay on the main thread
-- the main thread must do one local triage pass before dispatch
-- for non-trivial execution work, prefer dispatch once the command family is minimally stable
-- for non-trivial implementation work, prefer dispatch once the write scope is minimally stable
+- the main thread completes one local triage pass before dispatch
+- keep work on the main thread while route choice, scope, success criteria, or key parameters are still materially unstable
 
-If the current task is delegated, announce activation and the planned delegation split before spawning subagents.
+Enter `exploration` only when all of these hold:
 
-For `Plan Mode` auto-dispatch, all of these must hold:
-
-- the task has a concrete deliverable instead of only workflow or policy discussion
-- the current step needs bounded information retrieval that can change the next planning decision
-- the main thread already completed one local triage pass
-- bounded unknowns can change the next planning decision
+- there are bounded unknowns whose early signal can change the next step
 - further local exploration would noticeably bloat main-thread context
-- the dispatch remains read-only and stays within the `exploration` lane
+- the task is not broad open-ended research
 
-## Ownership
+`exploration` route rules:
 
-Only the main thread may create, steer, interrupt, wait on, close, and integrate subagents.
+- split independent narrow probes only when useful
+- keep at most `2` exploration agents active at once, and only when they cover disjoint broader search surfaces
+- in `Plan Mode`, automatic dispatch may enter only `exploration`
+- `Plan Mode` auto-entry still requires a concrete deliverable, bounded information retrieval, one completed local triage pass, and a read-only scope
 
-Only the main thread may decide:
+Enter `execution` only when all of these hold:
 
-- whether delegation is worth it
-- whether a partial result is already enough
-- whether route upgrades or direction changes are required
-- whether implementation results are ready to integrate
-- what final judgment to present
+- the next useful step is primarily mechanical execution or validation
+- the task is not a trivial check
+- the command family, success criteria, and key parameters are at least minimally stable
+- the work is long-running, high-output, validation-heavy, or a clearly independent execution sidecar
 
-## Main-Thread Modes
+`execution` route rules:
 
-- `Chat`: default mode; do not dispatch
-- `Exploration-enhanced`: use only when bounded unknowns can change the next decision and local exploration would noticeably bloat main-thread context; fan out independent narrow exploration tasks as useful within the current thread budget and keep at most `2` exploration agents active only when they own disjoint broader search surfaces
-- `Execution-oriented`: use when the next critical-path step is non-trivial mechanical execution and the command family is minimally stable; keep at most one execution agent active
-- `Long-implementation`: use when the task is non-trivial implementation work and the write scope is minimally stable; the main thread preserves decision and integration context
-- `Parallel-implementation`: use only after both path ownership and abstraction ownership are explicitly split
+- prefer `awaiter`
+- keep execution on the main thread when the check is trivial, the command family is still unstable, or success criteria are still materially unresolved
 
-In `Plan Mode`, automatic dispatch may enter only `Exploration-enhanced`. Do not auto-enter `Execution-oriented`, `Long-implementation`, or `Parallel-implementation`.
-
-Allow `Long-implementation` or `Parallel-implementation` auto-escalation only after the main thread has done one local triage pass and confirmed all of these:
+Enter `implementation` only when all of these hold:
 
 - the user asked to implement, fix, refactor, or deliver work instead of only discussing it
 - the task is not a trivial edit
-- the write scope is at least minimally stable, even if the full plan is not yet finished
-- the task is multi-file, multi-step, validation-heavy, has an independent sidecar, or is already swelling main-thread context
+- the write scope is at least minimally stable, even if the full plan is not finished
+- the work is multi-file, multi-step, validation-heavy, has an independent sidecar, or is already swelling main-thread context
 
-Allow `Execution-oriented` auto-escalation only after the main thread has done one local triage pass and confirmed all of these:
+`implementation` route rules:
 
-- the next useful step is execution rather than exploration or implementation
-- the task is not a trivial check
-- the command family, success criteria, and key parameters are at least minimally stable
-- the task is long-running, high-output, validation-heavy, or a clearly independent execution sidecar
+- prefer `worker`
+- keep implementation on the main thread when the edit is trivial, the architecture or ownership is still unresolved, or the write scope is still materially unstable
 
-## Dispatch
+`execution` and `implementation` stay serial by default on the same critical path.
 
-Dispatch by return semantics:
+Allow parallel `execution` and `implementation` only when all of these hold:
 
-- `exploration`: use only for bounded unknowns whose early signal can change the next step; split independent narrow probes across exploration routes when useful, keep at most `2` exploration routes active only when they cover disjoint broader search surfaces, and do not hand off broad open-ended research
-- `execution`: prefer `awaiter` once a controlled command family can be stated; keep the work on the main thread only for trivial checks or when execution scope, parameters, or success criteria are still materially unstable
-- `implementation`: prefer `worker` once a controlled write-scope contract can be stated; keep the work on the main thread only for trivial edits or when implementation architecture, ownership, or write scope are still materially unstable
+- the owned scopes are explicitly independent
+- neither lane needs to wait on the other's in-flight result
+- the execution sidecar does not depend on the current implementation result
+- ownership, validation claims, and final integration remain unambiguous
 
-`execution` and `implementation` are mutually exclusive lanes. Do not keep both active at the same time.
+If a task mixes code changes and heavy validation, dispatch `implementation` first and `execution` second unless the validation already satisfies the parallel gate above.
 
-When the trigger is `Plan Mode` information gathering, dispatch only `exploration`. Do not auto-dispatch `execution` or `implementation`.
+When implementation work is complete and the next step is primarily mechanical validation, prefer handing off to the `execution` route.
 
-If a task mixes code changes and heavy validation, dispatch `implementation` first and `execution` second.
+## Dispatch Contract
 
-When implementation work is complete and the next step is primarily mechanical validation, prefer handing off to an `Execution-oriented` subagent by default.
+Every subagent dispatch must include an explicit contract. State all of these:
 
-Keep execution work on the main thread only when one of these is true:
+- `mission`: the concrete task to complete
+- `owned scope`: the files, surfaces, or responsibilities the subagent owns
+- `forbidden scope`: the files, surfaces, or decisions the subagent must not touch
+- `success condition`: what result makes the task done
+- `hand-back trigger`: when the subagent should stop and return control
+- `expected output format`: the exact form of the result the main thread should receive
 
-- the check is trivial enough that dispatch overhead is not worth it
-- command-family choice, success criteria, or key execution parameters are still unresolved
-- the execution scope is still materially unstable after the local triage pass
+Recommended `fork_context` defaults:
 
-Keep implementation work on the main thread only when one of these is true:
-
-- the edit is trivial enough that dispatch overhead is not worth it
-- implementation architecture or ownership decisions are still unresolved
-- the write scope is still materially unstable after the local triage pass
-
-Use explicit `fork_context` defaults when dispatching:
-
-- `exploration`: prefer `fork_context=true` unless the parent agent wants an intentionally independent probe or a scoped briefing is clearly sufficient
+- `exploration`: prefer `fork_context=true` unless an intentionally independent probe or a scoped briefing is clearly sufficient
 - `execution`: prefer `fork_context=false`; use `fork_context=true` only when the command depends on recent thread state that cannot be reliably compressed
 - `implementation`: prefer `fork_context=true` unless a scoped briefing is clearly sufficient and the current main-thread history is not actually needed
 
-`fork_context=true` may reduce briefing size, but it never replaces an explicit task contract. Always state the concrete mission, owned scope, success condition, and stop or hand-back triggers for the subagent.
+`fork_context` helps with context shape, but it never replaces the dispatch contract.
 
-## Wait And Reuse
+## Wait, Reuse, Interrupt, Close
 
 After dispatch, keep advancing non-overlapping work on the main thread when possible.
 
 Wait only when the next critical-path step depends on that result:
 
-- `exploration`: wait only when its signal is needed for the next decision; if one or more exploration results already provide enough signal, do not wait for the remaining exploration routes to finish
+- `exploration`: wait only when its signal is needed for the next decision; if one or more exploration results already provide enough signal, do not wait for the remaining routes
 - `execution`: wait before using its evidence for validation claims
 - `implementation`: wait before integration, overlapping edits, result-dependent validation, or the final answer
 
 Review active same-class subagents before creating a new one.
 
-Treat each active subagent as one of these reuse states:
+Reuse states:
 
-- `warm-reusable`
-- `summarize-first`
-- `terminal`
+- `warm-reusable`: class, goal, and success condition still fit, and old context is unlikely to bias the next step incorrectly
+- `summarize-first`: reuse would save time, but context pollution is rising; request a short state capsule before continuing
+- `terminal`: do not reuse the agent for the current line of work
 
-Direct reuse is allowed only when class, goal, and success condition still fit and old context is unlikely to bias the next step incorrectly.
+Additional reuse rules:
 
-Use `summarize-first` when reuse would save time but context pollution is rising: request a short state capsule, then continue from that capsule instead of the full old history.
-
-Treat interrupted `implementation` agents as `terminal` for repo-tracked write work.
-
-Treat completed exploration agents as `terminal` once their result is consumed, superseded, or their decision window closes.
-
-If ambiguity, retained-context needs, or write responsibility grows, upgrade the route instead of stretching a fast or narrow lane too far.
-
-## Interrupt And Close
-
-Prefer wrap-up steering over interrupt when there is no urgent scope conflict.
+- treat interrupted `implementation` agents as `terminal` for repo-tracked write work
+- treat completed exploration agents as `terminal` once their result is consumed, superseded, or their decision window closes
+- if ambiguity, retained-context needs, or write responsibility grows, upgrade the route instead of stretching a narrow lane too far
 
 Interrupt only for a clear reason:
 
