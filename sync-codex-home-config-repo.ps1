@@ -770,7 +770,7 @@ try {
     }
 
     Write-Output "Published repository to origin/${mainBranch}: $RepoPath"
-    if (Read-YesNoChoice -Prompt "Also publish this same commit to origin/$releaseBranch?" -DefaultValue $false) {
+    if (Read-YesNoChoice -Prompt "Also publish this same commit to origin/${releaseBranch}?" -DefaultValue $false) {
         Publish-ReleaseBranch -RepositoryPath $RepoPath -BranchName $releaseBranch
         Write-Output "Published repository to origin/${releaseBranch}: $RepoPath"
     }
