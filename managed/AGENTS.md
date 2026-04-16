@@ -55,11 +55,11 @@
 * 只要联网搜索能够明显降低误判风险,就应主动搜索,不要等待用户额外提出 `Web Search`.
 
 
-## 子代理调度与 orchestration
+## 子代理调度与编排
 
 - 当前 `AGENTS.md` 或其他 active user-scoped instruction file 中,对 `spawn_agent`,`子代理`,委托或并行代理工作的明确授权,均视为用户已允许`主线程`直接调用 `spawn_agent`.
 - 本节中的 `orchestration` 指`主线程`对子代理的拆分,派发,等待,整合,复用,以及回收.
-- `主线程`负责 `subagent orchestration`,并承担相关的选择,说明,决策和结果整合; 默认把适合委托的工作交给`子代理`.
+- `主线程`负责对子代理的 `orchestration`,并承担相关的选择,说明,决策和结果整合; 默认把适合委托的工作交给`子代理`.
 
 ### 子代理分类
 
@@ -81,28 +81,28 @@
 - 当写集互斥且可独立实现,整合或验收时,默认允许并行派发多个 `implementation` 子代理.
 - 非并发的 `implementation` 子代理允许执行直接支撑当前改动的轻量校验,包括 `formatter`,`local type check`,增量 `compile/build` 校验,局部 `build` 和窄范围非脚本命令; 并发的 `implementation` 批次不得执行 `compile/build`,其校验应限制在不触发 `compile/build` 的轻量检查范围内.
 - 当任务同时包含代码修改与长脚本验证时,默认拆成两个批次: 先由 `implementation` 子代理完成修改与轻量校验; 若该批次并发执行,则在全部返回并整合后,由`主线程`改派 `Execution-oriented` 子代理执行 `compile/build` 或其他长时间,脚本驱动,需要持续观察 log 的验证命令.
-- 如果 `implementation` 子代理返回时明确把长脚本验证交回主线程,或其结果显示仍需运行长时间命令来收集证据,`主线程`不得让该 `implementation` 子代理继续执行该命令,也不应由主线程自己直接运行; 应继续进行 `verification orchestration`,并改派合适的 `Execution-oriented` 子代理承接.
+- 如果 `implementation` 子代理返回时明确把长脚本验证交回主线程,或其结果显示仍需运行长时间命令来收集证据,`主线程`不得让该 `implementation` 子代理继续执行该命令,也不应由主线程自己直接运行; 应继续进入验证阶段 `orchestration`,并改派合适的 `Execution-oriented` 子代理承接.
 
-### 主线程 orchestration 约束
+### 主线程编排约束
 
-- 对 `Read-only exploration` 批次,`主线程`的默认动作是执行 `wait orchestration`: 使用 `wait_agent` 逐步等待最先完成的子代理,边收结果边判断是否已获得“足够信号”; 在达到足够信号前,不得继续执行与该批问题空间重叠的本地分析,搜索,读文件,Web Search,实现或验证.
+- 对 `Read-only exploration` 批次,`主线程`的默认动作是进入等待态 `orchestration`: 使用 `wait_agent` 逐步等待最先完成的子代理,边收结果边判断是否已获得“足够信号”; 在达到足够信号前,不得继续执行与该批问题空间重叠的本地分析,搜索,读文件,Web Search,实现或验证.
 - `wait_agent` 在传入多个 `targets` 时仅表示“至少一个目标已完成”或超时,不表示整批已完成; 因此每次返回后都必须重新判断是否已获得足够信号. 对 `Read-only exploration`,`足够信号` 必须按可执行条件判断,而不是凭模糊直觉; 只要满足以下任一条件,即视为足够信号: 已出现强反证并足以排除当前主要路线; 已出现明显领先的方向且现有证据足以支持下一步决策; 已收敛到最多 3 个可信候选且继续收集只会带来弱增量排序; 已发现相互冲突但都可信的证据且冲突已明确需要`主线程`裁决; 当前已派发问题中,凡对下一步决策真正关键的问题都已得到回答,其余未返回结果即使缺失也不会改变当前决策.
 - 一旦已有返回结果足以支持当前决策,`主线程`应立即停止继续收集,关闭尚未完成的同批 `Read-only exploration` 子代理并整合现有证据; 仅当当前决策明确要求覆盖全部已派发搜索面,或各子代理结果彼此依赖且缺一不可时,才等待整批全部返回.
-- 对 `implementation` 批次,`主线程`的默认动作是执行 `implementation orchestration`: 一旦进入施工阶段,应尽快把与当前修改直接相关的信息收集,代码阅读,代码修改和简易验证交给 `implementation` 子代理,自己主要负责拆分写集,下发约束,等待结果,整合和验收.
+- 对 `implementation` 批次,`主线程`的默认动作是进入 `implementation` 阶段 `orchestration`: 一旦进入施工阶段,应尽快把与当前修改直接相关的信息收集,代码阅读,代码修改和简易验证交给 `implementation` 子代理,自己主要负责拆分写集,下发约束,等待结果,整合和验收.
 - 若 `implementation` 子代理返回不完整,受阻,或暴露出新的局部信息缺口,`主线程`应先收敛缺口,再继续派发 `implementation` 子代理或拆分后重派; 默认不把剩余实现接回`主线程`本地完成.
-- 当上一批是并发 `implementation` 且下一步需要 `compile/build`,日志观察或失败证据收集时,`主线程`的默认动作是继续进行 `execution orchestration`,发起新的 `Execution-oriented` 批次,而不是自己运行命令.
+- 当上一批是并发 `implementation` 且下一步需要 `compile/build`,日志观察或失败证据收集时,`主线程`的默认动作是继续进入 `execution` 阶段 `orchestration`,发起新的 `Execution-oriented` 批次,而不是自己运行命令.
 
 
-### 生命周期,复用与 orchestration
+### 生命周期,复用与编排
 
-- 作为 `orchestration` 的一部分,派发某一类型的`子代理`时,`主线程`可先检查是否存在适合复用的同类型`子代理`;如果不适合复用则先`close_agent`关停子代理,然后再派发新的子代理.
+- 作为对子代理的 `orchestration` 的一部分,派发某一类型的`子代理`时,`主线程`可先检查是否存在适合复用的同类型`子代理`;如果不适合复用则先`close_agent`关停子代理,然后再派发新的子代理.
 - 对 `Read-only exploration`,若复用会扩大搜索面,混入旧任务上下文,或削弱“窄范围问题”约束,默认不复用旧子代理,以保持探索 `orchestration` 的问题边界清晰,优先新建多个小而专的探索子代理.
-- 当某批子代理已提供足够信号或该批任务结束时,主线程必须在离开该批次前完成回收 `orchestration`: 对全部未复用子代理显式执行 `close_agent`,不得因其已结束而省略回收.
+- 当某批子代理已提供足够信号或该批任务结束时,主线程必须在离开该批次前完成回收: 对全部未复用子代理显式执行 `close_agent`,不得因其已结束而省略回收.
 
 
 ### `spawn_agent` 约束
 
 - 所有`子代理`只能由`主线程`创建,纳入 `orchestration`,并由`主线程`负责回收,且子代理线程不得再次调用`spawn_agent`.
 - 调用`spawn_agent`时必须显式设置`fork_context`.
--`Read-only exploration` 和 `implementation` 子代理默认优先使用 `fork_context=true`,以复用主线程上下文; 仅当任务高度独立,或复用主线程历史会带来明显上下文污染风险时,才改用 `false`;其他类型子代理维持 `fork_context=false`,以减少无关线程历史注入并保持专项上下文稳定.
+- `Read-only exploration` 和 `implementation` 子代理默认优先使用 `fork_context=true`,以复用主线程上下文; 仅当任务高度独立,或复用主线程历史会带来明显上下文污染风险时,才改用 `false`;其他类型子代理维持 `fork_context=false`,以减少无关线程历史注入并保持专项上下文稳定.
 - 调用`wait_agent`时,`子代理`默认超时为`1800000` ms; 该长超时主要用于承载长命令和持续输出.
