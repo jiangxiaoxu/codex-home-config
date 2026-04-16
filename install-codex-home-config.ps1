@@ -19,6 +19,7 @@ $repoOwner = 'jiangxiaoxu'
 $repoName = 'codex-home-config'
 $releaseBranch = 'release'
 $archiveUri = "https://codeload.github.com/$repoOwner/$repoName/zip/refs/heads/$releaseBranch"
+$publishedCommitApiUri = "https://api.github.com/repos/$repoOwner/$repoName/commits/$releaseBranch"
 $userAgent = 'codex-home-config-installer'
 $maxBackupVersions = 5
 $backupState = [pscustomobject]@{
@@ -29,6 +30,7 @@ $runtimeState = [pscustomobject]@{
     SupportTempRoot       = ''
     NodeExecutable        = ''
     NodeVersionText       = ''
+    PublishedCommitInfo   = $null
 }
 
 function Write-StageMessage {
@@ -63,6 +65,13 @@ function Get-ComponentSelection {
 function Get-DownloadRequestHeader {
     return @{
         Accept       = 'application/octet-stream'
+        'User-Agent' = $userAgent
+    }
+}
+
+function Get-GitHubApiRequestHeader {
+    return @{
+        Accept       = 'application/vnd.github+json'
         'User-Agent' = $userAgent
     }
 }
@@ -180,11 +189,7 @@ function Get-GitBranchName {
     return $null
 }
 
-function Get-RepositorySupportRoot {
-    if (-not [string]::IsNullOrWhiteSpace($runtimeState.SupportRepositoryRoot)) {
-        return $runtimeState.SupportRepositoryRoot
-    }
-
+function Get-LocalRepositoryRoot {
     $candidateRoots = [System.Collections.Generic.List[string]]::new()
     foreach ($candidateRoot in @($PSScriptRoot, $(if (-not [string]::IsNullOrWhiteSpace($PSCommandPath)) { Split-Path -Parent $PSCommandPath }))) {
         if ([string]::IsNullOrWhiteSpace($candidateRoot)) {
@@ -196,19 +201,241 @@ function Get-RepositorySupportRoot {
 
     foreach ($candidateRoot in @($candidateRoots | Select-Object -Unique)) {
         $toolPath = Join-Path $candidateRoot 'tools\config-toml-ops.cjs'
-        if (Test-Path -LiteralPath $toolPath -PathType Leaf) {
-            $gitPath = Join-Path $candidateRoot '.git'
-            if (Test-Path -LiteralPath $gitPath) {
-                $candidateBranch = Get-GitBranchName -RepositoryPath $candidateRoot
-                if ($candidateBranch -ne $releaseBranch) {
-                    Write-StageMessage "Ignoring local repository snapshot from branch '$candidateBranch'. Installer only installs published '$releaseBranch' content."
-                    continue
-                }
+        $gitPath = Join-Path $candidateRoot '.git'
+        if (-not (Test-Path -LiteralPath $toolPath -PathType Leaf) -or -not (Test-Path -LiteralPath $gitPath)) {
+            continue
+        }
+
+        return $candidateRoot
+    }
+
+    return $null
+}
+
+function Invoke-GitHubApiRequest {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Uri
+    )
+
+    $maxAttempts = 3
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        try {
+            return Invoke-RestMethod -Uri $Uri -Headers (Get-GitHubApiRequestHeader)
+        }
+        catch {
+            if ($attempt -ge $maxAttempts) {
+                $apiErrorMessage = Get-ApiErrorMessage -ErrorRecord $_
+                throw "GitHub API request failed for $Uri. $apiErrorMessage"
             }
 
-            $runtimeState.SupportRepositoryRoot = $candidateRoot
-            return $candidateRoot
+            Start-Sleep -Seconds 2
         }
+    }
+}
+
+function Split-CommitMessage {
+    param(
+        [Parameter()]
+        [AllowEmptyString()]
+        [string]$Message
+    )
+
+    if ($null -eq $Message) {
+        $Message = ''
+    }
+
+    $normalizedMessage = ($Message.Replace("`r`n", "`n").Replace("`r", "`n")).Trim()
+    if ([string]::IsNullOrWhiteSpace($normalizedMessage)) {
+        return [pscustomobject]@{
+            Subject     = ''
+            Description = ''
+        }
+    }
+
+    $messageLines = @($normalizedMessage -split "`n")
+    $subject = $messageLines[0].Trim()
+    $description = ''
+    if ($messageLines.Count -gt 1) {
+        $description = (($messageLines | Select-Object -Skip 1) -join [Environment]::NewLine).Trim()
+    }
+
+    return [pscustomobject]@{
+        Subject     = $subject
+        Description = $description
+    }
+}
+
+function Convert-CommitDateText {
+    param(
+        [Parameter()]
+        [AllowEmptyString()]
+        [string]$DateText
+    )
+
+    if ([string]::IsNullOrWhiteSpace($DateText)) {
+        return ''
+    }
+
+    try {
+        $parsedDate = [datetimeoffset]::Parse($DateText, [System.Globalization.CultureInfo]::InvariantCulture)
+        return $parsedDate.ToString('yyyy-MM-dd HH:mm:ss zzz')
+    }
+    catch {
+        return $DateText
+    }
+}
+
+function Get-LocalInstallCommitInfo {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RepositoryPath
+    )
+
+    $sha = (& git -C $RepositoryPath rev-parse HEAD 2>$null | Out-String).Trim()
+    if (($LASTEXITCODE -ne 0) -or [string]::IsNullOrWhiteSpace($sha)) {
+        throw "git rev-parse HEAD failed in $RepositoryPath"
+    }
+
+    $message = (& git -C $RepositoryPath log -1 --format=%B 2>$null | Out-String).TrimEnd()
+    if ($LASTEXITCODE -ne 0) {
+        throw "git log failed in $RepositoryPath"
+    }
+
+    $committerName = (& git -C $RepositoryPath log -1 --format=%cn 2>$null | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) {
+        throw "git log committer lookup failed in $RepositoryPath"
+    }
+
+    $committerDate = (& git -C $RepositoryPath log -1 --format=%cI 2>$null | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) {
+        throw "git log commit date lookup failed in $RepositoryPath"
+    }
+
+    $messageParts = Split-CommitMessage -Message $message
+    return [pscustomobject]@{
+        Sha             = $sha
+        ShortSha        = $sha.Substring(0, [Math]::Min(12, $sha.Length))
+        Subject         = $messageParts.Subject
+        Description     = $messageParts.Description
+        CommitterName   = $committerName
+        CommitDateText  = Convert-CommitDateText -DateText $committerDate
+        HtmlUrl         = "https://github.com/$repoOwner/$repoName/commit/$sha"
+        Source          = 'local repository branch'
+        Branch          = (Get-GitBranchName -RepositoryPath $RepositoryPath)
+    }
+}
+
+function Get-RemoteInstallCommitInfo {
+    $commitResponse = Invoke-GitHubApiRequest -Uri $publishedCommitApiUri
+    $messageParts = Split-CommitMessage -Message $commitResponse.commit.message
+    $commitDate = $commitResponse.commit.committer.date
+    if ([string]::IsNullOrWhiteSpace($commitDate)) {
+        $commitDate = $commitResponse.commit.author.date
+    }
+
+    $committerName = $commitResponse.commit.committer.name
+    if ([string]::IsNullOrWhiteSpace($committerName)) {
+        $committerName = $commitResponse.commit.author.name
+    }
+
+    $sha = [string]$commitResponse.sha
+    return [pscustomobject]@{
+        Sha             = $sha
+        ShortSha        = $sha.Substring(0, [Math]::Min(12, $sha.Length))
+        Subject         = $messageParts.Subject
+        Description     = $messageParts.Description
+        CommitterName   = $committerName
+        CommitDateText  = Convert-CommitDateText -DateText $commitDate
+        HtmlUrl         = [string]$commitResponse.html_url
+        Source          = 'remote published release branch'
+        Branch          = $releaseBranch
+    }
+}
+
+function Get-InstallCommitInfo {
+    if ($null -ne $runtimeState.PublishedCommitInfo) {
+        return $runtimeState.PublishedCommitInfo
+    }
+
+    $localRepositoryRoot = Get-LocalRepositoryRoot
+    if (-not [string]::IsNullOrWhiteSpace($localRepositoryRoot)) {
+        try {
+            $runtimeState.PublishedCommitInfo = Get-LocalInstallCommitInfo -RepositoryPath $localRepositoryRoot
+            return $runtimeState.PublishedCommitInfo
+        }
+        catch {
+            Write-Warning "Failed to read local install commit info from $localRepositoryRoot. Falling back to the published '$releaseBranch' branch."
+        }
+    }
+
+    $runtimeState.PublishedCommitInfo = Get-RemoteInstallCommitInfo
+    return $runtimeState.PublishedCommitInfo
+}
+
+function Show-InstallCommitInfo {
+    try {
+        $commitInfo = Get-InstallCommitInfo
+    }
+    catch {
+        Write-Warning "Failed to load install source commit info. Install will continue without commit metadata."
+        return
+    }
+
+    Write-Output "Install source commit:"
+    if (-not [string]::IsNullOrWhiteSpace($commitInfo.Branch)) {
+        Write-Output "  Branch: $($commitInfo.Branch)"
+    }
+
+    Write-Output "  SHA: $($commitInfo.Sha)"
+    Write-Output "  Short SHA: $($commitInfo.ShortSha)"
+    if (-not [string]::IsNullOrWhiteSpace($commitInfo.Subject)) {
+        Write-Output "  Subject: $($commitInfo.Subject)"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($commitInfo.Description)) {
+        Write-Output '  Description:'
+        foreach ($line in @($commitInfo.Description -split "(`r`n|`n|`r)")) {
+            if ([string]::IsNullOrWhiteSpace($line)) {
+                continue
+            }
+
+            Write-Output "    $line"
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($commitInfo.CommitterName)) {
+        Write-Output "  Committer: $($commitInfo.CommitterName)"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($commitInfo.CommitDateText)) {
+        Write-Output "  Committed at: $($commitInfo.CommitDateText)"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($commitInfo.HtmlUrl)) {
+        Write-Output "  URL: $($commitInfo.HtmlUrl)"
+    }
+
+    Write-Output "  Source: $($commitInfo.Source)"
+}
+
+function Get-RepositorySupportRoot {
+    if (-not [string]::IsNullOrWhiteSpace($runtimeState.SupportRepositoryRoot)) {
+        return $runtimeState.SupportRepositoryRoot
+    }
+
+    $localRepositoryRoot = Get-LocalRepositoryRoot
+    if (-not [string]::IsNullOrWhiteSpace($localRepositoryRoot)) {
+        $localBranch = Get-GitBranchName -RepositoryPath $localRepositoryRoot
+        if ([string]::IsNullOrWhiteSpace($localBranch)) {
+            Write-StageMessage 'Using local repository snapshot.'
+        }
+        else {
+            Write-StageMessage "Using local repository snapshot from branch '$localBranch'."
+        }
+
+        $runtimeState.SupportRepositoryRoot = $localRepositoryRoot
+        return $localRepositoryRoot
     }
 
     $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-home-config-support-" + [guid]::NewGuid().ToString('N'))
@@ -934,6 +1161,7 @@ function Invoke-UpdateAction {
         [string[]]$SelectedComponents
     )
 
+    Show-InstallCommitInfo
     Write-StageMessage 'Preparing repository snapshot...'
     $repositoryPath = Get-RepositorySupportRoot
     $managedPath = Join-Path $repositoryPath 'managed'

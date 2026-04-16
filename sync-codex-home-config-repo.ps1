@@ -728,10 +728,10 @@ if ($LASTEXITCODE -ne 0) {
     throw "git push failed in $RepoPath"
 }
 
-Write-Output "Published repository to origin/$mainBranch: $RepoPath"
+Write-Output "Published repository to origin/${mainBranch}: $RepoPath"
 if (Read-YesNoChoice -Prompt "Also publish this same commit to origin/$releaseBranch?" -DefaultValue $false) {
     Publish-ReleaseBranch -RepositoryPath $RepoPath -BranchName $releaseBranch
-    Write-Output "Published repository to origin/$releaseBranch: $RepoPath"
+    Write-Output "Published repository to origin/${releaseBranch}: $RepoPath"
 }
 else {
     Write-Output "Skipped publishing origin/$releaseBranch."

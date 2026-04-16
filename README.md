@@ -4,7 +4,8 @@ Public Codex home configuration for the installable content under `managed/` and
 
 ## Install
 
-Copy and run one of these in PowerShell. `Node.js 18+` is required for both install and restore because `config.toml` is merged through the repository Node helper. Online install now uses the published `release` branch only, so the installer and the managed snapshot come from the same published source.
+Copy and run one of these in PowerShell. `Node.js 18+` is required for both install and restore because `config.toml` is merged through the repository Node helper. Online install uses the published `release` branch only. Local install from a repository checkout uses the current local branch snapshot.
+Before `Update config`, the installer prints the install source commit metadata, including the branch name when available, commit SHA, subject, description, commit time, and commit URL.
 
 Interactive install menu:
 
