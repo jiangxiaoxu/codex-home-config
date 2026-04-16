@@ -42,6 +42,46 @@ function Write-StageMessage {
     Write-Information "[codex-home-config] $Message" -InformationAction Continue
 }
 
+function Test-InteractivePauseAvailable {
+    try {
+        return ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected -and -not [Console]::IsOutputRedirected)
+    }
+    catch {
+        return $false
+    }
+}
+
+function Get-ErrorDisplayMessage {
+    param(
+        [Parameter(Mandatory)]
+        [System.Management.Automation.ErrorRecord]$ErrorRecord
+    )
+
+    if ($null -ne $ErrorRecord.Exception -and -not [string]::IsNullOrWhiteSpace($ErrorRecord.Exception.Message)) {
+        return $ErrorRecord.Exception.Message.Trim()
+    }
+
+    return $ErrorRecord.ToString().Trim()
+}
+
+function Wait-OnFatalError {
+    param(
+        [Parameter()]
+        [string]$Prompt = 'Press Enter to exit'
+    )
+
+    if (-not (Test-InteractivePauseAvailable)) {
+        return
+    }
+
+    try {
+        [void](Read-Host $Prompt)
+    }
+    catch {
+        Write-Verbose 'Failed to wait for user input before exit.'
+    }
+}
+
 function Get-ComponentSelection {
     param(
         [Parameter(Mandatory)]
@@ -1190,26 +1230,33 @@ function Invoke-RestoreAction {
     Write-Output "Restored backup version: $($snapshotInfo.Name)"
 }
 
-if (Test-Path -LiteralPath $TargetCodexPath -PathType Leaf) {
-    throw "Target path '$TargetCodexPath' points to a file."
-}
-
-$null = Assert-NodeEnvironment
-$timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-
-$selectedAction = $Action
-if ($selectedAction -eq 'Prompt') {
-    $selectedAction = Select-MainAction
-}
-
 try {
-    switch ($selectedAction) {
-        'Update' { Invoke-UpdateAction -SelectedComponents $Components }
-        'Restore' { Invoke-RestoreAction }
-        'Quit' { Write-Output 'Operation cancelled.' }
-        default { throw "Unexpected action selection: $selectedAction" }
+    if (Test-Path -LiteralPath $TargetCodexPath -PathType Leaf) {
+        throw "Target path '$TargetCodexPath' points to a file."
+    }
+
+    $null = Assert-NodeEnvironment
+    $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+
+    $selectedAction = $Action
+    if ($selectedAction -eq 'Prompt') {
+        $selectedAction = Select-MainAction
+    }
+
+    try {
+        switch ($selectedAction) {
+            'Update' { Invoke-UpdateAction -SelectedComponents $Components }
+            'Restore' { Invoke-RestoreAction }
+            'Quit' { Write-Output 'Operation cancelled.' }
+            default { throw "Unexpected action selection: $selectedAction" }
+        }
+    }
+    finally {
+        Remove-RepositorySupportTempRoot
     }
 }
-finally {
-    Remove-RepositorySupportTempRoot
+catch {
+    Write-Error "[codex-home-config] $(Get-ErrorDisplayMessage -ErrorRecord $_)"
+    Wait-OnFatalError
+    exit 1
 }

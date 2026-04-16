@@ -43,6 +43,46 @@ function Get-ComponentSelection {
     return $componentSelection
 }
 
+function Test-InteractivePauseAvailable {
+    try {
+        return ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected -and -not [Console]::IsOutputRedirected)
+    }
+    catch {
+        return $false
+    }
+}
+
+function Get-ErrorDisplayMessage {
+    param(
+        [Parameter(Mandatory)]
+        [System.Management.Automation.ErrorRecord]$ErrorRecord
+    )
+
+    if ($null -ne $ErrorRecord.Exception -and -not [string]::IsNullOrWhiteSpace($ErrorRecord.Exception.Message)) {
+        return $ErrorRecord.Exception.Message.Trim()
+    }
+
+    return $ErrorRecord.ToString().Trim()
+}
+
+function Wait-OnFatalError {
+    param(
+        [Parameter()]
+        [string]$Prompt = 'Press Enter to exit'
+    )
+
+    if (-not (Test-InteractivePauseAvailable)) {
+        return
+    }
+
+    try {
+        [void](Read-Host $Prompt)
+    }
+    catch {
+        Write-Verbose 'Failed to wait for user input before exit.'
+    }
+}
+
 function Get-PowerShell7Executable {
     $candidatePaths = [System.Collections.Generic.List[string]]::new()
 
@@ -517,224 +557,231 @@ function Write-Utf8FileIfDifferent {
     [System.IO.File]::WriteAllText($Path, $Content, $utf8Encoding)
 }
 
-if ($PSVersionTable.PSVersion.Major -lt 7) {
-    $pwshExecutable = Get-PowerShell7Executable
-    if ([string]::IsNullOrWhiteSpace($pwshExecutable)) {
-        throw 'PowerShell 7 or later is required. pwsh.exe was not found.'
+try {
+    if ($PSVersionTable.PSVersion.Major -lt 7) {
+        $pwshExecutable = Get-PowerShell7Executable
+        if ([string]::IsNullOrWhiteSpace($pwshExecutable)) {
+            throw 'PowerShell 7 or later is required. pwsh.exe was not found.'
+        }
+
+        & $pwshExecutable @(Get-RelaunchArgumentList)
+        if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+        }
+
+        return
     }
 
-    & $pwshExecutable @(Get-RelaunchArgumentList)
-    if ($LASTEXITCODE -ne 0) {
-        exit $LASTEXITCODE
+    Set-StrictMode -Version Latest
+    $ErrorActionPreference = 'Stop'
+    $null = Assert-NodeEnvironment
+
+    if ([string]::IsNullOrWhiteSpace($RepoPath)) {
+        if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+            $RepoPath = $PSScriptRoot
+        }
+        else {
+            $RepoPath = Join-Path $HOME 'codex-home-config'
+        }
     }
 
-    return
-}
+    $sourceConfigPath = Join-Path $SourceCodexPath 'config.toml'
+    $sourceAgentsPath = Join-Path $SourceCodexPath 'AGENTS.md'
+    $sourceAgentDirectoryPath = Join-Path $SourceCodexPath 'agents'
+    $sourceSkillDirectoryPath = Join-Path $SourceCodexPath 'skills\jiangxiaoxu'
+    $componentSelection = Get-ComponentSelection -SelectedComponents $Components
 
-Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
-$null = Assert-NodeEnvironment
+    foreach ($requiredPath in @(
+            @{ Path = $sourceConfigPath; Selected = $componentSelection.Config },
+            @{ Path = $sourceAgentsPath; Selected = $componentSelection.AgentFile },
+            @{ Path = $sourceAgentDirectoryPath; Selected = $componentSelection.AgentFolder }
+        )) {
+        if ($requiredPath.Selected -and -not (Test-Path -LiteralPath $requiredPath.Path)) {
+            throw "Required source path was not found: $($requiredPath.Path)"
+        }
+    }
 
-if ([string]::IsNullOrWhiteSpace($RepoPath)) {
-    if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
-        $RepoPath = $PSScriptRoot
+    if (-not (Test-Path -LiteralPath $RepoPath -PathType Container)) {
+        & git clone $RepoUrl $RepoPath
+        if ($LASTEXITCODE -ne 0) {
+            throw "git clone failed for $RepoUrl"
+        }
+    }
+
+    if (-not (Test-Path -LiteralPath (Join-Path $RepoPath '.git') -PathType Container)) {
+        throw "Target repo path is not a git repository: $RepoPath"
+    }
+
+    if ($SkipInitialPull) {
+        $postPullStatusOutput = & git -C $RepoPath status --porcelain
+        if ($LASTEXITCODE -ne 0) {
+            throw "git status failed in $RepoPath"
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace(($postPullStatusOutput | Out-String))) {
+            throw "Repository '$RepoPath' has uncommitted changes. Commit or discard them before syncing."
+        }
     }
     else {
-        $RepoPath = Join-Path $HOME 'codex-home-config'
-    }
-}
-
-$sourceConfigPath = Join-Path $SourceCodexPath 'config.toml'
-$sourceAgentsPath = Join-Path $SourceCodexPath 'AGENTS.md'
-$sourceAgentDirectoryPath = Join-Path $SourceCodexPath 'agents'
-$sourceSkillDirectoryPath = Join-Path $SourceCodexPath 'skills\jiangxiaoxu'
-$componentSelection = Get-ComponentSelection -SelectedComponents $Components
-
-foreach ($requiredPath in @(
-        @{ Path = $sourceConfigPath; Selected = $componentSelection.Config },
-        @{ Path = $sourceAgentsPath; Selected = $componentSelection.AgentFile },
-        @{ Path = $sourceAgentDirectoryPath; Selected = $componentSelection.AgentFolder }
-    )) {
-    if ($requiredPath.Selected -and -not (Test-Path -LiteralPath $requiredPath.Path)) {
-        throw "Required source path was not found: $($requiredPath.Path)"
-    }
-}
-
-if (-not (Test-Path -LiteralPath $RepoPath -PathType Container)) {
-    & git clone $RepoUrl $RepoPath
-    if ($LASTEXITCODE -ne 0) {
-        throw "git clone failed for $RepoUrl"
-    }
-}
-
-if (-not (Test-Path -LiteralPath (Join-Path $RepoPath '.git') -PathType Container)) {
-    throw "Target repo path is not a git repository: $RepoPath"
-}
-
-if ($SkipInitialPull) {
-    $postPullStatusOutput = & git -C $RepoPath status --porcelain
-    if ($LASTEXITCODE -ne 0) {
-        throw "git status failed in $RepoPath"
-    }
-
-    if (-not [string]::IsNullOrWhiteSpace(($postPullStatusOutput | Out-String))) {
-        throw "Repository '$RepoPath' has uncommitted changes. Commit or discard them before syncing."
-    }
-}
-else {
-    $preSyncStatusOutput = & git -C $RepoPath status --porcelain
-    if ($LASTEXITCODE -ne 0) {
-        throw "git status failed in $RepoPath"
-    }
-
-    if (-not [string]::IsNullOrWhiteSpace(($preSyncStatusOutput | Out-String))) {
-        throw "Repository '$RepoPath' has uncommitted changes. Commit or discard them before syncing."
-    }
-
-    $currentBranch = (& git -C $RepoPath branch --show-current).Trim()
-    if ($LASTEXITCODE -ne 0) {
-        throw "git branch --show-current failed in $RepoPath"
-    }
-
-    if ($currentBranch -ne $mainBranch) {
-        & git -C $RepoPath checkout -B $mainBranch
+        $preSyncStatusOutput = & git -C $RepoPath status --porcelain
         if ($LASTEXITCODE -ne 0) {
-            throw "git checkout -B $mainBranch failed in $RepoPath"
-        }
-    }
-
-    & git -C $RepoPath ls-remote --exit-code --heads origin $mainBranch *> $null
-    $remoteMainCheckExitCode = $LASTEXITCODE
-    if (($remoteMainCheckExitCode -ne 0) -and ($remoteMainCheckExitCode -ne 2)) {
-        throw "git ls-remote failed for origin/$mainBranch in $RepoPath"
-    }
-
-    if ($remoteMainCheckExitCode -eq 0) {
-        $prePullHead = Get-RepoHeadCommit -RepoPath $RepoPath
-
-        & git -C $RepoPath pull --rebase origin $mainBranch
-        if ($LASTEXITCODE -ne 0) {
-            throw "git pull --rebase origin $mainBranch failed in $RepoPath"
+            throw "git status failed in $RepoPath"
         }
 
-        $postPullHead = Get-RepoHeadCommit -RepoPath $RepoPath
-        if ($prePullHead -ne $postPullHead) {
-            $repoSyncScriptPath = Join-Path $RepoPath 'sync-codex-home-config-repo.ps1'
-            if (-not (Test-Path -LiteralPath $repoSyncScriptPath -PathType Leaf)) {
-                throw "Updated sync script was not found: $repoSyncScriptPath"
-            }
+        if (-not [string]::IsNullOrWhiteSpace(($preSyncStatusOutput | Out-String))) {
+            throw "Repository '$RepoPath' has uncommitted changes. Commit or discard them before syncing."
+        }
 
-            Write-Output "Repository updated after pull; relaunching latest sync script from $repoSyncScriptPath"
+        $currentBranch = (& git -C $RepoPath branch --show-current).Trim()
+        if ($LASTEXITCODE -ne 0) {
+            throw "git branch --show-current failed in $RepoPath"
+        }
 
-            & $repoSyncScriptPath @(Get-RelaunchArgumentList -IncludeSkipInitialPull)
+        if ($currentBranch -ne $mainBranch) {
+            & git -C $RepoPath checkout -B $mainBranch
             if ($LASTEXITCODE -ne 0) {
-                exit $LASTEXITCODE
+                throw "git checkout -B $mainBranch failed in $RepoPath"
+            }
+        }
+
+        & git -C $RepoPath ls-remote --exit-code --heads origin $mainBranch *> $null
+        $remoteMainCheckExitCode = $LASTEXITCODE
+        if (($remoteMainCheckExitCode -ne 0) -and ($remoteMainCheckExitCode -ne 2)) {
+            throw "git ls-remote failed for origin/$mainBranch in $RepoPath"
+        }
+
+        if ($remoteMainCheckExitCode -eq 0) {
+            $prePullHead = Get-RepoHeadCommit -RepoPath $RepoPath
+
+            & git -C $RepoPath pull --rebase origin $mainBranch
+            if ($LASTEXITCODE -ne 0) {
+                throw "git pull --rebase origin $mainBranch failed in $RepoPath"
             }
 
-            return
+            $postPullHead = Get-RepoHeadCommit -RepoPath $RepoPath
+            if ($prePullHead -ne $postPullHead) {
+                $repoSyncScriptPath = Join-Path $RepoPath 'sync-codex-home-config-repo.ps1'
+                if (-not (Test-Path -LiteralPath $repoSyncScriptPath -PathType Leaf)) {
+                    throw "Updated sync script was not found: $repoSyncScriptPath"
+                }
+
+                Write-Output "Repository updated after pull; relaunching latest sync script from $repoSyncScriptPath"
+
+                & $repoSyncScriptPath @(Get-RelaunchArgumentList -IncludeSkipInitialPull)
+                if ($LASTEXITCODE -ne 0) {
+                    exit $LASTEXITCODE
+                }
+
+                return
+            }
         }
     }
-}
 
-$sourceInstallerPath = Join-Path $RepoPath 'install-codex-home-config.ps1'
+    $sourceInstallerPath = Join-Path $RepoPath 'install-codex-home-config.ps1'
 
-if (-not [string]::IsNullOrWhiteSpace($PSCommandPath) -and (Test-Path -LiteralPath $PSCommandPath -PathType Leaf)) {
-    $sourceSyncScriptPath = $PSCommandPath
-}
-else {
-    $sourceSyncScriptPath = Join-Path $RepoPath 'sync-codex-home-config-repo.ps1'
-}
-
-foreach ($requiredScriptPath in @($sourceInstallerPath, $sourceSyncScriptPath)) {
-    if (-not (Test-Path -LiteralPath $requiredScriptPath -PathType Leaf)) {
-        throw "Required script path was not found: $requiredScriptPath"
+    if (-not [string]::IsNullOrWhiteSpace($PSCommandPath) -and (Test-Path -LiteralPath $PSCommandPath -PathType Leaf)) {
+        $sourceSyncScriptPath = $PSCommandPath
     }
-}
-
-Copy-ItemIfDifferentPath -SourcePath $sourceInstallerPath -DestinationPath (Join-Path $RepoPath 'install-codex-home-config.ps1')
-
-$repoManagedPath = Join-Path $RepoPath 'managed'
-$null = New-Item -ItemType Directory -Path $repoManagedPath -Force
-if ($componentSelection.Config) {
-    $managedConfigPath = Join-Path $repoManagedPath 'config.toml'
-    Invoke-ConfigTomlTool -RepositoryPath $RepoPath -Command 'publish-sync' -Arguments @{
-        local   = $sourceConfigPath
-        managed = $managedConfigPath
-        output  = $managedConfigPath
-    }
-}
-
-if ($componentSelection.AgentFile) {
-    Copy-ItemIfDifferentPath -SourcePath $sourceAgentsPath -DestinationPath (Join-Path $repoManagedPath 'AGENTS.md')
-}
-
-if ($componentSelection.AgentFolder) {
-    $repoAgentDirectoryPath = Join-Path $repoManagedPath 'agents'
-    if (Test-Path -LiteralPath $repoAgentDirectoryPath) {
-        Remove-Item -LiteralPath $repoAgentDirectoryPath -Recurse -Force
+    else {
+        $sourceSyncScriptPath = Join-Path $RepoPath 'sync-codex-home-config-repo.ps1'
     }
 
-    Copy-Item -LiteralPath $sourceAgentDirectoryPath -Destination $repoManagedPath -Recurse -Force
-}
+    foreach ($requiredScriptPath in @($sourceInstallerPath, $sourceSyncScriptPath)) {
+        if (-not (Test-Path -LiteralPath $requiredScriptPath -PathType Leaf)) {
+            throw "Required script path was not found: $requiredScriptPath"
+        }
+    }
 
-if ($componentSelection.Skill) {
-    Sync-ManagedSkillDirectory -SourcePath $sourceSkillDirectoryPath -DestinationPath (Join-Path $repoManagedPath 'skills\jiangxiaoxu')
-}
+    Copy-ItemIfDifferentPath -SourcePath $sourceInstallerPath -DestinationPath (Join-Path $RepoPath 'install-codex-home-config.ps1')
 
-Copy-ItemIfDifferentPath -SourcePath $sourceSyncScriptPath -DestinationPath (Join-Path $RepoPath 'sync-codex-home-config-repo.ps1')
+    $repoManagedPath = Join-Path $RepoPath 'managed'
+    $null = New-Item -ItemType Directory -Path $repoManagedPath -Force
+    if ($componentSelection.Config) {
+        $managedConfigPath = Join-Path $repoManagedPath 'config.toml'
+        Invoke-ConfigTomlTool -RepositoryPath $RepoPath -Command 'publish-sync' -Arguments @{
+            local   = $sourceConfigPath
+            managed = $managedConfigPath
+            output  = $managedConfigPath
+        }
+    }
 
-$legacyConfigPath = Join-Path $RepoPath 'config.toml'
-if (Test-Path -LiteralPath $legacyConfigPath -PathType Leaf) {
-    Remove-Item -LiteralPath $legacyConfigPath -Force
-}
+    if ($componentSelection.AgentFile) {
+        Copy-ItemIfDifferentPath -SourcePath $sourceAgentsPath -DestinationPath (Join-Path $repoManagedPath 'AGENTS.md')
+    }
 
-$legacyScriptsPath = Join-Path $RepoPath 'scripts'
-if (Test-Path -LiteralPath $legacyScriptsPath -PathType Container) {
-    Remove-Item -LiteralPath $legacyScriptsPath -Recurse -Force
-}
+    if ($componentSelection.AgentFolder) {
+        $repoAgentDirectoryPath = Join-Path $repoManagedPath 'agents'
+        if (Test-Path -LiteralPath $repoAgentDirectoryPath) {
+            Remove-Item -LiteralPath $repoAgentDirectoryPath -Recurse -Force
+        }
 
-$legacyRootSkillsPath = Join-Path $RepoPath 'skills'
-if (Test-Path -LiteralPath $legacyRootSkillsPath -PathType Container) {
-    Remove-Item -LiteralPath $legacyRootSkillsPath -Recurse -Force
-}
+        Copy-Item -LiteralPath $sourceAgentDirectoryPath -Destination $repoManagedPath -Recurse -Force
+    }
 
-$legacyRootAgentsPath = Join-Path $RepoPath 'agents'
-if (Test-Path -LiteralPath $legacyRootAgentsPath -PathType Container) {
-    Remove-Item -LiteralPath $legacyRootAgentsPath -Recurse -Force
-}
+    if ($componentSelection.Skill) {
+        Sync-ManagedSkillDirectory -SourcePath $sourceSkillDirectoryPath -DestinationPath (Join-Path $repoManagedPath 'skills\jiangxiaoxu')
+    }
 
-$statusOutput = & git -C $RepoPath status --porcelain
-if ($LASTEXITCODE -ne 0) {
-    throw "git status failed in $RepoPath"
-}
+    Copy-ItemIfDifferentPath -SourcePath $sourceSyncScriptPath -DestinationPath (Join-Path $RepoPath 'sync-codex-home-config-repo.ps1')
 
-if ([string]::IsNullOrWhiteSpace(($statusOutput | Out-String))) {
-    Write-Output "No changes to publish in $RepoPath"
-    return
-}
+    $legacyConfigPath = Join-Path $RepoPath 'config.toml'
+    if (Test-Path -LiteralPath $legacyConfigPath -PathType Leaf) {
+        Remove-Item -LiteralPath $legacyConfigPath -Force
+    }
 
-& git -C $RepoPath add --all
-if ($LASTEXITCODE -ne 0) {
-    throw "git add failed in $RepoPath"
-}
+    $legacyScriptsPath = Join-Path $RepoPath 'scripts'
+    if (Test-Path -LiteralPath $legacyScriptsPath -PathType Container) {
+        Remove-Item -LiteralPath $legacyScriptsPath -Recurse -Force
+    }
 
-& git -C $RepoPath commit -m $CommitMessage
-if ($LASTEXITCODE -ne 0) {
-    throw "git commit failed in $RepoPath"
-}
+    $legacyRootSkillsPath = Join-Path $RepoPath 'skills'
+    if (Test-Path -LiteralPath $legacyRootSkillsPath -PathType Container) {
+        Remove-Item -LiteralPath $legacyRootSkillsPath -Recurse -Force
+    }
 
-& git -C $RepoPath push origin $mainBranch
-if ($LASTEXITCODE -ne 0) {
-    throw "git push failed in $RepoPath"
-}
+    $legacyRootAgentsPath = Join-Path $RepoPath 'agents'
+    if (Test-Path -LiteralPath $legacyRootAgentsPath -PathType Container) {
+        Remove-Item -LiteralPath $legacyRootAgentsPath -Recurse -Force
+    }
 
-Write-Output "Published repository to origin/${mainBranch}: $RepoPath"
-if (Read-YesNoChoice -Prompt "Also publish this same commit to origin/$releaseBranch?" -DefaultValue $false) {
-    Publish-ReleaseBranch -RepositoryPath $RepoPath -BranchName $releaseBranch
-    Write-Output "Published repository to origin/${releaseBranch}: $RepoPath"
-}
-else {
-    Write-Output "Skipped publishing origin/$releaseBranch."
-}
+    $statusOutput = & git -C $RepoPath status --porcelain
+    if ($LASTEXITCODE -ne 0) {
+        throw "git status failed in $RepoPath"
+    }
 
-Write-Output "Remote URL: $RepoUrl"
+    if ([string]::IsNullOrWhiteSpace(($statusOutput | Out-String))) {
+        Write-Output "No changes to publish in $RepoPath"
+        return
+    }
+
+    & git -C $RepoPath add --all
+    if ($LASTEXITCODE -ne 0) {
+        throw "git add failed in $RepoPath"
+    }
+
+    & git -C $RepoPath commit -m $CommitMessage
+    if ($LASTEXITCODE -ne 0) {
+        throw "git commit failed in $RepoPath"
+    }
+
+    & git -C $RepoPath push origin $mainBranch
+    if ($LASTEXITCODE -ne 0) {
+        throw "git push failed in $RepoPath"
+    }
+
+    Write-Output "Published repository to origin/${mainBranch}: $RepoPath"
+    if (Read-YesNoChoice -Prompt "Also publish this same commit to origin/$releaseBranch?" -DefaultValue $false) {
+        Publish-ReleaseBranch -RepositoryPath $RepoPath -BranchName $releaseBranch
+        Write-Output "Published repository to origin/${releaseBranch}: $RepoPath"
+    }
+    else {
+        Write-Output "Skipped publishing origin/$releaseBranch."
+    }
+
+    Write-Output "Remote URL: $RepoUrl"
+}
+catch {
+    Write-Error "[codex-home-config] $(Get-ErrorDisplayMessage -ErrorRecord $_)"
+    Wait-OnFatalError
+    exit 1
+}
