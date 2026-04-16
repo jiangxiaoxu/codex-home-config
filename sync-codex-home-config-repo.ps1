@@ -20,6 +20,9 @@ param(
     [switch]$SkipInitialPull
 )
 
+$mainBranch = 'main'
+$releaseBranch = 'release'
+
 function Get-ComponentSelection {
     param(
         [Parameter(Mandatory)]
@@ -167,6 +170,57 @@ function Get-RelaunchArgumentList {
     }
 
     return $arguments
+}
+
+function Read-YesNoChoice {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Prompt,
+
+        [Parameter()]
+        [bool]$DefaultValue = $false
+    )
+
+    if ([Console]::IsInputRedirected) {
+        Write-Output "Skipping prompt because stdin is redirected: $Prompt"
+        return $DefaultValue
+    }
+
+    $promptSuffix = if ($DefaultValue) { '[Y/n]' } else { '[y/N]' }
+    while ($true) {
+        try {
+            $response = Read-Host "$Prompt $promptSuffix"
+        }
+        catch {
+            Write-Warning "Failed to read interactive input. Using default answer: $DefaultValue"
+            return $DefaultValue
+        }
+
+        if ([string]::IsNullOrWhiteSpace($response)) {
+            return $DefaultValue
+        }
+
+        switch -Regex ($response.Trim()) {
+            '^(y|yes)$' { return $true }
+            '^(n|no)$' { return $false }
+            default { Write-Warning 'Please answer yes or no.' }
+        }
+    }
+}
+
+function Publish-ReleaseBranch {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RepositoryPath,
+
+        [Parameter(Mandatory)]
+        [string]$BranchName
+    )
+
+    & git -C $RepositoryPath push origin HEAD:$BranchName
+    if ($LASTEXITCODE -ne 0) {
+        throw "git push failed for origin/$BranchName in $RepositoryPath"
+    }
 }
 
 function Get-NodeExecutable {
@@ -542,25 +596,25 @@ else {
         throw "git branch --show-current failed in $RepoPath"
     }
 
-    if ($currentBranch -ne 'main') {
-        & git -C $RepoPath checkout -B main
+    if ($currentBranch -ne $mainBranch) {
+        & git -C $RepoPath checkout -B $mainBranch
         if ($LASTEXITCODE -ne 0) {
-            throw "git checkout -B main failed in $RepoPath"
+            throw "git checkout -B $mainBranch failed in $RepoPath"
         }
     }
 
-    & git -C $RepoPath ls-remote --exit-code --heads origin main *> $null
+    & git -C $RepoPath ls-remote --exit-code --heads origin $mainBranch *> $null
     $remoteMainCheckExitCode = $LASTEXITCODE
     if (($remoteMainCheckExitCode -ne 0) -and ($remoteMainCheckExitCode -ne 2)) {
-        throw "git ls-remote failed for origin/main in $RepoPath"
+        throw "git ls-remote failed for origin/$mainBranch in $RepoPath"
     }
 
     if ($remoteMainCheckExitCode -eq 0) {
         $prePullHead = Get-RepoHeadCommit -RepoPath $RepoPath
 
-        & git -C $RepoPath pull --rebase origin main
+        & git -C $RepoPath pull --rebase origin $mainBranch
         if ($LASTEXITCODE -ne 0) {
-            throw "git pull --rebase origin main failed in $RepoPath"
+            throw "git pull --rebase origin $mainBranch failed in $RepoPath"
         }
 
         $postPullHead = Get-RepoHeadCommit -RepoPath $RepoPath
@@ -669,10 +723,18 @@ if ($LASTEXITCODE -ne 0) {
     throw "git commit failed in $RepoPath"
 }
 
-& git -C $RepoPath push origin main
+& git -C $RepoPath push origin $mainBranch
 if ($LASTEXITCODE -ne 0) {
     throw "git push failed in $RepoPath"
 }
 
-Write-Output "Published repository: $RepoPath"
+Write-Output "Published repository to origin/$mainBranch: $RepoPath"
+if (Read-YesNoChoice -Prompt "Also publish this same commit to origin/$releaseBranch?" -DefaultValue $false) {
+    Publish-ReleaseBranch -RepositoryPath $RepoPath -BranchName $releaseBranch
+    Write-Output "Published repository to origin/$releaseBranch: $RepoPath"
+}
+else {
+    Write-Output "Skipped publishing origin/$releaseBranch."
+}
+
 Write-Output "Remote URL: $RepoUrl"

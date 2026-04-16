@@ -17,8 +17,8 @@ $ErrorActionPreference = 'Stop'
 
 $repoOwner = 'jiangxiaoxu'
 $repoName = 'codex-home-config'
-$branch = 'main'
-$archiveUri = "https://codeload.github.com/$repoOwner/$repoName/zip/refs/heads/$branch"
+$releaseBranch = 'release'
+$archiveUri = "https://codeload.github.com/$repoOwner/$repoName/zip/refs/heads/$releaseBranch"
 $userAgent = 'codex-home-config-installer'
 $maxBackupVersions = 5
 $backupState = [pscustomobject]@{
@@ -161,6 +161,25 @@ function Assert-NodeEnvironment {
     return $nodeExecutable
 }
 
+function Get-GitBranchName {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RepositoryPath
+    )
+
+    try {
+        $branchName = (& git -C $RepositoryPath branch --show-current 2>$null | Out-String).Trim()
+        if (($LASTEXITCODE -eq 0) -and -not [string]::IsNullOrWhiteSpace($branchName)) {
+            return $branchName
+        }
+    }
+    catch {
+        Write-Verbose "Failed to inspect git branch for $RepositoryPath"
+    }
+
+    return $null
+}
+
 function Get-RepositorySupportRoot {
     if (-not [string]::IsNullOrWhiteSpace($runtimeState.SupportRepositoryRoot)) {
         return $runtimeState.SupportRepositoryRoot
@@ -178,6 +197,15 @@ function Get-RepositorySupportRoot {
     foreach ($candidateRoot in @($candidateRoots | Select-Object -Unique)) {
         $toolPath = Join-Path $candidateRoot 'tools\config-toml-ops.cjs'
         if (Test-Path -LiteralPath $toolPath -PathType Leaf) {
+            $gitPath = Join-Path $candidateRoot '.git'
+            if (Test-Path -LiteralPath $gitPath) {
+                $candidateBranch = Get-GitBranchName -RepositoryPath $candidateRoot
+                if ($candidateBranch -ne $releaseBranch) {
+                    Write-StageMessage "Ignoring local repository snapshot from branch '$candidateBranch'. Installer only installs published '$releaseBranch' content."
+                    continue
+                }
+            }
+
             $runtimeState.SupportRepositoryRoot = $candidateRoot
             return $candidateRoot
         }
@@ -189,9 +217,9 @@ function Get-RepositorySupportRoot {
     $null = New-Item -ItemType Directory -Path $tempRoot -Force
 
     try {
-        Write-StageMessage 'Downloading repository snapshot...'
+        Write-StageMessage "Downloading published '$releaseBranch' snapshot..."
         Invoke-ArchiveDownload -Uri $archiveUri -OutFile $archivePath
-        Write-StageMessage 'Extracting repository snapshot...'
+        Write-StageMessage "Extracting published '$releaseBranch' snapshot..."
         Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
 
         $repositoryPath = Get-ExtractedRepositoryPath -ExtractPath $extractPath

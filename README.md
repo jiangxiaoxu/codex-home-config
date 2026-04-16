@@ -4,24 +4,24 @@ Public Codex home configuration for the installable content under `managed/` and
 
 ## Install
 
-Copy and run one of these in PowerShell. `Node.js 18+` is required for both install and restore because `config.toml` is merged through the repository Node helper. The published installer zip already includes the TOML runtime files, so online install does not need a separate `npm install`.
+Copy and run one of these in PowerShell. `Node.js 18+` is required for both install and restore because `config.toml` is merged through the repository Node helper. Online install now uses the published `release` branch only, so the installer and the managed snapshot come from the same published source.
 
 Interactive install menu:
 
 ```powershell
-iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/main/install-codex-home-config.ps1' | iex
+iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/release/install-codex-home-config.ps1' | iex
 ```
 
 Direct update to the default `$HOME/.codex`:
 
 ```powershell
-&([scriptblock]::Create((iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/main/install-codex-home-config.ps1'))) -Action Update
+&([scriptblock]::Create((iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/release/install-codex-home-config.ps1'))) -Action Update
 ```
 
 Direct update for `config.toml` only:
 
 ```powershell
-&([scriptblock]::Create((iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/main/install-codex-home-config.ps1'))) -Action Update -Components Config
+&([scriptblock]::Create((iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/release/install-codex-home-config.ps1'))) -Action Update -Components Config
 ```
 
 The installer starts with an interactive menu:
@@ -124,6 +124,7 @@ Sync `config.toml` and `AGENTS.md` only:
 The sync script requires `pwsh` 7+ and `Node.js 18+`. If it is started from an older PowerShell host, it relaunches itself in `pwsh.exe` and then continues.
 The sync script uses `$HOME/.codex` as the managed content source and defaults `RepoPath` to the repository root where the script lives.
 Before it publishes managed content, the sync script verifies that the repository is clean, pulls `origin/main`, and relaunches itself from the repository copy when that pull updates the local `HEAD`.
+After it pushes `origin/main`, the sync script prompts whether the same commit should also be published to `origin/release`. If you answer `No`, only `main` is updated. If `origin/release` does not exist yet and you answer `Yes`, the push creates it automatically.
 When publishing `config.toml`, the sync script uses the current `managed/config.toml` top-level keys as the allowlist for managed paths, except that `[agents]` is always copied directly from the local Codex home when it exists. The local `projects` table is never committed, the top-level keys `model`, `model_reasoning_effort`, `service_tier`, and `plan_mode_reasoning_effort` are always excluded from sync, and `[notice.model_migrations]` is also always excluded from sync. For `mcp_servers`, the existing managed server names are the allowlist, so only those `[mcp_servers.<name>]` blocks are copied from the local Codex home.
 When `-Components` is omitted, the sync script processes `Skill` as part of the full publish. If `.codex/skills/jiangxiaoxu` exists, it is copied into `managed/skills/jiangxiaoxu`; otherwise the managed skill directory is removed. Explicit partial sync runs leave `Skill` untouched unless it is selected.
 `-Components` accepts `Config`, `AgentFile`, `AgentFolder`, and `Skill`. If omitted, the sync script still publishes all four managed components.
