@@ -106,9 +106,4 @@
 
 - 所有`subagent`只能由`root session`创建,纳入 `orchestration`,并由`root session`负责回收,且`subagent session`不得再次调用`spawn_agent`.
 - 所有`subagent`默认使用 no-fork: `fork_context=false` + 显式 `agent_type`.
-- 只有 `implementation subagent` 在 full-history context 明显优于手工摘要上下文时,才应使用 `fork_context=true`.
-- 一旦使用 full-history fork,必须完全省略 `agent_type`,`model`,`reasoning_effort`; child 会自动继承父 agent 的这些配置,显式传入会触发 hard reject.
-- 合法调用模板固定为两种:
-    - no-fork: `fork_context=false` + 显式 `agent_type`
-    - full-history fork: `fork_context=true` + 不传 `agent_type`,`model`,`reasoning_effort`
 - 调用`wait_agent`时,`subagent`默认超时为`1800000` ms; 该长超时主要用于承载长命令和持续输出.
