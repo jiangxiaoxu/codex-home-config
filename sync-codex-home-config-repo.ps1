@@ -248,6 +248,45 @@ function Read-YesNoChoice {
     }
 }
 
+<#
+.SYNOPSIS
+Reads a single key confirmation where Enter accepts and every other key declines.
+
+.PARAMETER Prompt
+The confirmation message displayed before the key hint.
+
+.OUTPUTS
+True only when the user presses Enter; Esc and every other key return false.
+#>
+function Read-EnterAcceptChoice {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSAvoidUsingWriteHost',
+        '',
+        Justification = 'Interactive single-key confirmation requires direct console output.'
+    )]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Prompt
+    )
+
+    if ([Console]::IsInputRedirected) {
+        Write-Output "Skipping prompt because stdin is redirected: $Prompt"
+        return $false
+    }
+
+    try {
+        [Console]::Write("$Prompt [Enter=yes, Esc=no]")
+        $keyInfo = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+        [Console]::WriteLine()
+    }
+    catch {
+        Write-Warning 'Failed to read interactive input. Using default answer: False'
+        return $false
+    }
+
+    return $keyInfo.VirtualKeyCode -eq 13
+}
+
 function Publish-ReleaseBranch {
     param(
         [Parameter(Mandatory)]
@@ -770,7 +809,7 @@ try {
     }
 
     Write-Output "Published repository to origin/${mainBranch}: $RepoPath"
-    if (Read-YesNoChoice -Prompt "Also publish this same commit to origin/${releaseBranch}?" -DefaultValue $false) {
+    if (Read-EnterAcceptChoice -Prompt "Also publish this same commit to origin/${releaseBranch}?") {
         Publish-ReleaseBranch -RepositoryPath $RepoPath -BranchName $releaseBranch
         Write-Output "Published repository to origin/${releaseBranch}: $RepoPath"
     }
