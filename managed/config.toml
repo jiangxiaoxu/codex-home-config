@@ -44,3 +44,12 @@ hide_rate_limit_model_nudge = true
 
 [windows]
 sandbox = "unelevated"
+
+[tui]
+status_line = [
+  "current-dir",
+  "model-with-reasoning",
+  "context-usage",
+  "five-hour-limit",
+  "weekly-limit"
+]
