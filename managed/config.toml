@@ -21,11 +21,13 @@ tool_timeout_sec = 180
 
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"
+enabled = false
 
 [features]
 runtime_metrics = true
 guardian_approval = true
 apps = false
+tool_suggest = false
 unified_exec = true
 default_mode_request_user_input = true
 memories = true
