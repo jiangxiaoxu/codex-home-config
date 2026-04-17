@@ -28,6 +28,7 @@ guardian_approval = true
 apps = false
 unified_exec = true
 default_mode_request_user_input = true
+memories = true
 
 [sandbox_workspace_write]
 network_access = true
