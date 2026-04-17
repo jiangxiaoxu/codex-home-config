@@ -23,6 +23,9 @@ tool_timeout_sec = 180
 url = "https://developers.openai.com/mcp"
 enabled = false
 
+[apps._default]
+enabled = false
+
 [features]
 runtime_metrics = true
 guardian_approval = true
