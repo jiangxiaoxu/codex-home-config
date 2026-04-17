@@ -79,7 +79,6 @@
 - 当有多个待确认点时,默认先组织一批窄范围 `Read-only exploration` 并行收集信号,由`root session`基于最先返回的结果判断是否已足够支撑下一决策; 不要求先把所有待确认点都查完.
 - `implementation` 任务默认优先派发 `implementation subagent`,由`root session`负责 `implementation orchestration`,决策,整合和验收; 仅当任务极小,边界清晰且`root session`明显更快时才直行.
 - 只要 `implementation` 任务表现出多文件,跨模块,边界条件多,风险高或上下文收集成本高,一律派发 `implementation subagent`.
-- `Read-only exploration` 和 `Execution-oriented` 默认优先派发对应`subagent`.
 - 当当前阶段核心在于运行命令,验证变更,复现问题,确认回归,测量性能或收集失败证据时,默认优先考虑 `Execution-oriented subagent`.
 - `implementation subagent`允许执行直接支撑当前改动的轻量校验,包括 `formatter`,`local type check`,增量 `compile/build` 校验,面向触及目标的局部 `build`,以及触及范围内的窄范围非脚本命令; 这些校验应以快速确认改动正确性为目标,不得扩展为 `full rebuild`,`clean rebuild`,workspace 级全量构建,或其他长时间执行/重日志观察任务.
 - 当任务同时包含代码修改与长脚本验证时,默认拆成两个批次: 先派发 `implementation subagent`完成修改与轻量校验,等待该批全部返回,再由`root session`单独派发 `Execution-oriented subagent`执行长时间或脚本驱动的 `test`,`benchmark`,`diagnostic`,`full rebuild`,`clean rebuild`,workspace 级全量构建,或其他需要持续观察 log 的命令.
@@ -106,6 +105,10 @@
 ### `spawn_agent` 约束
 
 - 所有`subagent`只能由`root session`创建,纳入 `orchestration`,并由`root session`负责回收,且`subagent session`不得再次调用`spawn_agent`.
-- 调用`spawn_agent`时必须显式设置`fork_context`.
-- `Read-only exploration subagent` 和 `implementation subagent`默认优先使用 `fork_context=true`,以复用`root session`上下文; 仅当任务高度独立,或复用`root session`历史会带来明显上下文污染风险时,才改用 `false`;其他类型`subagent`维持 `fork_context=false`,以减少无关线程历史注入并保持专项上下文稳定.
+- 所有`subagent`默认使用 no-fork: `fork_context=false` + 显式 `agent_type`.
+- 只有 `implementation subagent` 在 full-history context 明显优于手工摘要上下文时,才应使用 `fork_context=true`.
+- 一旦使用 full-history fork,必须完全省略 `agent_type`,`model`,`reasoning_effort`; child 会自动继承父 agent 的这些配置,显式传入会触发 hard reject.
+- 合法调用模板固定为两种:
+    - no-fork: `fork_context=false` + 显式 `agent_type`
+    - full-history fork: `fork_context=true` + 不传 `agent_type`,`model`,`reasoning_effort`
 - 调用`wait_agent`时,`subagent`默认超时为`1800000` ms; 该长超时主要用于承载长命令和持续输出.
