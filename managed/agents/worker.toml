@@ -1,5 +1,5 @@
 name = "worker"
-description = "High-capability implementation agent for controlled multi-file or cross-module edits that must preserve shared contracts and handle edge cases explicitly."
+description = "High-capability implementation agent for repo-tracked changes, including planned feature delivery, controlled fixes and refactors, and assigned code reading or lightweight validation that directly supports the change while preserving shared contracts and handling edge cases explicitly."
 model = "gpt-5.4"
 model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"

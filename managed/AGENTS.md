@@ -66,7 +66,7 @@
 ### `subagent` 分类
 
 - `Read-only exploration`: 只读摸底,入口定位,调用链追踪,影响范围确认和外部资料核实.
-- `implementation`: `repo-tracked` 代码修改,局部修复,受控重构.
+- `implementation`: 负责以 `repo-tracked` 变更为主交付物的实施工作,包括代码修改,计划内 feature 落地,局部修复,受控重构,以及直接支撑当前改动的局部代码阅读,补线和轻量校验.
 - `Execution-oriented`: 负责 `build`,`test`,`benchmark`,`diagnostic` 等执行类任务,也可承接验证,复现,回归确认或性能确认等阶段性执行工作; 主要交付命令结果与执行证据的汇总,不负责代码修改.
 - 当前可用`subagent`与分类对应为: `explorer` -> `Read-only exploration`; `worker` -> `implementation`; `awaiter` -> `Execution-oriented`.
 
@@ -105,5 +105,5 @@
 ### `spawn_agent` 约束
 
 - 所有`subagent`只能由`root session`创建,纳入 `orchestration`,并由`root session`负责回收,且`subagent session`不得再次调用`spawn_agent`.
-- 所有`subagent`默认使用 no-fork: `fork_context=false` + 显式 `agent_type`.
+- 调用 `spawn_agent` 时必须显式指定 `fork_context=false` 和 `agent_type`; 不允许`subagent`继承当前线程历史.
 - 调用`wait_agent`时,`subagent`默认超时为`1800000` ms; 该长超时主要用于承载长命令和持续输出.
