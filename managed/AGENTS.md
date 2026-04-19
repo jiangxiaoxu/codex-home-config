@@ -79,10 +79,11 @@
 - 当有多个待确认点时,默认先组织一批窄范围 `Read-only exploration` 并行收集信号,由`root session`基于最先返回的结果判断是否已足够支撑下一决策; 不要求先把所有待确认点都查完.
 - `implementation` 任务默认优先派发 `implementation subagent`,由`root session`负责 `implementation orchestration`,决策,整合和验收; 仅当任务极小,边界清晰且`root session`明显更快时才直行.
 - 只要 `implementation` 任务表现出多文件,跨模块,边界条件多,风险高或上下文收集成本高,一律派发 `implementation subagent`.
-- 当当前阶段核心在于运行命令,验证变更,复现问题,确认回归,测量性能或收集失败证据时,默认优先考虑 `Execution-oriented subagent`.
+- 当此阶段核心在于运行命令,验证变更,复现问题,确认回归,测量性能或收集失败证据时,默认优先考虑 `Execution-oriented subagent`.
 - `implementation subagent`允许执行直接支撑当前改动的轻量校验,包括 `formatter`,`local type check`,增量 `compile/build` 校验,面向触及目标的局部 `build`,以及触及范围内的窄范围非脚本命令; 这些校验应以快速确认改动正确性为目标,不得扩展为 `full rebuild`,`clean rebuild`,workspace 级全量构建,或其他长时间执行/重日志观察任务.
 - 当任务同时包含代码修改与长脚本验证时,默认拆成两个批次: 先派发 `implementation subagent`完成修改与轻量校验,等待该批全部返回,再由`root session`单独派发 `Execution-oriented subagent`执行长时间或脚本驱动的 `test`,`benchmark`,`diagnostic`,`full rebuild`,`clean rebuild`,workspace 级全量构建,或其他需要持续观察 log 的命令.
 - 如果 `implementation subagent`返回时明确把长脚本验证交回`root session`,或其结果显示仍需运行长时间命令来收集证据,`root session`不得让该 `implementation subagent`继续执行该命令,也不应由`root session`自己直接运行; 应继续进行 `verification orchestration`,并改派合适的 `Execution-oriented subagent`承接.
+- 只要属于 `build`,`test`,`smoke`,`benchmark`,`diagnostic`,`publish` 或其他脚本驱动验证的任务,即使它只是“最后一条命令”,也必须视为 `Execution-oriented` 工作并派发 `awaiter`; 不得把“主线程已经有上下文”“只是顺手验证一下”“计划里的最后一步”当作自己直接运行的理由.
 
 ### `root session` orchestration 约束
 
