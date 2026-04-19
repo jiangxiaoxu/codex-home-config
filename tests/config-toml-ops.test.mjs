@@ -239,6 +239,40 @@ test('merge-install syncs managed mcp servers by server name and preserves unman
   );
 });
 
+test('merge-install preserves local sandbox_workspace_write.writable_roots as an unmanaged nested path', () => {
+  const sourceConfig = {
+    sandbox_workspace_write: {
+      network_access: true,
+      writable_roots: [
+        'C:\\managed-only'
+      ]
+    }
+  };
+
+  const targetConfig = {
+    sandbox_workspace_write: {
+      network_access: false,
+      writable_roots: [
+        'C:\\local-one',
+        'D:\\local-two'
+      ]
+    }
+  };
+
+  assert.deepStrictEqual(
+    buildMergeInstallConfig(sourceConfig, targetConfig),
+    {
+      sandbox_workspace_write: {
+        network_access: true,
+        writable_roots: [
+          'C:\\local-one',
+          'D:\\local-two'
+        ]
+      }
+    }
+  );
+});
+
 test('publish-sync emits agents from local config in addition to managed allowlist keys and skips projects plus notice.model_migrations', () => {
   const localConfig = {
     model: 'gpt-5.4',
@@ -423,6 +457,36 @@ test('publish-sync only emits managed mcp servers by server name', () => {
             'node "local.js"'
           ]
         }
+      }
+    }
+  );
+});
+
+test('publish-sync excludes sandbox_workspace_write.writable_roots from managed output', () => {
+  const localConfig = {
+    sandbox_workspace_write: {
+      network_access: true,
+      writable_roots: [
+        'C:\\local-one',
+        'D:\\local-two'
+      ]
+    }
+  };
+
+  const managedConfig = {
+    sandbox_workspace_write: {
+      network_access: true,
+      writable_roots: [
+        'C:\\managed-only'
+      ]
+    }
+  };
+
+  assert.deepStrictEqual(
+    buildPublishedSyncConfig(localConfig, managedConfig),
+    {
+      sandbox_workspace_write: {
+        network_access: true
       }
     }
   );

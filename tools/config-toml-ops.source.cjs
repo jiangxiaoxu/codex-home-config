@@ -27,8 +27,12 @@ const installRemovedTopLevelKeys = new Set([])
 const installRemovedNestedPaths = [
   ['notice', 'model_migrations']
 ]
+const installPreservedNestedPaths = [
+  ['sandbox_workspace_write', 'writable_roots']
+]
 const syncExcludedNestedPaths = [
-  ['notice', 'model_migrations']
+  ['notice', 'model_migrations'],
+  ['sandbox_workspace_write', 'writable_roots']
 ]
 
 function hasOwn (object, key) {
@@ -192,6 +196,7 @@ function buildMergeInstallConfig (sourceConfig, targetConfig) {
     mergedConfig.projects = targetConfig.projects
   }
 
+  preserveNestedPaths(mergedConfig, targetConfig, installPreservedNestedPaths)
   removeNestedPaths(mergedConfig, installRemovedNestedPaths)
   return mergedConfig
 }
@@ -224,6 +229,26 @@ function removeNestedPaths (config, nestedPaths) {
   for (const pathSegments of nestedPaths) {
     removeNestedPath(config, pathSegments)
   }
+}
+
+function preserveNestedPaths (destinationConfig, sourceConfig, nestedPaths) {
+  for (const pathSegments of nestedPaths) {
+    preserveNestedPath(destinationConfig, sourceConfig, pathSegments)
+  }
+}
+
+function preserveNestedPath (destinationConfig, sourceConfig, pathSegments) {
+  if (pathSegments.length < 2) {
+    return
+  }
+
+  const sourceValue = readNestedPath(sourceConfig, pathSegments)
+  if (typeof sourceValue === 'undefined') {
+    removeNestedPath(destinationConfig, pathSegments)
+    return
+  }
+
+  writeNestedPath(destinationConfig, pathSegments, sourceValue)
 }
 
 function removeNestedPath (config, pathSegments) {
@@ -270,6 +295,35 @@ function removeNestedPathFromObject (rootConfig, currentValue, currentKey, remai
   if (Object.keys(currentValue).length === 0) {
     delete rootConfig[currentKey]
   }
+}
+
+function readNestedPath (config, pathSegments) {
+  let currentValue = config
+
+  for (const pathSegment of pathSegments) {
+    if (!isTomlObject(currentValue) || !hasOwn(currentValue, pathSegment)) {
+      return undefined
+    }
+
+    currentValue = currentValue[pathSegment]
+  }
+
+  return currentValue
+}
+
+function writeNestedPath (config, pathSegments, value) {
+  let currentValue = config
+
+  for (let index = 0; index < pathSegments.length - 1; index += 1) {
+    const pathSegment = pathSegments[index]
+    if (!isTomlObject(currentValue[pathSegment])) {
+      currentValue[pathSegment] = {}
+    }
+
+    currentValue = currentValue[pathSegment]
+  }
+
+  currentValue[pathSegments[pathSegments.length - 1]] = value
 }
 
 function mergeInstallConfig ({ sourcePath, targetPath, outputPath }) {
