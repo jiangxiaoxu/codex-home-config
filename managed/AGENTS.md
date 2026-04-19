@@ -105,5 +105,6 @@
 ### `spawn_agent` 约束
 
 - 所有`subagent`只能由`root session`创建,纳入 `orchestration`,并由`root session`负责回收,且`subagent session`不得再次调用`spawn_agent`.
+- 当前使用 `spawn_agent` 时,`message` 和 `items` 不能同时使用; 纯文本派发默认使用 `message`,仅在需要 structured input,mentions 或其他非纯文本输入时使用 `items`.
 - 调用 `spawn_agent` 时必须显式指定 `fork_context=false` 和 `agent_type`; 不允许`subagent`继承当前线程历史.
 - 调用`wait_agent`时,`subagent`默认超时为`1800000` ms; 该长超时主要用于承载长命令和持续输出.
