@@ -33,7 +33,6 @@ tool_suggest = false
 unified_exec = true
 default_mode_request_user_input = true
 memories = true
-image_generation = true
 
 [sandbox_workspace_write]
 network_access = true
