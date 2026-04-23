@@ -49,8 +49,9 @@ sandbox = "unelevated"
 status_line = [
   "current-dir",
   "model-with-reasoning",
-  "context-usage",
+  "context-used",
   "five-hour-limit",
-  "weekly-limit"
+  "weekly-limit",
+  "context-window-size"
 ]
 terminal_title = [ "spinner", "project", "status" ]
