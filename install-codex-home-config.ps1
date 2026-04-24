@@ -987,7 +987,11 @@ function Select-MainAction {
             'Q. Quit'
         )
 
-        $choice = (Read-Host 'Enter choice').Trim()
+        $choice = (Read-Host 'Enter choice [1]').Trim()
+        if ($choice -eq '') {
+            $choice = '1'
+        }
+
         switch -Regex ($choice) {
             '^(1|update|u)$' { return 'Update' }
             '^(2|restore|r)$' { return 'Restore' }
@@ -1020,7 +1024,11 @@ function Select-BackupSnapshot {
     Write-Information 'Q. Quit' -InformationAction Continue
 
     while ($true) {
-        $choice = (Read-Host 'Choose a backup version').Trim()
+        $choice = (Read-Host 'Choose a backup version [1]').Trim()
+        if ($choice -eq '') {
+            $choice = '1'
+        }
+
         if ($choice -match '^(q|quit|exit)$') {
             return $null
         }
