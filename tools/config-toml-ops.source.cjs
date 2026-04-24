@@ -32,7 +32,8 @@ const installPreservedNestedPaths = [
 ]
 const syncExcludedNestedPaths = [
   ['notice', 'model_migrations'],
-  ['sandbox_workspace_write', 'writable_roots']
+  ['sandbox_workspace_write', 'writable_roots'],
+  ['tui', 'model_availability_nux']
 ]
 
 function hasOwn (object, key) {

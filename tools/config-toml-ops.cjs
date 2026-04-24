@@ -2031,7 +2031,8 @@ var installPreservedNestedPaths = [
 ];
 var syncExcludedNestedPaths = [
   ["notice", "model_migrations"],
-  ["sandbox_workspace_write", "writable_roots"]
+  ["sandbox_workspace_write", "writable_roots"],
+  ["tui", "model_availability_nux"]
 ];
 function hasOwn(object, key) {
   return Object.prototype.hasOwnProperty.call(object, key);

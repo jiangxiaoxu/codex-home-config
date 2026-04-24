@@ -56,6 +56,3 @@ status_line = [
   "context-window-size"
 ]
 terminal_title = [ "spinner", "project", "status" ]
-
-  [tui.model_availability_nux]
-  "gpt-5.5" = 2
