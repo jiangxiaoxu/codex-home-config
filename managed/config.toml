@@ -28,7 +28,6 @@ enabled = false
 
 [features]
 runtime_metrics = true
-guardian_approval = true
 tool_suggest = false
 apps = false
 unified_exec = true
