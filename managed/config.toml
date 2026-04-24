@@ -4,7 +4,7 @@ suppress_unstable_features_warning = true
 web_search = "live"
 personality = "pragmatic"
 background_terminal_max_timeout = 1_800_000
-approvals_reviewer = "guardian_subagent"
+approvals_reviewer = "user"
 
 [agents]
 max_threads = 16
@@ -41,6 +41,7 @@ network_access = true
 [notice]
 hide_full_access_warning = true
 hide_rate_limit_model_nudge = true
+fast_default_opt_out = true
 
 [windows]
 sandbox = "unelevated"
@@ -55,3 +56,6 @@ status_line = [
   "context-window-size"
 ]
 terminal_title = [ "spinner", "project", "status" ]
+
+  [tui.model_availability_nux]
+  "gpt-5.5" = 2
