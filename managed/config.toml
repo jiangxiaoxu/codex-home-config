@@ -33,7 +33,6 @@ default_mode_request_user_input = true
 memories = true
 tool_suggest = false
 apps = false
-plugins = false
 workspace_dependencies = false
 
 [sandbox_workspace_write]
