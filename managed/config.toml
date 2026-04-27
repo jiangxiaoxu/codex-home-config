@@ -28,12 +28,13 @@ enabled = false
 
 [features]
 runtime_metrics = true
-tool_suggest = false
-apps = false
-plugins = false
 unified_exec = true
 default_mode_request_user_input = true
 memories = true
+tool_suggest = false
+apps = false
+plugins = false
+workspace_dependencies = false
 
 [sandbox_workspace_write]
 network_access = true
