@@ -30,6 +30,7 @@ enabled = false
 runtime_metrics = true
 tool_suggest = false
 apps = false
+plugins = false
 unified_exec = true
 default_mode_request_user_input = true
 memories = true
