@@ -18,6 +18,7 @@ args = [
   "node \"$env:LOCALAPPDATA\\lm-tools-bridge\\stdioManager.js\""
 ]
 tool_timeout_sec = 180
+default_tools_approval_mode = "approve"
 
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"
