@@ -31,10 +31,13 @@ enabled = false
 runtime_metrics = true
 unified_exec = true
 default_mode_request_user_input = true
-memories = true
+memories = false
+goals = true
+code_mode = true
 tool_suggest = false
 apps = false
 workspace_dependencies = false
+chronicle = false
 
 [sandbox_workspace_write]
 network_access = true
