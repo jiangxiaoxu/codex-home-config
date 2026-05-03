@@ -3,7 +3,7 @@
 * 使用**中文**沟通,术语/专有名词保留英文原文(如 `Promise`,`API`,`React`).
 * 回答简洁直接,避免重复或冗长解释;如需详细说明,使用折叠块或分层标题.
 * 输出/生成的文字以及注释需要使用半角符号,不要使用全角符号.
-* 输出本地目录或文件路径时,优先使用 Markdown link,不要只输出普通字符串. 示例: `[AGENTS.md](C:/Users/jxx73/.codex/AGENTS.md)`. 如路径包含空格,link target 使用尖括号包裹.
+* 输出本地目录或文件路径时,优先使用 Markdown link,不要只输出普通字符串. 示例: `[settings.md](C:/settings.md)`. 如路径包含空格,link target 使用尖括号包裹.
 
 
 ## 问询策略 (`request_user_input` 工具可用且允许使用时生效)
@@ -60,7 +60,7 @@
 - `root session`: 指负责当前顶层 orchestration 的主线程或主会话.
 - `subagent session`: 指由`root session`派生出来执行子任务的会话.
 - `subagent`: 指由`root session`调度的代理实体.
-- 当前 `AGENTS.md` 或其他 active user-scoped instruction file 中,对 `spawn_agent`,`subagent`,委托或并行代理工作的明确授权,均视为用户已允许`root session`直接调用 `spawn_agent`.
+- 当前指令文件或其他 active user-scoped instruction file 中,对 `spawn_agent`,`subagent`,委托或并行代理工作的明确授权,均视为用户已允许`root session`直接调用 `spawn_agent`.
 - 本节中的 `orchestration` 指`root session`对`subagent`的拆分,派发,等待,整合,复用,以及回收.
 - `root session`负责 `subagent orchestration`,并承担相关的选择,说明,决策和结果整合; 默认把适合委托的工作交给`subagent`.
 
