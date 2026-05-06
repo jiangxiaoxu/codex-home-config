@@ -248,6 +248,49 @@ function Read-YesNoChoice {
     }
 }
 
+function Read-YesOrEnterChoice {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSAvoidUsingWriteHost',
+        '',
+        Justification = 'Interactive single-key confirmation requires direct console output.'
+    )]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Prompt
+    )
+
+    if ([Console]::IsInputRedirected) {
+        Write-Output "Skipping prompt because stdin is redirected: $Prompt"
+        return $false
+    }
+
+    while ($true) {
+        try {
+            [Console]::Write("$Prompt [Y/Enter=yes, N/Esc=no]")
+            $keyInfo = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+            [Console]::WriteLine()
+        }
+        catch {
+            Write-Warning 'Failed to read interactive input. Using default answer: False'
+            return $false
+        }
+
+        if ($keyInfo.VirtualKeyCode -eq 13) {
+            return $true
+        }
+
+        if ($keyInfo.VirtualKeyCode -eq 27) {
+            return $false
+        }
+
+        switch -Regex ([string]$keyInfo.Character) {
+            '^(y|Y)$' { return $true }
+            '^(n|N)$' { return $false }
+            default { Write-Warning 'Please answer yes or no.' }
+        }
+    }
+}
+
 <#
 .SYNOPSIS
 Reads a single key confirmation where Enter accepts and every other key declines.
@@ -299,6 +342,45 @@ function Publish-ReleaseBranch {
     & git -C $RepositoryPath push origin HEAD:$BranchName
     if ($LASTEXITCODE -ne 0) {
         throw "git push failed for origin/$BranchName in $RepositoryPath"
+    }
+}
+
+function Write-PendingRepositoryDiff {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RepositoryPath
+    )
+
+    Write-Output "Pending repository changes in $RepositoryPath"
+
+    & git -C $RepositoryPath status --short
+    if ($LASTEXITCODE -ne 0) {
+        throw "git status failed in $RepositoryPath"
+    }
+
+    Write-Output ''
+    Write-Output 'Tracked file diff:'
+    & git -C $RepositoryPath diff --
+    if ($LASTEXITCODE -ne 0) {
+        throw "git diff failed in $RepositoryPath"
+    }
+
+    $untrackedFiles = @(& git -C $RepositoryPath ls-files --others --exclude-standard)
+    if ($LASTEXITCODE -ne 0) {
+        throw "git ls-files failed in $RepositoryPath"
+    }
+
+    if ($untrackedFiles.Count -eq 0) {
+        return
+    }
+
+    Write-Output ''
+    Write-Output 'Untracked file diffs:'
+    foreach ($untrackedFile in $untrackedFiles) {
+        & git -C $RepositoryPath diff --no-index -- /dev/null $untrackedFile
+        if (($LASTEXITCODE -ne 0) -and ($LASTEXITCODE -ne 1)) {
+            throw "git diff --no-index failed for $untrackedFile in $RepositoryPath"
+        }
     }
 }
 
@@ -790,6 +872,12 @@ try {
 
     if ([string]::IsNullOrWhiteSpace(($statusOutput | Out-String))) {
         Write-Output "No changes to publish in $RepoPath"
+        return
+    }
+
+    Write-PendingRepositoryDiff -RepositoryPath $RepoPath
+    if (-not (Read-YesOrEnterChoice -Prompt 'Continue with committing and publishing these changes?')) {
+        Write-Output 'Stopped before commit and push. Pending repository changes were left in place for review.'
         return
     }
 
