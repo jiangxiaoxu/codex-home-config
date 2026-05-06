@@ -529,6 +529,39 @@ test('publish-sync excludes tui.model_availability_nux from managed output', () 
   );
 });
 
+test('publish-sync excludes top-level model_catalog_json from managed output', () => {
+  const localConfig = {
+    model_catalog_json: '~/.codex/model_catalog.json',
+    tui: {
+      status_line: [
+        'current-dir',
+        'model-with-reasoning'
+      ]
+    }
+  };
+
+  const managedConfig = {
+    model_catalog_json: '~/.codex/model_catalog.json',
+    tui: {
+      status_line: [
+        'current-dir'
+      ]
+    }
+  };
+
+  assert.deepStrictEqual(
+    buildPublishedSyncConfig(localConfig, managedConfig),
+    {
+      tui: {
+        status_line: [
+          'current-dir',
+          'model-with-reasoning'
+        ]
+      }
+    }
+  );
+});
+
 test('merge-install CLI writes model keys at the top of the output file', () => {
   withTempDir((tempDir) => {
     const sourcePath = join(tempDir, 'source.toml');

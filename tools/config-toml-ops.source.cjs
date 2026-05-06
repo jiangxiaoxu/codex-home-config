@@ -20,6 +20,7 @@ const partiallyManagedTopLevelTables = new Set([
 const syncExcludedTopLevelKeys = new Set([
   'model',
   'model_reasoning_effort',
+  'model_catalog_json',
   'service_tier',
   'plan_mode_reasoning_effort'
 ])

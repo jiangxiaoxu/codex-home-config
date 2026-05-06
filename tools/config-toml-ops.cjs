@@ -2019,6 +2019,7 @@ var partiallyManagedTopLevelTables = /* @__PURE__ */ new Set([
 var syncExcludedTopLevelKeys = /* @__PURE__ */ new Set([
   "model",
   "model_reasoning_effort",
+  "model_catalog_json",
   "service_tier",
   "plan_mode_reasoning_effort"
 ]);
