@@ -21,13 +21,13 @@ enabled = false
 runtime_metrics = true
 unified_exec = true
 default_mode_request_user_input = true
+terminal_resize_reflow = true
 goals = true
 code_mode = true
 tool_suggest = false
 apps = false
 workspace_dependencies = false
 chronicle = false
-terminal_resize_reflow = true
 
 [sandbox_workspace_write]
 network_access = true
