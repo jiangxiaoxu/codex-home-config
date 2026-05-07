@@ -3,7 +3,9 @@
 * 使用**中文**沟通,术语/专有名词保留英文原文(如 `Promise`,`API`,`React`).
 * 回答简洁直接,避免重复或冗长解释;如需详细说明,使用折叠块或分层标题.
 * 输出/生成的文字以及注释需要使用半角符号,不要使用全角符号.
-* 输出本地目录或文件路径时,优先使用 Markdown link,不要只输出普通字符串. 示例: `[settings.md](C:/settings.md)`. 如路径包含空格,link target 使用尖括号包裹.
+* 输出本地目录或文件路径时:
+  * 如果当前是 Codex CLI / TUI 环境,输出普通路径.
+  * 如果不是 Codex CLI / TUI 环境,优先使用 Markdown link,不要只输出普通字符串. 示例: `[settings.md](C:/settings.md)`. 如路径包含空格,link target 使用尖括号包裹.
 
 
 ## 问询策略 (`request_user_input` 工具可用且允许使用时生效)
