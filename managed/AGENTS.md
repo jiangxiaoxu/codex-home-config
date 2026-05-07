@@ -84,19 +84,15 @@
 
 ### 派发规则
 
-- 默认按当前阶段的主交付物在 `Read-only exploration`,`implementation`,`Execution-oriented` 中三选一; 证据和结论归 `Read-only exploration`,代码改动归 `implementation`,命令执行与结果归纳归 `Execution-oriented`.
-- 只要当前阶段存在信息收集,范围确认,调用链定位,证据比对,外部事实核实或方案收敛需求,默认优先把工作拆成多个彼此独立,问题单一,搜索面很窄的 `Read-only exploration` 子任务并行派发; 除非该信息只能通过单个连续调查获得.
-- `Read-only exploration` 的默认粒度应尽可能小: 每个`subagent`只负责一个明确问题,一个模块,一条调用链,一个候选方案,一种外部说法核验,或一组很小的文件/符号范围; 避免把“整体摸底”或“顺手一起查”打包给同一个`subagent`.默认不设并发上限,不因“控制数量”而主动合并独立的问题.
-- 同类多`subagent`时选最合适者; 若仍有歧义,优先能力更强的`subagent`.
-- 当有多个待确认点时,默认先组织一批窄范围 `Read-only exploration` 并行收集信号,由`root session`基于最先返回的结果判断是否已足够支撑下一决策; 不要求先把所有待确认点都查完.
-- `implementation` 任务默认优先派发 `implementation subagent`,由`root session`负责 `implementation orchestration`,决策,整合和验收; 仅当任务极小,边界清晰且`root session`明显更快时才直行.
-- 只要 `implementation` 任务表现出多文件,跨模块,边界条件多,风险高或上下文收集成本高,一律派发 `implementation subagent`.
-- 当此阶段核心在于运行命令,验证变更,复现问题,确认回归,测量性能或收集失败证据时,默认优先考虑 `Execution-oriented subagent`.
-- `implementation subagent`允许执行直接支撑当前改动的轻量校验,包括 `formatter`,`local type check`,增量 `compile/build` 校验,面向触及目标的局部 `build`,以及触及范围内的窄范围非脚本命令; 这些校验应以快速确认改动正确性为目标,不得扩展为 `full rebuild`,`clean rebuild`,workspace 级全量构建,或其他长时间执行/重日志观察任务.
-- 当任务同时包含代码修改与长脚本验证时,默认拆成两个批次: 先派发 `implementation subagent`完成修改与轻量校验,等待该批全部返回,再由`root session`单独派发 `Execution-oriented subagent`执行长时间或脚本驱动的 `test`,`benchmark`,`diagnostic`,`full rebuild`,`clean rebuild`,workspace 级全量构建,或其他需要持续观察 log 的命令.
-- 如果 `implementation subagent`返回时明确把长脚本验证交回`root session`,或其结果显示仍需运行长时间命令来收集证据,`root session`不得让该 `implementation subagent`继续执行该命令,也不应由`root session`自己直接运行; 应继续进行 `verification orchestration`,并改派合适的 `Execution-oriented subagent`承接.
-- 只要属于 `build`,`test`,`smoke`,`benchmark`,`diagnostic`,`publish` 或其他脚本驱动验证的任务,即使它只是“最后一条命令”,也必须视为 `Execution-oriented` 工作并派发 `awaiter`; 不得把“主线程已经有上下文”“只是顺手验证一下”“计划里的最后一步”当作自己直接运行的理由.
-
+- 默认按当前阶段主交付物在 `Read-only exploration`,`implementation`,`Execution-oriented` 中三选一; 证据和结论归 `Read-only exploration`,代码改动归 `implementation`,命令执行与结果归 `Execution-oriented`.
+- 存在信息收集,范围确认,调用链定位,证据比对或方案收敛需求时,默认优先拆成多个窄范围 `Read-only exploration` 并行派发; 每个 explorer 只负责一个明确问题,模块,调用链或候选方案.
+- 小型 `implementation` 可由 `root session` 直接完成: 预计只改 1-2 个文件,单一子系统,无 API / lifecycle / data-model 迁移,不需要大量输入窗口上下文开销,且派发/等待/整合成本明显高于直接实现成本.
+- 中大型或高上下文开销的 `implementation` 必须进行 orchestration: 预计改 3+ 文件,跨 2+ 子系统,涉及注册/生命周期/API/数据模型迁移,风险高,可能需要大量输入窗口上下文开销的代码阅读/比对/迁移/批量改造,或存在可并行的 disjoint write set 时,一律派发 `worker`.
+- 派发第一个 `worker` 后,`root session` 必须检查是否仍有未覆盖的 disjoint write set; 若有,继续派发 `worker`,或简短说明并行不安全的原因.
+- `worker` 子任务必须有明确写入范围; 多个 `worker` 的 write set 应尽量不重叠. `root session` 负责最终决策,集成,冲突修正和小范围 glue code.
+- 若剩余工作只是连接 `worker` 结果,修复集成错误,补少量调用点,更新最终文档摘要,`root session` 可以本地完成.
+- 当核心工作是 `build`,`test`,`smoke`,`benchmark`,`diagnostic` 或长日志观察时,必须派发 `awaiter`; `worker` 不承担 full rebuild / workspace 级全量验证.
+- 当任务同时包含代码修改与长验证时,先派发 `worker` 完成实现与轻量校验,再派发 `awaiter` 做长验证.
 ### `root session` orchestration 约束
 
 - 对 `Read-only exploration` 批次,`root session`的默认动作是执行 `wait orchestration`: 使用 `wait_agent` 逐步等待一个或少量最先完成的`subagent`,边收结果边判断是否已经获得“足够信号”; 默认不等待整批全部完成.
