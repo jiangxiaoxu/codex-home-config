@@ -26,6 +26,7 @@ goals = true
 code_mode = true
 tool_suggest = false
 workspace_dependencies = false
+apps = false
 
 [sandbox_workspace_write]
 network_access = true
