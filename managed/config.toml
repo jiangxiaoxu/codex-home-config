@@ -25,9 +25,7 @@ terminal_resize_reflow = true
 goals = true
 code_mode = true
 tool_suggest = false
-apps = false
 workspace_dependencies = false
-chronicle = false
 
 [sandbox_workspace_write]
 network_access = true
