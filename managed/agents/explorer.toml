@@ -1,6 +1,6 @@
 name = "explorer"
 description = "Read-only exploration agent for bounded repo exploration, call-path tracing, impact analysis, scope confirmation, targeted web verification, and decision-useful evidence gathering."
-model = "gpt-5.4-mini"
+model = "gpt-5.3-codex"
 model_reasoning_effort = "medium"
 sandbox_mode = "read-only"
 nickname_candidates = [
