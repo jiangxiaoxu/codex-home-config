@@ -121,5 +121,13 @@
 
 - 所有`subagent`只能由`root session`创建,纳入 `orchestration`,并由`root session`负责回收,且`subagent session`不得再次调用`spawn_agent`.
 - 当前使用 `spawn_agent` 时,`message` 和 `items` 不能同时使用; 纯文本派发默认使用 `message`,仅在需要 structured input,mentions 或其他非纯文本输入时使用 `items`.
-- 调用 `spawn_agent` 时必须显式指定 `fork_context=false` 和 `agent_type`; 不允许`subagent`继承当前线程历史.
+- 调用 `spawn_agent` 时默认必须显式指定 `fork_context=false` 和 `agent_type`; 默认不允许`subagent`继承当前线程历史.
+- 仅当派发对象是 `implementation` 类型,且 `root session` 判定完整上下文对实现有明显价值时,允许使用 v1 `fork_context=true`. 此时必须省略 `agent_type`,`model`,`reasoning_effort`; 即使没有指定 `agent_type=worker`,该 `subagent` 在 `orchestration` 中也必须视为 `implementation` 子代理,适用 `worker` 的写入范围,集成,等待,回收和后续 `awaiter` 验证规则.
+- v1 `fork_context=true` 的 `implementation` 派发示例:
+  ```json
+  {
+    "message": "Implement the assigned change in the forked context. Edit files directly and list changed paths in the final answer.",
+    "fork_context": true
+  }
+  ```
 - 调用`wait_agent`时,默认显式传入 `timeout_ms=1800000`; 该长超时主要用于承载长命令和持续输出.
