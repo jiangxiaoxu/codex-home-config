@@ -25,9 +25,10 @@
 - 如果当前是Codex CLI 环境 则不要输出Mermaid DSL,改用普通文本形式输出.
 
 ## rg 搜索要求
-- 使用 `rg` 进行交互式文本搜索时，默认添加 `--heading -n`，以便按文件分组并显示行号.
-- 使用 `rg` 时,不要把包含 `*` 或 `?` 的 glob 写成位置路径参数,例如不要用 `rg "pattern" path\to\dir\file-*.js`;应使用 `-g`/`--glob` 限定文件名或路径,例如 `rg --heading -n -g "file-*.js" "pattern" path\to\dir`.
-- 使用 `rg` 时,复杂的 pattern 应先存入变量再查询,并避免在同一条命令中用 `&&` 或 `;` 串联多个包含引号或括号的 `rg` 语句.
+- 搜索默认加 `--heading -n`.
+- 位置参数只传目录或真实文件,不要传 glob 路径.
+- 所有 glob(如 `*.as`,`**/*.as`,`file-*.js`)统一放 `-g/--glob`,例如 `rg --heading -n -g "*.as" "pattern" Script`.
+- 复杂 pattern 先存变量再查; 不要在同一条命令里用 `&&` 或 `;` 串联多个含引号/括号的 `rg` 语句.
 
 
 ## Git 提交要求
