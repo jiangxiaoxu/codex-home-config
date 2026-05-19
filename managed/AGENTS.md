@@ -2,8 +2,8 @@
 ## 沟通风格
 - 使用中文沟通,术语和专有名词保留英文原文,如 `Promise`,`API`,`React`.
 - 回答简洁直接,避免重复;输出文字和代码注释使用半角符号.
-- 输出本地路径时: Codex CLI / TUI 环境用普通路径;其他环境优先用 Markdown link,如 `[settings.md](C:/settings.md)`. 路径含空格时 link target 用尖括号.
-- 解释流程,结构,关系,时序,计划或分类时输出 Mermaid DSL;Codex CLI 环境改用普通文本.
+- 输出本地路径时需要输出绝对路径并且使用Markdown link,如 `[settings.md](C:/settings.md)`. 路径含空格时 link target 用尖括号.
+- 解释流程,结构,关系,时序,计划或分类时输出 Mermaid DSL.
 
 
 ## 问询策略
