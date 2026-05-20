@@ -1,7 +1,7 @@
 name = "worker"
 description = "Implementation agent for repo-tracked changes, including planned feature delivery, controlled fixes and refactors, and assigned code reading or lightweight validation that supports the change while preserving contracts and handling edge cases."
-model = "gpt-5.4"
-model_reasoning_effort = "xhigh"
+model = "gpt-5.5"
+model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 nickname_candidates = [
   "worker-01",

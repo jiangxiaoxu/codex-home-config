@@ -59,7 +59,7 @@
 - 存在信息收集,范围确认,调用链定位,证据比对或方案收敛需求时,默认优先拆成多个窄范围 `explorer` 并行派发; 每个子任务只负责一个明确问题,模块,调用链或候选方案.
 - 小型代码改动可由 `root session` 直接完成: 预计只改 1-2 个文件,单一子系统,无 API / lifecycle / data-model 迁移,不需要大量输入窗口上下文开销,且派发/等待/整合成本明显高于直接实现成本.
 - 中大型或高上下文开销的代码改动必须进行 orchestration: 预计改 3+ 文件,跨 2+ 子系统,涉及注册/生命周期/API/数据模型迁移,风险高,需要大量输入窗口上下文开销的代码阅读/比对/迁移/批量改造,或存在可并行的 disjoint write set 时,一律派发 `worker`.
-- 派发第一个 `worker` 后,`root session`必须检查是否仍有未覆盖的 disjoint write set; 若有,继续派发 `worker`,或简短说明并行不安全的原因. `worker` 子任务必须有明确写入范围,多个 `worker` 的 write set 应尽量不重叠; `root session`负责最终决策,集成,冲突修正和小范围 glue code,若剩余工作只是连接结果,修复集成错误,补少量调用点或更新最终文档摘要,可本地完成.
+- 派发第一个 `worker` 后, `root session` 必须检查是否仍有未覆盖的 disjoint write set; 若有, 继续派发 `worker`; 否则,简短说明并行不安全或不必要的原因. 一旦任务已进入 `worker` orchestration, 后续代码改动默认由合适的 `worker` 执行, 包括 glue code, 裁决后的修正, 集成改动和冲突处理落地; `root session` 仅负责调度, 审阅, 最终决策, 冲突裁决和收敛判断.
 - 核心工作是 `build`,`test`,`smoke`,`benchmark`,`diagnostic` 或长日志观察时,必须派发 `awaiter`; `worker` 不承担 full rebuild / workspace 级全量验证. 当任务同时包含代码修改与长验证时,先派发 `worker` 完成实现与轻量校验,再派发 `awaiter` 做长验证.
 - 对 `explorer` 批次,`root session`默认执行 `wait orchestration`: 使用 `wait_agent` 逐步等待一个或少量最先完成的`subagent`,边收结果边判断是否已获得“足够信号”; 默认不等待整批全部完成. 只要尚未达到“足够信号”,`root session`进入等待态,不得继续执行与该批问题空间重叠的本地分析,搜索,读文件,Web Search,实现或验证; 仅允许执行 `wait_agent`,`close_agent`,`send_input`,基于已返回结果进行整合判断,以及向用户发送简短进度说明. 若是否重叠存在歧义,一律按重叠处理.
 - `wait_agent` 在传入多个 `targets` 时,返回仅表示“至少一个目标已完成”或超时,不表示整批已完成; 每次返回后,`root session`都必须显式判断是否已获得“足够信号”,否则继续等待剩余关键`subagent`. 对 `explorer` 批次,`足够信号` 必须按可执行条件判断; 满足以下任一条件即可停止继续收集: 已出现强反证并足以排除当前主要路线; 已出现明显领先方向且现有证据足以支持下一步决策; 已收敛到最多 3 个可信候选且继续收集只会带来弱增量排序; 已发现相互冲突但都可信的证据且冲突已明确需要`root session`裁决; 对下一步决策真正关键的问题都已得到回答,其余未返回结果即使缺失也不会改变当前决策.

@@ -41,11 +41,10 @@ sandbox = "unelevated"
 
 [tui]
 status_line = [
-  "current-dir",
+  "project-name",
   "model-with-reasoning",
   "context-used",
-  "five-hour-limit",
-  "weekly-limit",
-  "context-window-size"
+  "weekly-limit"
 ]
 terminal_title = [ "spinner", "project", "status" ]
+status_line_use_colors = true
