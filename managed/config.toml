@@ -22,11 +22,11 @@ runtime_metrics = true
 unified_exec = true
 default_mode_request_user_input = true
 terminal_resize_reflow = true
-goals = true
 code_mode = true
 tool_suggest = false
 workspace_dependencies = false
 apps = false
+js_repl = false
 
 [sandbox_workspace_write]
 network_access = true
@@ -34,7 +34,6 @@ network_access = true
 [notice]
 hide_full_access_warning = true
 hide_rate_limit_model_nudge = true
-fast_default_opt_out = true
 
 [windows]
 sandbox = "unelevated"
