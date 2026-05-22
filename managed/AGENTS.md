@@ -73,5 +73,5 @@
 - 作为 `orchestration` 的一部分,派发某一类型的`subagent`时,`root session`必须先检查是否存在适合复用的同类型 `idle subagent`; 若存在可复用者,优先复用; 若判断不可复用,必须先`close_agent`关停同类型剩余 `idle subagent`,然后再派发新的`subagent`. 每个类型默认最多保留 2 个 `idle subagent`; 超出时必须关闭较旧或较不匹配的候选者,且不得跨 workspace,cwd,shell,环境前提或任务类型长期保留.
 - 对 `awaiter`,若处于同一 workspace,cwd,shell,环境前提和验证目标的连续 `build`/`test`/`smoke`/`diagnostic` loop,默认优先保留并复用 `idle awaiter`,以减少重复启动和首字 token 延迟. 对 `explorer`,若复用会扩大搜索面,混入旧任务上下文,或削弱“窄范围问题”约束,默认不复用旧`subagent`,以保持探索边界清晰,优先新建多个小而专的探索`subagent`. 当某批`subagent`已提供足够信号或该批任务结束时,`root session`必须在离开该批次前完成回收 `orchestration`: 对不保留为 `idle subagent` 的`subagent`显式执行 `close_agent`,不得因其已结束而省略回收; 对保留的 `idle subagent`,必须在下一次同类型派发前重新执行 reuse-or-close 判断.
 - 所有`subagent`只能由`root session`创建,纳入 `orchestration`,并由`root session`负责回收,且`subagent session`不得再次调用`spawn_agent`. 当前使用 `spawn_agent` 时,`message` 和 `items` 不能同时使用; 纯文本派发默认使用 `message`,仅在需要 structured input,mentions 或其他非纯文本输入时使用 `items`.
-- 调用 `spawn_agent` 时默认必须显式指定 `fork_context=false` 和 `agent_type`; 默认不允许`subagent`继承当前线程历史. 仅当派发对象是代码修改任务,且 `root session` 判定完整上下文对实现有明显价值时,允许使用 v1 `fork_context=true`; 此时必须省略 `agent_type`,`model`,`reasoning_effort`,并仍遵循前述 `worker` 派发、集成、等待、回收与后续验证规则.
+- 调用 `spawn_agent` 时默认必须显式指定 `fork_context=false` 和 `agent_type`.
 - 调用`wait_agent`时,默认显式传入 `timeout_ms=1800000`; 该长超时主要用于承载长命令和持续输出.
