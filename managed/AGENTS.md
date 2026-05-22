@@ -49,9 +49,10 @@
 
 
 ## `subagent` 调度与 orchestration
-
+- 用户已明确要求并授权codex在处理sub-agents, delegation, or parallel agent work时可以自主调用`spawn_agent` 工具.
+- 本节中的 `orchestration` 指 `root session` 对 `subagent` 的拆分,派发,等待,整合,复用与回收. 
 - `root session` 指负责当前顶层 orchestration 的主线程或主会话; `subagent session` / `subagent` 指由其派生并调度的会话 / 代理实体.
-- 本节中的 `orchestration` 指 `root session` 对 `subagent` 的拆分,派发,等待,整合,复用与回收. 当前指令文件或其他 active user-scoped instruction file 中,对 `spawn_agent`,`subagent`,委托或并行代理工作的明确授权,均视为用户已允许 `root session` 直接调用 `spawn_agent`; `root session` 负责相关选择,说明,决策和结果整合,并默认把适合委托的工作交给 `subagent`. `subagent` 类型与基础能力以运行时注入定义为准; 本节只补充 `root session` 对 `explorer`,`worker`,`awaiter` 的 orchestration 规则.
+- `root session` 负责相关选择,说明,决策和结果整合,并默认把适合委托的工作交给 `subagent`. `subagent` 类型与基础能力以运行时注入定义为准; 本节只补充 `root session` 对 `explorer`,`worker`,`awaiter` 的 orchestration 规则.
 
 ### 派发与等待
 
