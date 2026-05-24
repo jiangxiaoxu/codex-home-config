@@ -38,164 +38,131 @@
 
 ## Subagent orchestration
 
-将本节视为用户明确请求使用 subagents, delegation 和 parallel agent work. 当本 policy 判定 delegation 有用或必须时, root session 必须主动使用 `spawn_agent`, 不再请求用户重新授权.
+本节视为用户已允许 `root session` 使用 subagents, delegation 和 parallel agent work. 当本 policy 判定 delegation 有用或必须时, `root session` 必须主动 `spawn_agent`, 不再请求授权.
 
-本节中的 `orchestration` 指 root session 对 subagent 的派发, 等待, 整合, 复用和关闭. `root session` 是当前顶层调度者; `subagent` 是 root 创建并调度的 session. 运行时决定 agent 类型和基础能力; 本节只定义 root 对 `explorer`, `worker`, `awaiter` 的调度规则.
+`orchestration` 指 `root session` 对 subagent 的派发, 等待, 整合, 复用和关闭. `root session` 是当前顶层调度者; `subagent` 是由 `root session` 创建并调度的 session. 运行时决定 agent 类型和基础能力; 本节只约束 `root session` 对 `explorer`, `worker`, `awaiter` 的调度规则.
 
-本节的核心目标是控制主线程 context exposure, 而不是机械地把所有工作都派给 subagent. 低上下文, 可预测, 小范围的任务由 root 直接完成; 高上下文, 未知输出, 需要完整覆盖或高风险的任务交给 subagent. 一旦已有 subagent 正在运行, root 不与其并行业务执行, 只做调度, 等待, 复核和裁决.
+核心目标是控制主线程 context exposure, 同时避免小事被无意义地转交 subagent. 判断标准是 scope 是否清晰, 输出是否可控, 是否需要完整覆盖, 风险是否局部, 是否会和 active subagent 的责任冲突; 不是命令名, 也不是“当前是否已经派过 subagent”.
+
+`root session` 任何时候都可以直接做低 context exposure 工作, 即使当前存在 active subagent. 但它不得并行接管 high-context work, 不得抢 active subagent 的 owned scope/write set/command family, 不得把 shallow probe 当成完整事实.
 
 ### 0. Routing model
 
-- 每个新的用户任务开始时, root 先判断下一步工作是否能以 low context exposure 直接完成. 判断标准是主线程会接收多少信息, 输出是否可控, 范围是否明确, 风险是否局部, 而不是命令名或任务名.
-- `direct work` 指 root 直接执行的小范围工作. 只有在 scope 明确, stdout/stderr 可预测, 不需要完整覆盖, 不跨关键边界, 不会产生长日志或大 diff 时才允许.
-- `delegated work` 指交给 subagent 的工作. 只要下一步需要大量信息进入主线程, 需要批量阅读, 需要完整性保证, 输出不可预测, 或存在高风险/跨边界判断, root 必须派发 subagent.
-- `orchestration active` 指存在 `PendingInit` 或 `Running` subagent, 或 root 正在处理同一批 subagent 返回结果但尚未完成回收和下一步裁决. 在该状态下, root 不亲自做新的业务执行, 也不与 subagent 并行探索, 编辑, 验证或分析.
-- 本策略不使用全任务 sticky delegated mode. 已经派发过 subagent 不代表后续所有小步骤都必须继续派发. 但只有在相关 subagent 已完成或关闭, 且下一步重新满足 direct boundary 时, root 才能恢复 direct work.
-- 如果 subagent 的返回结果引出新的具体业务, root 默认派发或复用合适的 subagent 处理. 只有当该业务明显属于 direct boundary, 且没有 subagent 正在运行, 且不会把大量内容带入主线程时, root 才可直接完成.
+`root session` 每一步都重新判断 direct/delegated. 派发过 subagent 不会让整个用户任务永久进入 sticky delegated mode; active subagent 也不会冻结所有直接执行. active 状态只限制冲突和高上下文工作.
 
-### 1. Decision order
+- `direct work`: scope 明确, 输出短且可预测, 可中断, 不需要完整覆盖, 风险局部, 不产生长日志/大 diff, 不跨关键边界.
+- `delegated work`: 会让大量信息进入主线程, 输出不可预测, 需要批量阅读, 完整性保证, 调用链/影响面判断, 高风险裁决或长验证.
+- `active subagent`: 处于 `PendingInit`/`Running`, 或已返回但结果尚未整合, 冲突尚未裁决, 或仍需回收的 subagent.
 
-root 每次准备执行下一步前按以下顺序判断:
+决策顺序:
 
-1. 若有 subagent 正在运行, root 只做调度相关工作: 等待, 发送补充 brief, 关闭不需要的 subagent, 整理 compact summary, 向用户给简短进度更新. 不执行新的 repo search, 文件阅读, 代码修改, build/test 或日志分析.
-2. 若没有 active subagent, 且下一步属于 direct boundary, root 应直接执行, 不派发 subagent. 这是为了避免小任务被 delegation latency 放大.
-3. 若下一步触发 mandatory delegation condition, root 必须执行 reuse-or-close 判断并派发 `explorer`, `worker` 或 `awaiter`.
-4. 若范围不清但可能很小, root 可以先做一个 bounded shallow probe 来收窄范围, 如 `git diff --stat`, `rg -l`, `rg -c`, `head`, `tail`, 明确路径下的 `sed -n`. probe 结果只能作为摸底或 subagent brief, 不得作为完整覆盖结论.
-5. 若 shallow probe 后仍不能确认低上下文, 或需要把 sample/partial 结果升级为完整事实, root 必须派发 subagent.
+1. 当前动作明显属于 direct boundary, 且不与 active subagent 冲突 -> `root session` 直接做.
+2. scope 可能很小但尚不清楚 -> `root session` 可做 bounded shallow probe, 如 `git status`, `git diff --stat/name-only`, `rg -l/-c/-m`, `head`, `tail`, `sed -n`, 明确路径下的小范围读取. probe 只用于摸底, 找候选路径, 估计分布或写 subagent brief.
+3. probe 后仍不能确认低 context exposure, 或需要把 sample/partial 升级为完整事实 -> 派发/复用 subagent.
+4. 满足 mandatory delegation condition -> reuse-or-close 后派 `explorer`, `worker` 或 `awaiter`.
+5. subagent 返回后引出后续业务 -> 重新按本顺序判断. 低上下文且不冲突的动作可由 `root session` 处理; 否则派发/复用合适 subagent.
 
-### 2. Direct boundary
+### 1. Direct boundary
 
-root 可直接执行的典型工作:
+`root session` 可随时直接执行以下低 context exposure 工作, 包括 active subagent 存在时:
 
-- `git status`, `git diff --stat`, `git diff --name-only`, `git diff --name-status`, 以及明确 ref/path 且预期很小的 `git diff`, `git log`, `git show`.
-- 用户明确要求且范围清楚的 `git add`, `git commit`, `git restore`, branch/tag 操作; 不自动 stage 或 commit 的全局规则仍然适用.
-- 已知文件的局部阅读, 少量明确文件的行范围阅读, 单文件或双文件的小改动, typo, 文案, import, 小配置和小测试断言修正.
-- 限定到明确文件或少量明确目录的 `rg --heading -n <pattern> <known-dir-or-file...>`; 可用 `-g/--glob`, file type, `-m/--max-count`, `-l`, `-c` 收窄输出. 完整结果只在该明确 scope 内可作为事实.
-- 明确小 scope, 非交互, 不启动 watcher/daemon/dev server, 不做 full/workspace 验证, 且 stdout/stderr 可控的短命令.
-- 为准备 subagent brief 而做的轻量状态检查或浅探索, 如候选路径定位, changed-file 列表, diff stat, 少量错误行摘取.
+- 轻量状态和小 git 查询: `git status`, `git diff --stat`, `git diff --name-only/status`, 明确 ref/path 且预期很小的 `git diff/log/show`.
+- 明确且不冲突的 git 操作: 用户要求的 `git add`, `git commit`, `git restore`, branch/tag 操作. 若 active worker 可能继续改 tracked files, 或 active awaiter 正在验证当前工作树, 先等待或协调.
+- 小范围阅读: 已知文件的局部阅读, subagent 明确列出的文件/符号/行号范围, 少量配置或错误行上下文. 不得沿线索扩展成新调用链探索或批量阅读.
+- 小范围编辑: 单文件或双文件的 typo, 文案, import, 小配置, 小测试断言, 明确局部 glue code. 必须属于同一局部功能, 且不涉及 shared contract, public API, lifecycle, data model, schema, migration, permission, cache, concurrency, generated files, snapshots, test baselines, shared config 或跨 package 集成. active worker 存在时, 不得重叠其 owned paths 和语义责任.
+- 小范围搜索: 限定到明确文件或少量明确目录的 `rg --heading -n <pattern> <known-path...>`, 可用 `-g/--glob`, file type, `-m`, `-l`, `-c` 收窄. 结论只在该明确 scope 内成立.
+- 短命令: scope 明确, 非交互, 不启动 watcher/daemon/dev server, 不做 full/clean/workspace-wide 验证, stdout/stderr 可控. 若输出膨胀, 持续运行, 卡住或需要长日志分析, 停止/中断并改派 `awaiter` 或 `explorer`.
 
-root 直接执行时必须满足以下约束:
+Direct work 只能支撑实际检查范围内的结论. 一旦暴露出更大 scope, 未知风险, 跨边界依赖, 长输出或完整覆盖需求, 后续必须改走 delegation.
 
-- 输出可控: 预期不会产生长日志, 大 diff, 大量匹配, 大型 JSON, 大型表格或持续输出.
-- 范围局部: 已知文件, 已知小目录, 已知 symbol, 已知命令族; 不需要 repo-wide exhaustiveness.
-- 风险局部: 不涉及 shared contract, public API, lifecycle, registration, data model, schema, migration, permission, cache, concurrency, generated files, snapshots, test baselines, shared config 或跨 package 集成.
-- 可中断: 若命令输出开始超预期膨胀, 持续输出, 卡住, 或暴露出更大范围, root 应停止继续解析并改派 subagent.
-- 可解释: direct work 的结论只能覆盖实际检查过的范围; 不把局部检查表述成全局事实.
+### 2. Mandatory delegation
 
-### 3. Mandatory delegation conditions
+满足以下任一条件时, `root session` 必须派发/复用 subagent:
 
-满足以下任一条件时, root 必须派发或复用 subagent:
-
-- 需要超过 direct boundary 的信息收集, 范围确认, 调用链追踪, 影响面分析, 证据比对, 候选方案收敛, 遗漏检查或外部验证.
-- 需要完整覆盖或 exhaustive usage list, 而不是局部样本或候选路径.
-- repo-wide 或未知大目录的完整内容搜索; 大范围 `rg` 搭配 `-A/-B/-C/--context/--passthru` 等 content amplifier; 连续多次大范围截断搜索仍无法收窄的问题.
-- 预计修改 3+ 文件, 或虽然文件少但跨 2+ 子系统, 模块, package, service, layer 或 abstraction boundary.
-- 涉及 API, lifecycle, registration, data model, schema, migration, permission, cache, concurrency, error handling, generated files, snapshots, test baselines 或 shared config.
-- 任务高风险, 高上下文, 需要批量阅读/比对/迁移/重复改造, 或需要跨文件一致性检查.
-- 存在可并行的独立探索面, 独立验证面或 disjoint write sets. 但并行只发生在 subagents 之间; root 不参与并行业务执行.
+- 超过 direct boundary 的信息收集, scope confirmation, call tracing, impact analysis, 证据比对, candidate narrowing, gap checking, 遗漏检查或外部验证.
+- 需要完整覆盖, exhaustive usage list, repo-wide search, 或把局部样本升级为完整事实.
+- repo-wide/未知大目录完整搜索; 大范围 `rg` 搭配 `-A/-B/-C/--context/--passthru`; 连续截断搜索仍无法收窄.
+- 预计修改 3+ 文件; 或跨 2+ 子系统, 模块, package, service, layer, abstraction boundary.
+- 涉及 API, lifecycle, registration, data model, schema, migration, permission, cache, concurrency, error handling, generated files, snapshots, test baselines, shared config.
+- 高风险, 高上下文, 批量阅读/比对/迁移/重复改造, 或跨文件一致性检查.
+- 存在可并行的独立探索面, 验证面或 disjoint write sets.
 - 主工作是 build, test, smoke, benchmark, diagnostic, 长日志观察, flaky failure 复现或失败证据收集.
-- 用户要求 review, audit, troubleshooting, performance analysis, compatibility analysis, migration plan, architecture tradeoff 或多方案比较, 且对象不是明确的小型 diff, 单文件问题, 短日志或浅探索.
-- 未知脚本或不熟悉命令的实际执行, 或 command profile 本身需要大范围阅读.
-- subagent 返回的信息需要进一步业务处理, 且该处理不明显属于 direct boundary.
+- 用户要求 review, audit, troubleshooting, performance/compatibility analysis, migration plan, architecture tradeoff 或多方案比较, 且对象不是明确小型 diff, 单文件问题, 短日志或浅探索.
+- 未知脚本/不熟悉命令的实际执行, 或 command profile 需要大范围阅读.
+- subagent 返回的信息需要进一步业务处理, 但该处理不明显属于 direct boundary, 或会与 active subagent 冲突.
 
-### 4. Root behavior during orchestration
+Parallel work 主要发生在 subagents 之间. `root session` 可以并行做低 context exposure 工作, 但不能用该例外规避本应 delegation 的高上下文业务.
 
-在 `orchestration active` 中, root 仅可亲自做以下工作:
+### 3. Active orchestration
 
-- 阅读用户输入, 对话历史, 需求, 约束和 subagent compact output.
-- 等待已有 subagent 返回; 若缺信息, 继续派发或复用 subagent, 不由 root 补查.
-- 读取 subagent 明确列出的文件, 符号, 行号范围, diff, 命令输出或链接; 目的仅限核对引用准确性, 理解局部上下文, 裁决冲突和整合结论, 不得沿线索继续扩展搜索.
-- 查看轻量状态, 如 `git status`, `git diff --stat`, `git diff --name-only`, worker 返回的 changed files 对应小 diff, 已生成 diff 片段和 subagent 指定 patch 区域; 不得扩展成新的探索或大 diff 阅读.
-- 编写 subagent brief, 选择 agent type, wait strategy, close/reuse 策略.
-- 提出必须由用户决定的关键问题, 做最终决策, 合并结论, 输出最终答复.
+active subagent 存在时, `root session` 仍以 scheduler/reviewer 为主: 拆分任务, 派发, 等待, 复用/关闭, 复核证据和 diff, 裁决冲突, 整合结论, 给用户更新进度. 同时, direct boundary 内且不冲突的低 context exposure 工作可以直接完成.
 
-其他工作均不是 orchestration active 下的 root 工作: 新 `rg`/`grep`/`find`, 调用链探索, 批量读文件, 大窗口源码/日志阅读, content-bearing `git show`/`git diff -U`, 代码编辑, repo-tracked 文件修改, build/test/smoke/benchmark/diagnostic, 长日志分析, command profile 或扩展 Web Search. root 复核时若发现缺失信息, 新风险, 新调用链, 新文件范围或新验证需求, 必须派发或复用对应 subagent.
+active 期间允许 `root session` 做: 等待 subagent; 阅读用户输入/历史/需求/约束/subagent compact output; 读取 subagent 明确列出的文件, 符号, 行号范围, diff, 命令输出或链接用于核对和裁决; 查看 `git status`, `git diff --stat/name-only`, worker changed files 的小 diff; 编写 brief, 选择 agent type, wait strategy, close/reuse 策略; 做非冲突的小范围阅读, 小搜索, 小修正和短命令.
 
-### 5. Agent selection
+active 期间禁止 `root session` 做: 新的大范围 `rg`/`grep`/`find`, 调用链探索, impact analysis, exhaustive usage list, candidate narrowing, 批量读文件, 大窗口源码/日志阅读, 大 `git show`/`git diff -U`, 完整历史考古, 与 active worker 重叠的编辑, generated files/snapshots/test baselines/shared config 改动, full/workspace-wide build/test/smoke/benchmark/diagnostic, 长日志观察和失败证据收集.
 
-默认按当前阶段的主交付物选择 agent:
+复核发现缺失信息, 新风险, 新调用链, 新文件范围, 新验证需求或 conflict 时, 先判断是否仍在 direct boundary 内; 否则派发/复用对应 subagent.
 
-- 证据, 范围, 调用链, 外部事实, 候选方案和结论 -> `explorer`.
-- 代码改动, repo-tracked 文件改动, glue code, 修复和集成落地 -> `worker`.
-- 命令执行, build/test/smoke/benchmark/diagnostic, 状态, 日志和验证结果 -> `awaiter`.
+### 4. Agent selection and brief
 
-混合任务通常按 `explorer -> worker -> awaiter` 分阶段执行. 若设计信号已经足够, 可以从 `worker` 开始. 若实现已存在且只缺验证, 可以从 `awaiter` 开始. 每次阶段切换都重新判断下一步是 direct boundary 还是 mandatory delegation; 但如果仍处于 orchestration active, root 不亲自做业务执行.
+按主交付物选择 agent: 证据/范围/调用链/外部事实/候选方案/结论 -> `explorer`; 代码或 repo-tracked 改动/glue code/修复/集成落地 -> `worker`; 命令执行/build/test/smoke/benchmark/diagnostic/状态/日志/验证结果 -> `awaiter`.
 
-各 agent config 已定义用途和返回格式. root 不需要在 AGENTS.md 中重复完整格式, 但每次 `spawn_agent` message 必须自包含, 至少包括 objective, scope, allowed/forbidden actions, stop conditions, success criteria, 相关文件/符号/命令/前序摘要, 以及本次最关键的输出字段. 默认要求 explorer 返回 decisive evidence, worker 返回 changed files, awaiter 返回 commands, exit codes 和 validation results.
+混合任务通常按 `explorer -> worker -> awaiter` 分阶段执行. 信号足够可从 `worker` 开始; 只缺验证可从 `awaiter` 开始. 阶段切换后继续按 routing model 判断; direct boundary 内的小步骤可由 `root session` 直接做, 超出边界的探索/实现/验证继续派 subagent.
 
-### 6. Explorer orchestration
+每次 `spawn_agent` message 必须自包含, 至少包括 objective, scope, allowed/forbidden actions, stop conditions, success criteria, relevant files/symbols/commands, previous subagent summary, expected output fields. 默认要求 `explorer` 返回 decisive evidence, `worker` 返回 changed files, `awaiter` 返回 commands, exit codes 和 validation results. 因默认 `fork_context=false`, 不得假设 subagent 能看到完整 `root session` context.
 
-- 有探索需求且超过 direct boundary 时, 派发 `explorer`. 若存在多个相互独立且高价值的问题, 模块, 调用链, 候选方案或证据面, 可以拆成多个窄范围 `explorer` 并行派发.
-- 不为了形式上的并行而拆分 explorer. 小范围搜索, 单文件证据确认或有限目录内的少量 `rg` 应由 root 直接完成.
-- repo search, call tracing, scope confirmation, impact analysis, gap checking, official-source verification 和 candidate narrowing 在高上下文或需要完整覆盖时交给 `explorer`.
-- 进入 `explorer orchestration` 后, root 逐步等待一个或少量最先返回的 explorer. 每次 `wait_agent` 返回后, root 必须判断是否已有 enough signal.
-- 若 enough signal 不足, root 不得自行探索, 只能继续等待仍关键的 explorer, 或把缺失问题拆成新的窄范围 explorer 派发/复用.
-- root 可以复核 explorer 明确列出的证据, 但不得沿证据继续扩展搜索. 若复核后发现信息不足, 引用不准确, 证据冲突或出现新问题, 继续派发/复用 explorer.
-- 一旦已有 enough signal, root 应停止继续收集, 关闭同批不再需要的 explorer, 整合现有证据, 并裁决下一步是 direct work, worker, awaiter 还是进一步 explorer.
-- 只有当前决策明确要求覆盖全部已派发搜索面, 或各 explorer 结果彼此依赖且缺一不可时, root 才等待整批 explorer 全部返回.
-- 若 explorer 返回 `Verification needed`, `Next best action` 或类似字段, root 不默认亲自执行. root 先按 decision order 判断; 若不属于 direct boundary, 验证交 `awaiter` 或 `explorer`, 实现交 `worker`, 进一步探索交 `explorer`.
+### 5. Explorer orchestration
 
-Enough signal 满足以下任一条件即可: 已出现强反证并足以排除当前主要路线; 已出现明显领先方向且证据足以支持下一步决策; 已收敛到最多 3 个可信候选且继续收集只会带来弱增量排序; 已发现相互冲突但都可信的证据且冲突需要 root 裁决; 对下一步决策真正关键的问题都已回答, 未返回结果不会改变当前决策.
+超过 direct boundary 的 repo search, call tracing, scope confirmation, impact analysis, gap checking, official-source verification, candidate narrowing 交给 `explorer`. 小范围搜索, 单文件证据确认, 明确少量目录内的 bounded `rg` 可由 `root session` 直接做, 但只支持小 scope 结论.
 
-### 7. Worker orchestration
+有多个独立且高价值的探索面时, 拆成多个窄范围 `explorer` 并行派发. 每个 `explorer` 只负责一个明确问题, 模块, 调用链, 候选方案或证据面; 不为形式并行而拆. 探索面相互依赖或边界不清时, 先派一个更窄的 `explorer` 收敛 scope.
 
-- 需要代码或 repo-tracked 文件改动且超过 direct boundary 时, 派发 `worker`. 小型单文件/双文件局部修正可由 root 直接完成, 但不得跨关键边界或扩大上下文.
-- 进入 `worker orchestration` 后, 只要 worker 仍在运行或同一 write set 的 repair loop 尚未回收, 后续代码改动继续由 `worker` 执行, 包括主实现, glue code, root 裁决后的修正, 集成改动, 冲突落地, review/test 反馈 patch, 小 patch 和一行修正.
-- 当所有相关 worker 已完成或关闭后, 如果后续只剩明确 direct boundary 内的小整理, root 可以直接完成; 如果仍属于同一实现责任或会扩大上下文, 复用或新建 worker.
-- 派发第一个 worker 前, root 必须判断是否存在可并行的 disjoint write sets. 若存在, 派发多个 worker; 若不存在, 派发或复用一个 primary/integrator worker 执行修改, 而不是让多个 worker 争用同一写入面.
-- `disjoint write set` 指多个 worker 的预期写入文件集合互不重叠, 且不共享 generated files, registries, schemas, migrations, public APIs, global config, 单一 test baseline 或同一 abstraction boundary. 边界不清时, 视为不 disjoint.
-- 每个 worker 任务必须有明确 write-scope contract: allowed paths, forbidden paths, owned responsibility, success condition, allowed incidental fixes, hand-back conditions.
-- worker 可以读取 assigned scope 内为安全实现所需的文件, 也可以做实现范围内的必要 cross-file analysis. 但不得扩大 write surface, 不得接管新的 architecture ownership, 不得跨未授权 abstraction boundary.
-- worker 可以跑局部轻量检查, 如 formatting, local typecheck, incremental compile, touched-scope build 或其他 narrow non-test command. full/clean/workspace-wide build, tests, benchmark, diagnostic 和长日志观察交给 `awaiter`.
-- worker 返回 blocker, open risk, verification handoff 或 main-thread decision need 时, root 负责裁决. 裁决后的实现通常仍交 worker; 只有明确属于 direct boundary 且无 active subagent 时, root 才可直接处理.
+`root session` 逐步等待一个或少量最先返回的 `explorer`, 每次 `wait_agent` 后判断 enough signal. 不足则继续等待关键 `explorer`, 或把缺失问题拆成新的窄范围 `explorer` 派发/复用; 也可以做 direct boundary 内的小证据复核或 shallow probe, 但不得自行完成高上下文探索.
 
-### 8. Awaiter orchestration
+`root session` 可复核 `explorer` 明确证据, 不沿证据扩展成新大范围搜索. 信息不足, 引用不准, 证据冲突或出现新问题时, 按 direct boundary 判断; 超出边界则继续派发/复用 `explorer`.
 
-- build, test, smoke, benchmark, diagnostic, 长日志观察和失败证据收集超过 direct boundary 时必须交给 `awaiter`.
-- 明确小 scope, 非交互, 输出可控的短命令可由 root 直接执行, 例如单个已知文件的格式检查, 明确 path 的轻量 typecheck, 或只输出版本/状态的命令. 一旦输出失控或失败分析需要长日志, 改派 `awaiter`.
-- 同时包含代码修改和长验证的任务, 先由 worker 完成实现和局部轻量检查, 再由 awaiter 做长验证或 workspace 级验证.
-- worker 批次后, 若下一步需要命令执行, 日志观察, 失败证据收集或环境诊断, root 先按 decision order 判断. 超出 direct boundary 的验证默认派发新的 awaiter 批次, 不亲自运行.
-- `awaiter` 不修改源码或 repo-tracked 文件. 若命令产生 tracked-file side effect, awaiter 应停止并报告; root 再裁决是否派 worker 处理.
-- `awaiter` 只运行 parent-defined command family, 观察 stdout/stderr/logs, 收集证据, 提炼 failure signature, 判断是否需要继续派 worker, explorer 或 awaiter.
-- 长验证失败时, root 不亲自读长日志调试和改代码. 需要定位原因时派 explorer; 需要修复时派 worker; 需要重跑或补充验证时派 awaiter.
+已有 enough signal 时, 停止低价值收集, 关闭同批不再需要的 `explorer`, 整合证据, 决定下一步是 direct work, further explorer, worker 还是 awaiter. 只有当前决策需要覆盖全部已派发搜索面, 或各结果彼此依赖且缺一不可时, 才等待整批完成.
 
-### 9. `wait_agent` 与 enough signal
+Enough signal: 强反证足以排除主路线; 明显领先方向足以支持下一步; 收敛到最多 3 个可信候选且继续收集只会弱排序; 可信证据冲突需要 `root session` 裁决; 下一步关键问题已回答, 未返回结果不会改变当前决策.
 
-- 调用 `wait_agent` 时, 默认显式传入 `timeout_ms=1800000`; 该长超时主要用于长命令和持续输出.
-- 当 `wait_agent` 传入多个 `targets` 时, 返回只表示至少一个目标已完成或超时, 不表示整批已完成.
-- 每次返回后, root 必须判断是否已有 enough signal, 是否继续等待剩余关键 subagent, 是否派发新的 subagent, 以及是否关闭不再需要的 subagent.
-- root 不得因为一个 subagent 返回就假设整批完成. 但已有 enough signal 时, 也不得继续等待只会带来低价值增量的结果.
-- 等待期间 root 不并行业务执行. 需要推进其他独立面时, 派发新的 subagent; 不由 root 亲自补做.
+### 6. Worker orchestration
 
-### 10. Reuse / close
+代码或 repo-tracked 文件改动超过 direct boundary 时派 `worker`. 单/双文件局部小修正可由 `root session` 直接做, 包括 active subagent 存在时的非冲突小修正; 但不得跨关键边界, 不得修改 active worker owned paths, 不得影响 active awaiter 正在验证的工作树语义, 不得扩大 write surface.
 
-- `idle subagent` 指同类型, 已创建, 未关闭, 当前不是 `PendingInit` 或 `Running`, 且协议上仍可通过 `send_input` 接收任务的 subagent.
-- `Completed` 通常可作为 idle 候选; `Interrupted` 需要先判断是否适合继续派发; `Errored` 默认不复用; `Shutdown`, `NotFound`, 已 `close_agent`, 或协议上不可继续接收任务者视为 terminal, 不得复用.
-- 每次准备派发某一类型 subagent 时, root 必须先执行 reuse-or-close 判断. 只有 type, workspace, cwd, shell/environment 和 task boundary 都匹配时才复用.
-- 若复用会混入旧上下文, 扩大任务边界, 削弱窄范围约束或污染结果, 不得复用; 应先关闭不适合的 idle subagent, 再新建.
-- 每个类型默认最多保留 2 个 idle subagent; 超出时关闭较旧或较不匹配者.
-- `awaiter` 在同 workspace/cwd/shell/environment 且连续 build/test/smoke/diagnostic loop 中, 默认优先复用.
-- `explorer` 默认不复用, 除非新任务与旧任务边界完全一致, 且不会扩大搜索面.
-- `worker` 仅在连续处理同一 write set, 同一 implementation target 或同一 repair loop 时复用; 否则关闭后新建.
-- 当某批 subagent 已提供 enough signal 或该批任务结束时, root 必须在离开该批次前完成回收. 不保留为 idle 的 subagent 必须显式 `close_agent`; 不得因为其已 `Completed` 而省略关闭.
+进入 worker orchestration 后, active worker 的 write scope 由该 `worker` 拥有. 同一 write set, implementation target 或 repair loop 内的主实现, glue code, 裁决后修正, 集成改动, 冲突落地, review/test 反馈 patch, 小 patch 和一行修正, 默认继续交给该 `worker` 或复用合适 `worker`. `root session` 只有在动作明显属于 direct boundary, 不与 active worker 冲突, 且不会让实现责任混乱时, 才直接处理.
 
-### 11. `spawn_agent`
+派第一个 `worker` 前, `root session` 必须判断是否存在 disjoint write sets. 有则可并行多个 `worker`; 没有则派/复用一个 primary/integrator `worker`. `disjoint write set` 指预期写入文件互不重叠, 且不共享 generated files, registries, schemas, migrations, public APIs, global config, 单一 test baseline 或同一 abstraction boundary; 边界不清即不 disjoint.
 
-- 只有 root 可以创建, 调度和关闭 subagent; subagent 不得调用 `spawn_agent`.
-- 调用 `spawn_agent` 时默认显式指定 `fork_context=false` 和 `agent_type`.
-- `message` 和 `items` 不能同时使用. 纯文本派发默认使用 `message`; 仅在需要 structured input, mentions 或其他非纯文本输入时使用 `items`.
-- 因 `fork_context=false`, 每次派发 message 必须自包含, 不得假设 subagent 能看到完整 root context.
-- 派发 message 应明确说明: objective, scope, allowed/forbidden actions, stop conditions, success criteria, relevant files/symbols/commands, previous subagent summary, expected output fields.
-- 若运行时缺少某 agent type, root 可选择 `default` agent, 但必须收紧权限和输出要求; 无安全替代时停止并说明能力缺失.
+每个 `worker` brief 必须有 write-scope contract: allowed paths, forbidden paths, owned responsibility, success condition, allowed incidental fixes, hand-back conditions. `worker` 可读取 assigned scope 内安全实现所需文件并做必要 cross-file analysis, 但不得扩大 write surface, 接管新 architecture ownership, 或跨未授权 abstraction boundary.
 
-### 12. Progress updates
+`worker` 可跑局部轻量检查, 如 formatting, local typecheck, incremental compile, touched-scope build 或 narrow non-test command. full/clean/workspace-wide build, tests, benchmark, diagnostic 和长日志观察交给 `awaiter`, 除非命令明确属于 direct boundary 且输出可控.
 
-- root 应在 orchestration 批次开始, enough-signal 点, 进入 worker, 进入 awaiter, 发生冲突裁决和最终收敛时, 给用户简短更新.
-- 更新聚焦 agent type, 目标, 是否已有 enough signal, 当前裁决和下一步.
-- 不向主线程倾倒原始长日志, 长 diff, 重复探索历史或无关中间输出.
+`worker` 返回 blocker, open risk, verification handoff 或 main-thread decision need 时, `root session` 负责裁决. 裁决后的实现通常仍交 `worker`; 若只剩非冲突 direct boundary 小动作, `root session` 可直接完成. 验证交 `awaiter`, 探索交 `explorer`, 除非对应动作本身低 context exposure.
+
+### 7. Awaiter orchestration
+
+超过 direct boundary 的 build, test, smoke, benchmark, diagnostic, 长日志观察和失败证据收集交给 `awaiter`. 明确小 scope, 非交互, 输出可控的短命令可由 `root session` 直接执行, 如版本/状态查询, 单文件格式检查, 明确 path 的轻量 typecheck 或局部非测试命令. 输出膨胀, 持续运行, 失败需长日志分析, 或会干扰 active awaiter/worker 判断时, 改派 `awaiter`.
+
+代码修改+长验证: `worker` 先实现和局部轻量检查, `awaiter` 再做长验证或 workspace 级验证. worker 批次后若需命令执行, 日志观察, 失败证据收集或环境诊断, 先按 routing model 判断; 超出 direct boundary 的验证派 `awaiter`.
+
+`awaiter` 不修改源码或 repo-tracked 文件. 若命令产生 tracked-file side effect, `awaiter` 停止并报告; `root session` 再裁决是否派 `worker`. `awaiter` 只运行 parent-defined command family, 观察 stdout/stderr/logs, 收集证据, 提炼 failure signature, 判断后续需 `worker`, `explorer` 还是 `awaiter`.
+
+长验证失败时, `root session` 不亲自读长日志调试和改代码. 定位派 `explorer`, 修复派 `worker`, 重跑/补验派 `awaiter`. 若失败信息足够短且 scope 明确, `root session` 可直接做小范围裁决或 brief, 但不把短错误行扩展成长日志分析.
+
+### 8. Wait, reuse, spawn, progress
+
+`wait_agent` 默认显式 `timeout_ms=1800000`. 多 `targets` 返回只表示至少一个目标完成或超时, 不代表整批完成. 每次返回后, `root session` 判断是否已有 enough signal, 是否继续等关键 subagent, 是否派新 subagent, 是否关闭不需要者. 已有 enough signal 时, 不继续等待低价值增量.
+
+`idle subagent`: 同类型, 已创建未关闭, 非 `PendingInit`/`Running`, 且协议上可 `send_input`. `Completed` 通常可复用; `Interrupted` 需判断; `Errored` 默认不复用; `Shutdown`/`NotFound`/已 `close_agent`/不可接收任务者为 terminal. 派某类型前必须 reuse-or-close. 仅 type, workspace, cwd, shell/environment, task boundary 全匹配才复用. 会混入旧上下文, 扩大边界, 削弱窄范围约束或污染结果时, 关闭后新建. 每类型默认最多保留 2 个 idle, 超出关旧的/不匹配的.
+
+复用偏好: `awaiter` 在同 workspace/cwd/shell/environment 且连续 build/test/smoke/diagnostic loop 中优先复用; `explorer` 默认不复用, 除非边界完全一致且不扩大搜索面; `worker` 仅在连续同一 write set, implementation target 或 repair loop 时复用. 批次已有 enough signal 或任务结束时, `root session` 离开批次前完成回收. 不保留为 idle 的必须显式 `close_agent`; 不因 `Completed` 省略关闭.
+
+只有 `root session` 可创建, 调度和关闭 subagent; subagent 不得 `spawn_agent`. `spawn_agent` 默认显式 `fork_context=false` 和 `agent_type`; `message`/`items` 不并用, 纯文本默认 `message`. 若缺少某 agent type, 可用 `default` 但必须收紧权限和输出; 无安全替代则停止并说明能力缺失.
+
+`root session` 在 orchestration 批次开始, enough-signal 点, 进入 worker/awaiter, 冲突裁决和最终收敛时给用户简短更新. 更新聚焦 agent type, 目标, signal, 裁决和下一步; 不倾倒原始长日志, 长 diff, 重复探索历史或无关中间输出.
 
 ## 验收与收尾
 
-- 最终答复前, root 复核目标, subagent 结果, 实际 diff, 验证结果和剩余风险.
+- 最终答复前, `root session` 复核目标, subagent 结果, 实际 diff, 验证结果和剩余风险.
 - 若有文件修改, 总结 changed files, key changes, validation commands 和 results. 验证状态必须按证据标注; 验证缺失或不完整时, 说明原因并建议下一步.
 - 不把 explorer 的早期 signal 当最终事实; 不把未运行或局部检查写成已通过.
