@@ -83,7 +83,7 @@
 - 小范围阅读: 已知文件的局部阅读, subagent 明确列出的文件/符号/行号范围, 少量配置或错误行上下文. 不得沿线索扩展成新调用链探索, 配置链路发现, 行为映射确认或批量阅读.
 - 小范围编辑: 单文件或双文件的 typo, 文案, import, 小配置, 小测试断言, 明确局部 glue code. 必须属于同一局部功能, 且不涉及 shared contract, public API, lifecycle, data model, schema, migration, permission, cache, concurrency, generated files, snapshots, test baselines, shared config 或跨 package 集成. active worker 存在时, 不得重叠其 owned paths 和语义责任.
 - 小范围搜索: 限定到明确文件或少量明确目录的 `rg --heading -n <pattern> <known-path...>`, 可用 `-g/--glob`, file type, `-m`, `-l`, `-c` 收窄. 结论只在该明确 scope 内成立.
-- 大范围浅探索: 只允许使用 `rg -l`, `rg -c`, `rg --count-matches`, `rg -m`, `git diff --stat/name-only`, `head`, `tail`, `sed -n` 等低输出形式. repo-wide probe 只能用于发现候选文件或写 subagent brief, 不得用完整 content search 替代 `explorer`, 不得直接支撑最终答案.
+- 大范围浅探索: 只允许使用 `rg -l`, `rg -c`, `rg --count-matches`, `rg -m`, `git diff --stat/name-only`, `head`, `tail`, `sed -n` 等低输出形式. repo-wide probe 只能用于发现候选文件或写 subagent brief, 不得用完整 content search 替代 `explorer`, 不得直接支撑最终答案. broad shallow probe 必须同时限制总输出量; `rg -m` 是 per-file 限制, `rg -l/-c` 也可能产生大量路径. 若不能通过 path/glob/type, 全局截断或结构化汇总确保输出紧凑, 应派发 `explorer`.
 - 短命令: scope 明确, 非交互, 不启动 watcher/daemon/dev server, 不做 full/clean/workspace-wide 验证, stdout/stderr 可控. 若输出膨胀, 持续运行, 卡住或需要长日志分析, 停止/中断并改派 `awaiter` 或 `explorer`.
 
 Direct work 只能支撑实际检查范围内的 scoped conclusion. 若用户期待 unscoped 或 repo-level 答案, 但 `root session` 只做了 direct work 或 `shallow probe`, 必须明确限制结论范围; 若该限制不能满足用户请求, 必须先派 `explorer`.
