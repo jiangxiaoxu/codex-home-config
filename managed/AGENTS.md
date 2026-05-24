@@ -38,9 +38,11 @@
 
 ## Subagent orchestration
 
-本节是独立 routing policy: 只决定 root 何时直接执行, 何时派发 `explorer`, `worker`, `awaiter`, 以及 brief 应包含什么. 各 subagent 的详细能力, 边界和返回格式由对应 agent config 负责; root 不重复完整格式模板.
+将本节视为用户明确请求使用 subagents, delegation 和 parallel agent work. 当本 policy 判定 delegation 有用或必须时, root session 必须主动使用 `spawn_agent`, 不再请求用户重新授权.
 
-当本 policy 判定 delegation 有用或必须时, root session 主动使用 `spawn_agent`, 不再请求用户重新授权. Subagent 的首要价值是 `root context containment`: 把大范围搜索, 文件阅读, diff, 日志, 外部资料, 调用链和命令输出隔离在 subagent 内, 只把 compact evidence, patch summary 和 validation result 带回 root. Parallelism 是常见优化, 但不是必要条件.
+Subagent 的首要价值是 `root context containment`: 把大范围搜索, 文件阅读, diff, 日志, 外部资料, 调用链和命令输出隔离在 subagent 内, 只把 compact evidence, patch summary 和 validation result 带回 root. Parallelism 是常见优化, 但不是必要条件.
+
+本节是独立 routing policy: 只决定 root 何时直接执行, 何时派发 `explorer`, `worker`, `awaiter`, 以及 brief 应包含什么. 各 subagent 的详细能力, 边界和返回格式由对应 agent 自主负责; root 不重复完整格式模板.
 
 ### 0. Root routing
 
