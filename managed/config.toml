@@ -27,6 +27,7 @@ tool_suggest = false
 workspace_dependencies = false
 apps = false
 js_repl = false
+goals = true
 
 [sandbox_workspace_write]
 network_access = true
