@@ -46,6 +46,8 @@
 
 `root session` 任何时候都可以直接做低 context exposure 工作, 即使当前存在 active subagent. 但低 context exposure 同时要求信息量低, 语义不确定性低, scope 已知, 输出有界, 且不推进 active subagent 已拥有的业务线程. 输出很短但需要 repo-wide 置信度, 多文件关系判断, 配置链路发现, runtime 映射解释或完整性证明的工作, 仍然是 delegated work.
 
+- `root session` 直接调用 `functions.exec_command` 时, 默认显式设置较小且有界的 `max_output_tokens`; 搜索、状态查询、局部读取优先使用 1000-4000。若需要更大输出, 必须有明确原因, 并优先通过 path/glob/type、`rg -l/-c/-m`、`git diff --stat/name-only`、`head`、`tail`、`sed -n` 等方式先收窄输出.
+
 ### 0. Routing gate
 
 每个用户任务开始时, 以及每次准备执行新的 content-bearing action 前, `root session` 必须先做 routing gate. 这个 gate 判断当前动作应归为 `direct work`, `shallow probe` 还是 `delegated work`; 不存在“派过一次 subagent 后全任务 sticky delegation”的规则, 也不存在“active subagent 会冻结所有 direct work”的规则.
