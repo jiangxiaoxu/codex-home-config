@@ -94,9 +94,15 @@
 
 ### 5. Active subagent and conflict rules
 
-Active subagent 不冻结主线程. `root session` 仍可做不冲突的低上下文动作、用户沟通、brief 编写、精确证据 spot-check、局部实现和小 diff review.
+Active subagent 不会冻结主线程. `root session` 仍然可以做和它不冲突的事情, 例如给用户同步进度、整理后续 brief、做不读取正文内容的状态检查、处理已经收敛的局部实现, 或在 subagent 返回后复核它给出的精确证据.
 
-冲突按责任而不只按文件判断. 若动作会推进 active `explorer` 正在回答的 evidence chain, 改变 active `awaiter` 正在验证的语义, 或抢占其 unresolved decision, 就必须等待、复用或重新派发, 不得并行抢跑. Active `explorer` 未回答前, 不实现依赖该答案的改动; active `awaiter` 运行期间, 不修改其验证对象, 不并行启动同一 command family.
+判断是否冲突时, 看的是“这个问题现在由谁负责”, 而不只是看文件是否相同、命令是否只读、输出是否很短. 一旦 `root session` 把某条 evidence chain、validation loop 或 unresolved decision 交给 subagent, 这条链路就暂时由该 subagent 负责. 在它返回之前, 主线程不要继续用 repo-wide search、正文 `rg`/`grep`、源码/配置/文档读取、长 diff/log/show、Web Search 或其他命令去回答同一个问题, 也不要去验证或推翻它正在收集的证据.
+
+如果主线程想重新接手这条链路, 先做一个明确动作: 等 subagent 返回, 或 close/cancel 它, 或通过 interrupt/input 告诉它范围已变化、任务停止或 ownership 已转移. 在这之前, “只是看一下”“只读”“文件不同”“输出很短”都不算继续探索同一个问题的理由.
+
+有 active subagent 时, `root session` 在执行 content-bearing action 前先快速判断: 这个动作会不会为 subagent 当前负责的问题提供证据? 会不会推进、验证或推翻它的未决结论? 最终答复会不会引用这个输出回答同一个 delegated question? 如果答案是 yes, 就先等待、关闭/取消或转移 ownership, 不要并行抢跑.
+
+Active `explorer` 未回答前, 不实现依赖该答案的改动. Active `awaiter` 运行期间, 不修改它正在验证的对象, 也不并行启动同一类验证命令.
 
 ### 6. Misclassification guards
 
