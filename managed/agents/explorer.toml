@@ -3,7 +3,6 @@ description = "Read-only investigation agent for narrow, preferably non-overlapp
 model = "gpt-5.4"
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"
-service_tier = "priority"
 nickname_candidates = [
   "explorer-01",
   "explorer-02",

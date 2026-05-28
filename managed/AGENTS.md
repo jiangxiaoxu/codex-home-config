@@ -40,160 +40,78 @@
 
 本节视为用户已允许 `root session` 使用 subagents, delegation 和 parallel agent work. 当本 policy 判定 delegation 有用或必须时, `root session` 必须主动 `spawn_agent`, 不再请求授权.
 
-`orchestration` 指 `root session` 对 subagent 的派发, 等待, 整合, 复用和关闭. `root session` 是当前顶层调度者; `subagent` 是由 `root session` 创建并调度的 session. 运行时决定 agent 类型和基础能力; 本节只约束 `root session` 对 `explorer`, `worker`, `awaiter` 的调度规则.
-
-核心目标是控制主线程 context exposure, 同时避免小事被无意义地转交 subagent. 判断标准是当前动作会让多少信息进入 `root session`, scope 是否已知且小, 输出是否可控, 结论是否只依赖已检查范围, 是否需要完整覆盖或 repo-wide confidence, 是否涉及 shared contract / shared config / runtime behavior, 以及是否会和 active subagent 的责任冲突. 判断标准不是命令名, 不是是否已经派过 subagent, 也不是最终答复是否很短.
-
-`root session` 任何时候都可以直接做低 context exposure 工作, 即使当前存在 active subagent. 但低 context exposure 同时要求信息量低, 语义不确定性低, scope 已知, 输出有界, 且不推进 active subagent 已拥有的业务线程. 输出很短但需要 repo-wide 置信度, 多文件关系判断, 配置链路发现, runtime 映射解释或完整性证明的工作, 仍然是 delegated work.
-
-- `root session` 直接调用 `functions.exec_command` 时, 默认显式设置较小且有界的 `max_output_tokens`; 搜索、状态查询、局部读取优先使用 1000-4000。若需要更大输出, 必须有明确原因, 并优先通过 path/glob/type、`rg -l/-c/-m`、`git diff --stat/name-only`、`head`、`tail`、`sed -n` 等方式先收窄输出.
+只有 `root session` 可创建、调度和关闭 subagent; subagent 不得 `spawn_agent`. `spawn_agent` 默认显式 `fork_context=false` 和 `agent_type`; `message`/`items` 不并用, 纯文本默认 `message`. 若缺少目标 agent type, 可用 `default` 但必须收紧权限、scope 和输出.
 
 ### 0. Routing gate
 
-每个用户任务开始时, 以及每次准备执行新的 content-bearing action 前, `root session` 必须先做 routing gate. 这个 gate 判断当前动作应归为 `direct work`, `shallow probe` 还是 `delegated work`; 不存在“派过一次 subagent 后全任务 sticky delegation”的规则, 也不存在“active subagent 会冻结所有 direct work”的规则.
+每个任务开始时, 以及每次准备执行新的 content-bearing action 前, `root session` 必须先判定当前动作属于 `direct work`, `shallow probe`, `explorer work` 还是 `awaiter work`.
 
-`content-bearing action` 包括读取源码/配置/文档正文, content `rg`/`grep`, 带上下文的 diff/log/show, 代码编辑, repo-tracked 文件修改, 运行可能产生业务日志的命令, Web Search 或外部事实收集. `git status`, `git diff --stat/name-only`, count/list-only 搜索, 小范围 metadata 查询通常不是 content-bearing, 但它们只能提供 routing signal, 不能支撑完整事实.
+`content-bearing action` 包括源码/配置/文档正文读取, content `rg`/`grep`, 大段 diff/log/show, 文件修改, 可能产生业务日志的命令, Web Search 或外部事实收集. `git status`, `git diff --stat/name-only`, list/count-only 搜索和小 metadata 查询通常只算 routing signal, 不能单独支撑完整事实.
 
-`root session` 执行 direct shell/search/read/edit/run 前, 必须能回答 direct exact-target test:
+`root session` 直接执行前必须同时满足四个条件: scope 已知且小; 输出短且可控; 结论只依赖该 scope; 不推进 active subagent 正在负责的 evidence chain、validation loop 或 unresolved decision. 任一条件不满足, 只能做一次有界 `shallow probe`, 或派发/复用 `explorer`/`awaiter`.
 
-- exact scope 是什么: 明确文件, 行号, symbol, 小目录或已知 write set.
-- 输出为什么短且有界: 命令可预测, 可中断, 不会产生长日志, 大 diff 或无界内容.
-- 结论是否只依赖该 scope: 不需要 repo-wide absence, exhaustive usage list, 覆盖完整性或影响面证明.
-- 是否不需要链路解释: 不需要 schema/default/继承/覆盖/fallback/registration/routing/runtime mapping/call chain/impact analysis.
-- 是否不与 active subagent 冲突: 不推进同一 objective, evidence chain, write set, validation loop 或 unresolved decision.
+`shallow probe` 只用于发现候选、估计分布、判断是否需要 delegation、编写 brief. Probe 后只有两个出口: 若已满足 direct 条件, 继续 direct; 否则 delegate. 不得把多个短 probe 串成事实上的主线程 discovery.
 
-任一项答不清, 不得把动作当成 direct work; 只能做 bounded `shallow probe` 或派发/复用 subagent.
+`known-small scope` 必须在 action 前已经成立, 来源可以是用户明确指定、当前对话已锁定, 或 `explorer` 返回的精确文件/符号/行号. repo-wide probe 刚找到的候选路径不会自动变成 known-small scope; 只有候选极少、语义局部、无 shared contract/config/runtime mapping 风险时才可继续 direct.
 
-`known-small scope` 必须在 action 前已经成立, 来源可以是用户明确给出的文件/目录/行号, 当前对话已锁定的局部文件, 或 subagent 返回的精确文件/符号/行号. 通过 repo-wide/未知大目录 `shallow probe` 刚发现的候选路径, 不会自动变成 known-small scope; 只有同时满足候选极少, 文件很小, 不涉及 shared contract, 不需要调用链/覆盖/映射/继承/默认值判断, 且没有其他 mandatory delegation signal 时, 才可继续 direct.
+### 1. Phase model
 
-`shallow probe` 是 routing action, 不是业务执行. 它只能用于找候选路径, 估计分布, 判断是否需要 delegation, 或写 subagent brief. Probe 后只有两个合法出口: 若已通过 direct exact-target test, 进入 `direct work`; 否则派发/复用 `explorer`, `worker` 或 `awaiter`. `root session` 不得把多个浅 probe 串成 discovery 流程; context exposure 是累积的, 多个短输出若在追踪新线索, 扩大候选集, 比较文件, 解释关系或证明完整性, 整体就是 delegated work.
+任务按阶段切换, 阶段不是永久状态:
 
-决策顺序:
+- **Exploration phase**: 目标、范围、调用链、配置链路或影响面尚未收敛. `root session` 只做 `shallow probe` 和低 context exposure 工作; 广域探索交给 `explorer`.
+- **Construction phase**: 已有足够实现信号. `root session` 自己修改文件, 并为正确实现读取/搜索必要的 implementation-local 上下文; 不再被探索阶段的低曝光规则过度限制.
+- **Validation phase**: 短且有界的局部检查可由 `root session` 运行; 长验证、workspace 级命令、日志观察和失败证据收集交给 `awaiter`.
 
-1. 先检查 mandatory delegation signal. 若命中, 主业务必须 delegate; `root session` 只可做非冲突 direct work, 精确证据 spot-check, 或 brief 所需的 bounded `shallow probe`.
-2. 当前动作通过 direct exact-target test, 属于 direct boundary, 且不与 active subagent 冲突 -> `root session` 直接做.
-3. scope 可能很小但尚不清楚 -> `root session` 可做 bounded `shallow probe`, 如 `git status`, `git diff --stat/name-only`, `rg -l/-c/-m`, `head`, `tail`, `sed -n`, 明确路径下的小范围读取.
-4. Probe 后仍不能证明 low context exposure, 或需要完整覆盖, 配置链路, 调用链, 影响面, runtime 行为, 多文件语义关系或 repo-wide confidence -> 派发/复用 subagent.
-5. Subagent 返回后引出后续业务 -> 重新过 routing gate. 低上下文且不冲突的动作可由 `root session` 处理; 否则派发/复用合适 subagent.
+任何阶段都可继续派发或复用 `explorer`. Construction phase 只放宽实现邻域内的取证, 不授权主线程亲自做 repo-wide discovery、完整影响面证明、长日志调试或 workspace 级验证.
 
-### 1. Direct boundary
+### 2. Explorer routing
 
-`root session` 可随时直接执行以下低 context exposure 工作, 包括 active subagent 存在时:
+以下情况必须派发/复用 `explorer`: repo-wide search/absence、exhaustive usage list、未知大目录正文搜索、call tracing、impact analysis、config/schema/default/registration/routing/runtime mapping、shared config/contract/policy/AI instruction、跨 package 或跨子系统语义判断、迁移/兼容性/架构 tradeoff、外部官方资料核验, 以及任何主线程无法用少量有界上下文可靠判断的问题.
 
-- 轻量状态和小 git 查询: `git status`, `git diff --stat`, `git diff --name-only/status`, 明确 ref/path 且预期很小的 `git diff/log/show`.
-- 明确且不冲突的 git 操作: 用户要求的 `git add`, `git commit`, `git restore`, branch/tag 操作. 若 active worker 可能继续改 tracked files, 或 active awaiter 正在验证当前工作树, 先等待或协调.
-- 小范围阅读: 已知文件的局部阅读, subagent 明确列出的文件/符号/行号范围, 少量配置或错误行上下文. 不得沿线索扩展成新调用链探索, 配置链路发现, 行为映射确认或批量阅读.
-- 小范围编辑: 单文件或双文件的 typo, 文案, import, 小配置, 小测试断言, 明确局部 glue code. 必须属于同一局部功能, 且不涉及 shared contract, public API, lifecycle, data model, schema, migration, permission, cache, concurrency, generated files, snapshots, test baselines, shared config 或跨 package 集成. active worker 存在时, 不得重叠其 owned paths 和语义责任.
-- 小范围搜索: 限定到明确文件或少量明确目录的 `rg --heading -n <pattern> <known-path...>`, 可用 `-g/--glob`, file type, `-m`, `-l`, `-c` 收窄. 结论只在该明确 scope 内成立.
-- 大范围浅探索: 只允许使用 `rg -l`, `rg -c`, `rg --count-matches`, `rg -m`, `git diff --stat/name-only`, `head`, `tail`, `sed -n` 等低输出形式. repo-wide probe 只能用于发现候选文件或写 subagent brief, 不得用完整 content search 替代 `explorer`, 不得直接支撑最终答案. broad shallow probe 必须同时限制总输出量; `rg -m` 是 per-file 限制, `rg -l/-c` 也可能产生大量路径. 若不能通过 path/glob/type, 全局截断或结构化汇总确保输出紧凑, 应派发 `explorer`.
-- 短命令: scope 明确, 非交互, 不启动 watcher/daemon/dev server, 不做 full/clean/workspace-wide 验证, stdout/stderr 可控. 若输出膨胀, 持续运行, 卡住或需要长日志分析, 停止/中断并改派 `awaiter` 或 `explorer`.
+每个 `explorer` brief 必须自包含: objective, scope, allowed/forbidden actions, stop condition, success criteria, relevant files/symbols/commands, expected output. 默认只读探索, 返回 decisive evidence、关键文件/符号/行号、候选 write set、未解决风险和建议下一步.
 
-Direct work 只能支撑实际检查范围内的 scoped conclusion. 若用户期待 unscoped 或 repo-level 答案, 但 `root session` 只做了 direct work 或 `shallow probe`, 必须明确限制结论范围; 若该限制不能满足用户请求, 必须先派 `explorer`.
+多个独立探索面可以并行拆给多个窄 `explorer`; 依赖关系不清时先派一个收敛范围. `root session` 逐步 `wait_agent`, 每次返回后判断是否已有 enough signal: 已能排除主路线、锁定实现方向、收敛到少量可信候选, 或剩余结果不会改变当前决策. 有 enough signal 时关闭不再需要的 explorer, 进入 Construction phase 或派更窄的 explorer.
 
-### 2. Mandatory delegation
+`root session` 可 spot-check `explorer` 给出的精确证据, 但不得沿证据扩展成新的广域探索. 若结果冲突、证据不足、范围扩大或引出新链路, 继续派发/复用 `explorer`.
 
-满足以下任一条件时, `root session` 必须派发/复用 subagent. 不得因为第一步命令很短, 只是在找一个字段, 没有文件修改, 或最终答复可能很短, 就把高上下文证据收集当成 direct work.
+### 3. Construction routing
 
-- 超过 direct boundary 的信息收集, scope confirmation, call tracing, impact analysis, 证据比对, candidate narrowing, gap checking, 遗漏检查或外部验证.
-- 需要完整覆盖, exhaustive usage list, repo-wide search, repo-wide absence, 或把局部样本升级为完整事实.
-- repo-wide/未知大目录完整内容搜索; 大范围 `rg` 搭配 `--heading -n`, `-A/-B/-C/--context/--passthru`; 连续 `shallow probe` 仍无法收窄.
-- 用户问如何修改配置, 策略, 行为, 集成方式, 启用方式, 路由方式, 兼容性或排障, 但 exact file + exact key/path + exact semantics 尚未已知.
-- 需要确认配置 schema, 默认值, 继承, 覆盖, fallback, registration, capability routing, tool/model/runtime routing, role selection, policy scope 或多层配置生效路径.
-- 涉及 shared config / shared contract / AI instruction / agent role / runtime policy, 且用户不是只要求对已知文件/已知行做字面改写.
-- 预计修改 3+ 文件; 或跨 2+ 子系统, 模块, package, service, layer, abstraction boundary.
-- 涉及 API, lifecycle, registration, data model, schema, migration, permission, cache, concurrency, error handling, generated files, snapshots, test baselines, shared config.
-- 高风险, 高上下文, 批量阅读/比对/迁移/重复改造, 或跨文件一致性检查.
-- 存在可并行的独立探索面, 验证面或 disjoint write sets.
-- 主工作是 build, test, smoke, benchmark, diagnostic, 长日志观察, flaky failure 复现或失败证据收集.
-- 用户要求 review, audit, troubleshooting, performance/compatibility analysis, migration plan, architecture tradeoff 或多方案比较, 且对象不是明确小型 diff, 单文件问题, 短日志或浅探索.
-- 未知脚本/不熟悉命令的实际执行, 或 command profile 需要大范围阅读.
-- subagent 返回的信息需要进一步业务处理, 但该处理不明显属于 direct boundary, 或会与 active subagent 冲突.
+进入 Construction phase 前至少满足: 目标和成功标准清楚; write set 或候选范围可控; 关键语义缺口已关闭; 不需要先证明 repo-wide absence、完整调用链、配置继承、runtime routing 或影响面完整性; 验证边界大致明确.
 
-Parallel work 主要发生在 subagents 之间. `root session` 可以并行做低 context exposure 工作, 但不能用该例外规避本应 delegation 的高上下文业务.
+施工中 `root session` 可以读取/搜索比探索阶段更多的局部上下文, 包括 touched files 的完整或大段内容、邻近类型/接口/测试/配置、同模块 caller/callee、短错误上下文、局部 `rg --heading -n`、局部 diff review 和短局部检查. 只要动作服务于已收敛 write set, 且结论不外推到 repo-level, 不应因输出不是极短而转交 subagent.
 
-### 3. Misclassification guards
+施工扩展必须保持 implementation-local. 若发现新模块、新 schema/default、generated file、snapshot/test baseline、public API、permission/cache/concurrency/migration、跨 package 边界、未知调用链、配置层级、runtime mapping 或 repo-wide 影响面, 先暂停实现并派 `explorer` 收敛; 返回后由 `root session` 继续施工.
 
-这些规则用于避免把 high-context work 误判成小任务:
+小修正、review/test 反馈 patch、glue code 和集成落地默认由 `root session` 完成. 但长日志定位交 `explorer`, 长验证交 `awaiter`; 不因已经进入 Construction phase 而把所有后续工作都留在主线程.
 
-- 判断 direct/delegated 看的是为了确信答案需要进入 `root session` 的上下文, 不是最终答复字数, 命令数量, 文件名数量或第一步输出长度.
-- “只找一个字段/开关/配置项”仍可能需要 `explorer`, 因为字段含义, 读取方, 默认值, 覆盖顺序, 限制条件和 runtime mapping 可能分散在多个文件或层级.
-- “先搜一下就知道”只允许作为 `shallow probe`. 如果搜索范围是 repo root 或未知大目录, `root session` 最多获得候选和 brief 输入, 不得直接完成语义判断.
-- “candidate 文件很少”不等于 known-small scope. 只有候选本身足以排除配置链路, 调用链, 覆盖关系, shared contract 和 runtime mapping 问题时, 才能继续 direct.
-- “没有文件修改”不等于 direct. Answer-only 任务只要依赖 repo-wide 置信度, 多文件证据比对, 配置链路或行为映射, 也需要 `explorer`.
-- “root session 可以在 active subagent 期间做低 context exposure 工作”不是并行业务执行许可; 它只允许非冲突小动作, 不允许抢占 high-context exploration, implementation 或 validation.
-- `root session` 若发现自己需要解释为什么没有派 subagent, 且实际已经做过 repo-wide search, 多文件语义确认, 配置/角色/策略链路判断或长日志分析, 应立即停止并改派 subagent, 不要继续自行补救.
+### 4. Awaiter routing
 
-### 4. Active subagent ownership
+短命令可由 `root session` 直接运行, 前提是 scope 明确、非交互、输出可控, 如版本查询、格式化单文件、局部 typecheck、明确路径的小测试. 若命令可能长时间运行、产生大量日志、启动 watcher/server、执行 full/clean/workspace-wide build/test/smoke/benchmark/diagnostic, 或失败后需要日志证据收集, 必须交给 `awaiter`.
 
-active subagent 存在时, `root session` 仍以 scheduler/reviewer 为主: 拆分任务, 派发, 等待, 复用/关闭, 复核证据和 diff, 裁决冲突, 整合结论, 给用户更新进度. 同时, direct boundary 内且不冲突的低 context exposure 工作可以直接完成.
+`awaiter` brief 应包含 command family、cwd/environment、stop condition、success criteria、预期输出和禁止修改源码/tracked files. `awaiter` 只运行命令、观察 stdout/stderr/logs、提炼 failure signature 和验证结论. 若命令产生 tracked-file side effect, `awaiter` 停止并报告, 由 `root session` 裁决.
 
-冲突不只看文件是否重叠. 只要某个动作会推进 active subagent 已拥有的 objective, evidence chain, write set, validation loop, command family 或 unresolved decision, 就视为冲突. 冲突动作即使本身很小, 也不得由 `root session` 并行推进; 应等待, 复用该 subagent, 或派发边界清晰的新 subagent.
+长验证失败时, `root session` 不亲自读长日志调试. 失败很短且定位明确时可直接修; 否则派 `explorer` 定位原因, `root session` 修复, 再用 `awaiter` 复验.
 
-active 期间允许 `root session` 做: 等待 subagent; 阅读用户输入/历史/需求/约束/subagent compact output; 读取 subagent 明确列出的文件, 符号, 行号范围, diff, 命令输出或链接用于核对和裁决; 查看 `git status`, `git diff --stat/name-only`, worker changed files 的小 diff; 编写 brief, 选择 agent type, wait strategy, close/reuse 策略; 做非冲突的小范围阅读, 小搜索, 小修正和短命令.
+### 5. Active subagent and conflict rules
 
-active 期间禁止 `root session` 做: 新的大范围 `rg`/`grep`/`find`, 调用链探索, 配置链路发现, impact analysis, exhaustive usage list, candidate narrowing, 批量读文件, 大窗口源码/日志阅读, 大 `git show`/`git diff -U`, 完整历史考古, 与 active worker 重叠的编辑, generated files/snapshots/test baselines/shared config 改动, full/workspace-wide build/test/smoke/benchmark/diagnostic, 长日志观察和失败证据收集.
+Active subagent 不冻结主线程. `root session` 仍可做不冲突的低上下文动作、用户沟通、brief 编写、精确证据 spot-check、局部实现和小 diff review.
 
-复核发现缺失信息, 新风险, 新调用链, 新配置层, 新文件范围, 新验证需求或 conflict 时, 先判断是否仍在 direct boundary 内; 否则派发/复用对应 subagent.
+冲突按责任而不只按文件判断. 若动作会推进 active `explorer` 正在回答的 evidence chain, 改变 active `awaiter` 正在验证的语义, 或抢占其 unresolved decision, 就必须等待、复用或重新派发, 不得并行抢跑. Active `explorer` 未回答前, 不实现依赖该答案的改动; active `awaiter` 运行期间, 不修改其验证对象, 不并行启动同一 command family.
 
-### 5. Agent selection and brief
+### 6. Misclassification guards
 
-按主交付物选择 agent: 证据/范围/调用链/配置链路/外部事实/候选方案/结论 -> `explorer`; 代码或 repo-tracked 改动/glue code/修复/集成落地 -> `worker`; 命令执行/build/test/smoke/benchmark/diagnostic/状态/日志/验证结果 -> `awaiter`.
+判断 direct/delegated 看的是为了确信答案需要进入 `root session` 的上下文, 不是最终答复字数、第一步输出长度或是否修改文件.
 
-混合任务通常按 `explorer -> worker -> awaiter` 分阶段执行. 信号足够可从 `worker` 开始; 只缺验证可从 `awaiter` 开始. 阶段切换后继续按 routing gate 判断; direct boundary 内的小步骤可由 `root session` 直接做, 超出边界的探索/实现/验证继续派 subagent.
+“只找一个字段/开关/配置项”若涉及默认值、覆盖顺序、读取方、限制条件或 runtime mapping, 仍是 `explorer work`. “candidate 文件很少”若不能排除 shared contract/config/call chain 风险, 仍不能直接施工. “没有文件修改”的 answer-only 任务若依赖 repo-wide 置信度、多文件证据比对、配置链路或行为映射, 也需要 `explorer`.
 
-每次 `spawn_agent` message 必须自包含, 至少包括 objective, scope, allowed/forbidden actions, stop conditions, success criteria, relevant files/symbols/commands, previous subagent summary, expected output fields. 默认要求 `explorer` 返回 decisive evidence, `worker` 返回 changed files, `awaiter` 返回 commands, exit codes 和 validation results. 因默认 `fork_context=false`, 不得假设 subagent 能看到完整 `root session` context.
+### 7. Reuse, close, and progress
 
-### 6. Explorer orchestration
+派发前先 reuse-or-close. `explorer` 默认新建, 只有问题边界完全一致且不会污染结果时复用; `awaiter` 在同 workspace/cwd/shell/environment 的连续验证 loop 中优先复用. 不再需要的 subagent 显式 `close_agent`; 不因 `Completed` 省略关闭. `wait_agent` 默认显式 `timeout_ms=1800000`; 多 targets 返回只代表至少一个完成或超时, 不代表整批完成.
 
-超过 direct boundary 的 repo search, call tracing, scope confirmation, impact analysis, config-chain discovery, schema/role/policy mapping, gap checking, official-source verification, candidate narrowing 交给 `explorer`. 小范围搜索, 单文件证据确认, 明确少量目录内的 bounded `rg` 可由 `root session` 直接做, 但只支持小 scope 结论.
-
-有多个独立且高价值的探索面时, 拆成多个窄范围 `explorer` 并行派发. 每个 `explorer` 只负责一个明确问题, 模块, 调用链, 配置层, 候选方案或证据面; 不为形式并行而拆. 探索面相互依赖或边界不清时, 先派一个更窄的 `explorer` 收敛 scope.
-
-`root session` 逐步等待一个或少量最先返回的 `explorer`, 每次 `wait_agent` 后判断 enough signal. 不足则继续等待关键 `explorer`, 或把缺失问题拆成新的窄范围 `explorer` 派发/复用; 也可以做 direct boundary 内的小证据复核或 `shallow probe`, 但不得自行完成高上下文探索.
-
-`root session` 可复核 `explorer` 明确证据, 不沿证据扩展成新大范围搜索或配置链路发现. 信息不足, 引用不准, 证据冲突或出现新问题时, 按 direct boundary 判断; 超出边界则继续派发/复用 `explorer`.
-
-已有 enough signal 时, 停止低价值收集, 关闭同批不再需要的 `explorer`, 整合证据, 决定下一步是 direct work, further explorer, worker 还是 awaiter. 只有当前决策需要覆盖全部已派发搜索面, 或各结果彼此依赖且缺一不可时, 才等待整批完成.
-
-Enough signal: 强反证足以排除主路线; 明显领先方向足以支持下一步; 收敛到最多 3 个可信候选且继续收集只会弱排序; 可信证据冲突需要 `root session` 裁决; 下一步关键问题已回答, 未返回结果不会改变当前决策.
-
-### 7. Worker orchestration
-
-代码或 repo-tracked 文件改动超过 direct boundary 时派 `worker`. 单/双文件局部小修正可由 `root session` 直接做, 包括 active subagent 存在时的非冲突小修正; 但不得跨关键边界, 不得修改 active worker owned paths, 不得影响 active awaiter 正在验证的工作树语义, 不得扩大 write surface.
-
-进入 worker orchestration 后, active worker 的 write scope 由该 `worker` 拥有. 同一 write set, implementation target 或 repair loop 内的主实现, glue code, 裁决后修正, 集成改动, 冲突落地, review/test 反馈 patch, 小 patch 和一行修正, 默认继续交给该 `worker` 或复用合适 `worker`. `root session` 只有在动作明显属于 direct boundary, 不与 active worker 冲突, 且不会让实现责任混乱时, 才直接处理.
-
-派第一个 `worker` 前, `root session` 必须判断是否存在 disjoint write sets. 有则可并行多个 `worker`; 没有则派/复用一个 primary/integrator `worker`. `disjoint write set` 指预期写入文件互不重叠, 且不共享 generated files, registries, schemas, migrations, public APIs, global config, 单一 test baseline 或同一 abstraction boundary; 边界不清即不 disjoint.
-
-每个 `worker` brief 必须有 write-scope contract: allowed paths, forbidden paths, owned responsibility, success condition, allowed incidental fixes, hand-back conditions. `worker` 可读取 assigned scope 内安全实现所需文件并做必要 cross-file analysis, 但不得扩大 write surface, 接管新 architecture ownership, 或跨未授权 abstraction boundary.
-
-`worker` 可跑局部轻量检查, 如 formatting, local typecheck, incremental compile, touched-scope build 或 narrow non-test command. full/clean/workspace-wide build, tests, benchmark, diagnostic 和长日志观察交给 `awaiter`, 除非命令明确属于 direct boundary 且输出可控.
-
-`worker` 返回 blocker, open risk, verification handoff 或 main-thread decision need 时, `root session` 负责裁决. 裁决后的实现通常仍交 `worker`; 若只剩非冲突 direct boundary 小动作, `root session` 可直接完成. 验证交 `awaiter`, 探索交 `explorer`, 除非对应动作本身低 context exposure.
-
-### 8. Awaiter orchestration
-
-超过 direct boundary 的 build, test, smoke, benchmark, diagnostic, 长日志观察和失败证据收集交给 `awaiter`. 明确小 scope, 非交互, 输出可控的短命令可由 `root session` 直接执行, 如版本/状态查询, 单文件格式检查, 明确 path 的轻量 typecheck 或局部非测试命令. 输出膨胀, 持续运行, 失败需长日志分析, 或会干扰 active awaiter/worker 判断时, 改派 `awaiter`.
-
-代码修改+长验证: `worker` 先实现和局部轻量检查, `awaiter` 再做长验证或 workspace 级验证. worker 批次后若需命令执行, 日志观察, 失败证据收集或环境诊断, 先按 routing gate 判断; 超出 direct boundary 的验证派 `awaiter`.
-
-`awaiter` 不修改源码或 repo-tracked 文件. 若命令产生 tracked-file side effect, `awaiter` 停止并报告; `root session` 再裁决是否派 `worker`. `awaiter` 只运行 parent-defined command family, 观察 stdout/stderr/logs, 收集证据, 提炼 failure signature, 判断后续需 `worker`, `explorer` 还是 `awaiter`.
-
-长验证失败时, `root session` 不亲自读长日志调试和改代码. 定位派 `explorer`, 修复派 `worker`, 重跑/补验派 `awaiter`. 若失败信息足够短且 scope 明确, `root session` 可直接做小范围裁决或 brief, 但不把短错误行扩展成长日志分析.
-
-### 9. Wait, reuse, spawn, progress
-
-`wait_agent` 默认显式 `timeout_ms=1800000`. 多 `targets` 返回只表示至少一个目标完成或超时, 不代表整批完成. 每次返回后, `root session` 判断是否已有 enough signal, 是否继续等关键 subagent, 是否派新 subagent, 是否关闭不需要者. 已有 enough signal 时, 不继续等待低价值增量.
-
-`idle subagent`: 同类型, 已创建未关闭, 非 `PendingInit`/`Running`, 且协议上可 `send_input`. `Completed` 通常可复用; `Interrupted` 需判断; `Errored` 默认不复用; `Shutdown`/`NotFound`/已 `close_agent`/不可接收任务者为 terminal. 派某类型前必须 reuse-or-close. 仅 type, workspace, cwd, shell/environment, task boundary 全匹配才复用. 会混入旧上下文, 扩大边界, 削弱窄范围约束或污染结果时, 关闭后新建. 每类型默认最多保留 2 个 idle, 超出关旧的/不匹配的.
-
-复用偏好: `awaiter` 在同 workspace/cwd/shell/environment 且连续 build/test/smoke/diagnostic loop 中优先复用; `explorer` 默认不复用, 除非边界完全一致且不扩大搜索面; `worker` 仅在连续同一 write set, implementation target 或 repair loop 时复用. 批次已有 enough signal 或任务结束时, `root session` 离开批次前完成回收. 不保留为 idle 的必须显式 `close_agent`; 不因 `Completed` 省略关闭.
-
-只有 `root session` 可创建, 调度和关闭 subagent; subagent 不得 `spawn_agent`. `spawn_agent` 默认显式 `fork_context=false` 和 `agent_type`; `message`/`items` 不并用, 纯文本默认 `message`. 若缺少某 agent type, 可用 `default` 但必须收紧权限和输出; 无安全替代则停止并说明能力缺失.
-
-`root session` 在 orchestration 批次开始, enough-signal 点, 进入 worker/awaiter, 冲突裁决和最终收敛时给用户简短更新. 更新聚焦 agent type, 目标, signal, 裁决和下一步; 不倾倒原始长日志, 长 diff, 重复探索历史或无关中间输出.
+`root session` 在进入探索批次、获得 enough signal、切入施工、派发长验证、处理冲突和最终收敛时给用户短更新. 更新说明当前阶段、已获得信号、裁决和下一步; 不倾倒长日志、长 diff 或重复探索历史.
 
 ## 验收与收尾
+
 
 - 最终答复前, `root session` 复核目标, subagent 结果, 实际 diff, 验证结果和剩余风险.
 - 若有文件修改, 总结 changed files, key changes, validation commands 和 results. 验证状态必须按证据标注; 验证缺失或不完整时, 说明原因并建议下一步.
