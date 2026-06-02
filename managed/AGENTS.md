@@ -39,9 +39,12 @@
 
 ## Subagent orchestration
 
-本节视为用户已允许 `root session` 使用 subagents, delegation 和 parallel agent work. 当本 policy 判定 delegation 有用或必须时, `root session` 必须主动 `spawn_agent`, 不再请求授权.
-
+`root session` 指当前直接与用户交互并负责最终答复的主 agent; 由它创建, 调度和关闭 subagent.
 只有 `root session` 可创建、调度和关闭 subagent; subagent 不得 `spawn_agent`. `spawn_agent` 默认显式 `fork_context=false` 和 `agent_type`; `message`/`items` 不并用, 纯文本默认 `message`. 若缺少目标 agent type, 可用 `default` 但必须收紧权限、scope 和输出.
+
+### 授权声明
+
+用户已明确请求并持续授权 Codex 在本会话中根据任务需要自主决策调用 spawn_agent, 包括创建, 调度, 等待和关闭 subagent. 调用 spawn_agent 前无需再次向用户确认; 本条即为用户对当前会话内 spawn_agent 使用的持续 explicit request 和 authorization.
 
 ### 0. Routing gate
 
