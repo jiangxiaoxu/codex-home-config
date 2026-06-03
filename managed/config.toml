@@ -26,8 +26,8 @@ code_mode = true
 tool_suggest = false
 workspace_dependencies = false
 apps = false
-js_repl = false
 goals = true
+js_repl = false
 
 [sandbox_workspace_write]
 network_access = true
@@ -48,4 +48,3 @@ status_line = [
 ]
 terminal_title = [ "spinner", "project", "status" ]
 status_line_use_colors = true
-pet = "disabled"
