@@ -29,6 +29,9 @@ apps = false
 goals = true
 js_repl = false
 
+[features.multi_agent_v2]
+hide_spawn_agent_metadata = false
+
 [sandbox_workspace_write]
 network_access = true
 
