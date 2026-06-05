@@ -40,7 +40,7 @@
 ## Subagent orchestration
 
 - `/root` 指当前直接与用户交互并负责最终答复的主 agent; `/root` 是全局最终 owner, 负责面向用户的最终答复和全局收敛.
-- `subagent` 指由 `/root` 或受限授权 agent 派发的 agent, 只负责完成 direct parent brief 中限定的任务; subagent 的 final response 会返回给 parent agent.
+- `subagent` 指 agent tree 中的协作 agent: an agent in a team of agents collaborating to complete a task. 它由 direct parent 通过 `spawn_agent` 创建, 以 direct parent 提供的任务 brief 和授权边界为准; 在 `final` channel 返回的内容会立即交付给 parent agent.
 - 默认 subagent 不得创建, 调度, 恢复, 关闭或重新分配任何 agent tree 任务; 只有该 subagent 被明确授权时, 才可嵌套派发或管理 direct child agent.
 - `/root` 保留对所有 descendant agent 的 `wait_agent` / `close_agent` 接管权; 接管后 `/root` 不得和原 owner 并行推进同一 evidence chain 或 validation loop.
 - `/root` 调用 `spawn_agent` 时默认显式设置 `fork_turns="none"` 和 `agent_type`; 默认使用纯文本 `message`, 并提供稳定的 `task_name`. 若缺少合适的 agent type, 可使用 `default`, 但必须收紧 scope, 权限和预期输出.
@@ -48,7 +48,8 @@
 
 ### 授权声明
 
-用户已明确请求并持续授权 `/root` 在本会话中根据任务需要自主决策调用 spawn_agent, 包括创建, 调度, 等待和关闭 subagent. `/root`调用 spawn_agent 前无需再次向用户确认.
+默认授权 `/root` 在会话中根据任务需要自主决策调用 `spawn_agent`, 包括创建, 调度, 等待和关闭 subagent. `/root` 调用 `spawn_agent` 前无需再次向用户确认.
+若用户在后续聊天中要求“不派发子代理”, “不要用 subagent”, “直接做”, “暂停派发”或“停止派发”, `/root` 必须在本轮及相关后续上下文中服从该限制, 直到用户明确恢复默认授权.
 
 ### Subagent lifecycle policy
 
