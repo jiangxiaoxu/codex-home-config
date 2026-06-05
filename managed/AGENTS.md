@@ -41,7 +41,7 @@
 
 - `/root` 指当前直接与用户交互并负责最终答复的主 agent; `/root` 是全局最终 owner, 负责面向用户的最终答复和全局收敛.
 - `subagent` 指 agent tree 中的协作 agent: an agent in a team of agents collaborating to complete a task. 它由 direct parent 通过 `spawn_agent` 创建, 以 direct parent 提供的任务 brief 和授权边界为准; 在 `final` channel 返回的内容会立即交付给 parent agent.
-- 默认 subagent 不得创建, 调度, 恢复, 关闭或重新分配任何 agent tree 任务; 只有该 subagent 被明确授权时, 才可嵌套派发或管理 direct child agent.
+- 默认 subagent 不自行创建, 调度, 恢复, 关闭, 等待或重新分配任何 agent tree 任务; 当任务授权明确允许时, 才可在授权边界内派发并管理自己创建的 direct child agent. Nested delegation 不自动扩展到任意后代.
 - `/root` 保留对所有 descendant agent 的 `wait_agent` / `close_agent` 接管权; 接管后 `/root` 不得和原 owner 并行推进同一 evidence chain 或 validation loop.
 - `/root` 调用 `spawn_agent` 时默认显式设置 `fork_turns="none"` 和 `agent_type`; 默认使用纯文本 `message`, 并提供稳定的 `task_name`. 若缺少合适的 agent type, 可使用 `default`, 但必须收紧 scope, 权限和预期输出.
 - `/root` 的每个 `spawn_agent` brief 必须包含 objective, scope, allowed actions, forbidden actions, stop condition, success criteria, expected output 和 ownership boundary.
@@ -82,7 +82,7 @@
 - **Validation phase**: 短且有界的局部检查可由 `/root` 运行; 长验证、workspace 级命令、日志观察和失败证据收集交给 `awaiter`.
 
 任何阶段都可继续派发或复用 `explorer`. Construction phase 只放宽实现邻域内的取证, 不授权主线程亲自做 repo-wide discovery、完整影响面证明、长日志调试或 workspace 级验证.
-当 `/root` 将实现任务交给 `worker` 时, 默认同时把该实现的实际验证责任交给 worker: brief 应说明期望验证范围, worker 应优先自己运行小范围验证, 长验证由 worker 派 direct child `awaiter`. `/root` 不应接受 routine validation handoff; 只有工具缺失、环境不可用、执行被 parent 禁止或需要主线程决策时才接回验证问题.
+当 `/root` 将实现任务交给 `worker` 时, brief 应说明期望验证范围, 并默认把该实现的实际验证责任交给 worker. `/root` 不应替 worker 执行 routine validation; 只有 worker 报告工具缺失、环境不可用、执行被禁止、授权边界不足或需要主线程决策时, 才接回验证问题.
 
 ### 2. Explorer routing
 
@@ -130,13 +130,13 @@ Active `explorer` 未回答前, 不实现依赖该答案的改动. Active `await
 
 “只找一个字段/开关/配置项”若涉及默认值、覆盖顺序、读取方、限制条件或 runtime mapping, 仍是 `explorer work`. “candidate 文件很少”若不能排除 shared contract/config/call chain 风险, 仍不能直接施工. “没有文件修改”的 answer-only 任务若依赖 repo-wide 置信度、多文件证据比对、配置链路或行为映射, 也需要 `explorer`.
 
-### 7. Reuse, close, and progress
+### 7. Reuse, close, and wait
 
 派发前先 `list_agents` 做 reuse-or-close. `explorer` 默认新建, 只有问题边界完全一致且不会污染结果时复用; `awaiter` 在同 workspace/cwd/shell/environment 的连续验证 loop 中优先复用. 不再需要的 subagent 显式 `close_agent`; 不因 completed 状态省略关闭. close 后按当前可用工具视为不可继续使用, 后续工作重新 `spawn_agent`.
 
 ### list_agents 返回值解释
 
-`list_agents` 返回当前 root thread tree 中可见的 live agents。每项包含 `agent_name`, `agent_status`, `last_task_message`; `last_task_message` 只表示最近任务 brief / instruction, 不等同于 final result。
+`list_agents` 返回当前会话 root thread tree 中可见的 live agents。每项包含 `agent_name`, `agent_status`, `last_task_message`; `last_task_message` 只表示最近任务 brief / instruction, 不等同于 final result。
 
 是否能基于结果等待, 关闭, 续派或接手某个 agent, 取决于当前 brief / policy 是否授予对应的 lifecycle ownership。未被授权时, 不得管理, 等待, 关闭或重新分配其他 agents。
 
