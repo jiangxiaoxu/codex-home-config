@@ -134,9 +134,29 @@ Active `explorer` 未回答前, 不实现依赖该答案的改动. Active `await
 
 派发前先 `list_agents` 做 reuse-or-close. `explorer` 默认新建, 只有问题边界完全一致且不会污染结果时复用; `awaiter` 在同 workspace/cwd/shell/environment 的连续验证 loop 中优先复用. 不再需要的 subagent 显式 `close_agent`; 不因 completed 状态省略关闭. close 后按当前可用工具视为不可继续使用, 后续工作重新 `spawn_agent`.
 
-`wait_agent` 默认显式 `timeout_ms=1800000`. 多 subagent 同时存在时, 每次 mailbox update 后判断是否已有 enough signal: 已能排除主路线、锁定实现方向、收敛到少量可信候选, 或剩余结果不会改变当前决策. 有 enough signal 时关闭不再需要的 subagent. 不把 `wait_agent` 的 tool output 当作完整结果; 最终结论必须基于实际收到的 subagent notification 或后续可核验输出.
+### list_agents 返回值解释
 
-`/root` 在进入探索批次、获得 enough signal、切入施工、派发长验证、处理冲突和最终收敛时给用户短更新. 更新说明当前阶段、已获得信号、裁决和下一步; 不倾倒长日志、长 diff 或重复探索历史.
+`list_agents` 返回当前 root thread tree 中可见的 live agents。每项包含 `agent_name`, `agent_status`, `last_task_message`; `last_task_message` 只表示最近任务 brief / instruction, 不等同于 final result。
+
+是否能基于结果等待, 关闭, 续派或接手某个 agent, 取决于当前 brief / policy 是否授予对应的 lifecycle ownership。未被授权时, 不得管理, 等待, 关闭或重新分配其他 agents。
+
+`agent_status` 使用规则:
+
+- `running`: 正在执行; 只有它仍 owns 当前 evidence chain / validation loop 时, 才可作为 `wait_agent` 的等待理由。
+- `pending_init`: 初始化中; 只在刚创建 agent 时可短暂等待。
+- `interrupted`: 已中断, 不会自己继续。若要继续, 先 `followup_task(target=<agent_name>, message=<明确续作任务>)`, 再等待后续 update; 否则 `close_agent` 或由当前 owner 接手。
+- `{ "completed": string | null }`: 已完成; 吸收 completed payload 或对应 final result 后 `close_agent`, 不要再 `wait_agent`。
+- `{ "errored": string }`: 已失败; 记录 failure signature 后 `close_agent`, 不要再 `wait_agent`。
+- `shutdown`: 已关闭且不可再取回结果; 不要 `wait_agent`。若仍出现在 `list_agents`, 用 `close_agent` 清理。
+- `not_found`: 不存在或不可见; final 状态, 不要 `wait_agent`。
+
+只对仍可能产生 mailbox update 的非 final agent 使用 `wait_agent`; 不要等待 final 状态。
+
+`wait_agent` timeout 根据等待对象和任务长度选择; 不要机械固定长 timeout. 短同步点用默认或短 timeout, 明确长任务才用较长 timeout. 多 subagent 同时存在时, 每次 mailbox update 后判断是否已有 enough signal: 已能排除主路线、锁定实现方向、收敛到少量可信候选, 或剩余结果不会改变当前决策. 有 enough signal 时关闭不再需要的 subagent. 不把 `wait_agent` 的 tool output 当作完整结果; 最终结论必须基于实际收到的 subagent notification 或后续可核验输出.
+
+### Progress updates
+
+`/root` 在关键阶段切换和收敛点给用户短更新: 说明当前阶段、已获信号、裁决和下一步; 不倾倒长日志、长 diff 或重复探索历史.
 
 ## 验收与收尾
 
