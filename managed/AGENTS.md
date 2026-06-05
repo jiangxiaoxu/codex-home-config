@@ -82,6 +82,7 @@
 - **Validation phase**: 短且有界的局部检查可由 `/root` 运行; 长验证、workspace 级命令、日志观察和失败证据收集交给 `awaiter`.
 
 任何阶段都可继续派发或复用 `explorer`. Construction phase 只放宽实现邻域内的取证, 不授权主线程亲自做 repo-wide discovery、完整影响面证明、长日志调试或 workspace 级验证.
+当 `/root` 将实现任务交给 `worker` 时, 默认同时把该实现的实际验证责任交给 worker: brief 应说明期望验证范围, worker 应优先自己运行小范围验证, 长验证由 worker 派 direct child `awaiter`. `/root` 不应接受 routine validation handoff; 只有工具缺失、环境不可用、执行被 parent 禁止或需要主线程决策时才接回验证问题.
 
 ### 2. Explorer routing
 
