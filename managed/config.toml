@@ -29,6 +29,9 @@ js_repl = false
   enabled = true
   hide_spawn_agent_metadata = false
   max_concurrent_threads_per_session = 16
+  min_wait_timeout_ms = 60_000
+  max_wait_timeout_ms = 3_600_000
+  default_wait_timeout_ms = 300_000
 
 [sandbox_workspace_write]
 network_access = true
