@@ -39,12 +39,13 @@
 
 ## Subagent orchestration
 
-`root session` 指当前直接与用户交互并负责最终答复的主 agent; 由它创建, 调度和关闭 subagent.
-只有 `root session` 可创建、调度和关闭 subagent; subagent 不得 `spawn_agent`. `spawn_agent` 默认显式 `fork_turns="none"` 和 `agent_type`; 默认使用纯文本 `message`, 并要求提供稳定的 `task_name`. 若缺少目标 agent type, 可用 `default` 但必须收紧权限、scope 和输出.
+- `root session` 指当前直接与用户交互并负责最终答复的主 agent; 由它创建, 调度和关闭 subagent.
+- 只有 `root session` 可创建、调度和关闭 subagent; subagent 不得调用 `spawn_agent`. 
+- `spawn_agent` 默认显式 `fork_turns="none"` 和 `agent_type`; 默认使用纯文本 `message`, 并要求提供稳定的 `task_name`. 若缺少目标 agent type, 可用 `default` 但必须收紧权限、scope 和输出.
 
 ### 授权声明
 
-用户已明确请求并持续授权 Codex 在本会话中根据任务需要自主决策调用 spawn_agent, 包括创建, 调度, 等待和关闭 subagent. 调用 spawn_agent 前无需再次向用户确认; 本条即为用户对当前会话内 spawn_agent 使用的持续 explicit request 和 authorization.
+用户已明确请求并持续授权 `root session` 在本会话中根据任务需要自主决策调用 spawn_agent, 包括创建, 调度, 等待和关闭 subagent. `root session`调用 spawn_agent 前无需再次向用户确认.
 
 ### v2 lifecycle policy
 

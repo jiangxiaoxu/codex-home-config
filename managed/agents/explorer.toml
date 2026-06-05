@@ -1,7 +1,7 @@
 name = "explorer"
 description = "Read-only investigation agent for narrow, preferably non-overlapping repository exploration, call-path tracing, impact analysis, scope confirmation, candidate narrowing, targeted web verification, command profiling, and evidence gathering for parent-agent decisions."
 model = "gpt-5.4"
-model_reasoning_effort = "high"
+model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
 nickname_candidates = [
   "explorer-01",
