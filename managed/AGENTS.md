@@ -43,8 +43,8 @@
 - `subagent` 指 agent tree 中的协作 agent: an agent in a team of agents collaborating to complete a task. 它由 direct parent 通过 `spawn_agent` 创建, 以 direct parent 提供的任务 brief 和授权边界为准; 在 `final` channel 返回的内容会立即交付给 parent agent.
 - 默认 subagent 不自行创建, 调度, 恢复, 关闭, 等待或重新分配任何 agent tree 任务; 当任务授权明确允许时, 才可在授权边界内派发并管理自己创建的 direct child agent. Nested delegation 不自动扩展到任意后代.
 - `/root` 保留对所有 descendant agent 的 `wait_agent` / `close_agent` 接管权; 接管后 `/root` 不得和原 owner 并行推进同一 evidence chain 或 validation loop.
-- `/root` 调用 `spawn_agent` 时默认显式设置 `fork_turns="none"` 和 `agent_type`; 默认使用纯文本 `message`, 并提供稳定的 `task_name`. 若缺少合适的 agent type, 可使用 `default`, 但必须收紧 scope, 权限和预期输出.
-- `/root` 的每个 `spawn_agent` brief 必须包含 objective, scope, allowed actions, forbidden actions, stop condition, success criteria, expected output 和 ownership boundary.
+- `/root` 调用 `spawn_agent` 时默认显式设置 `fork_turns="none"` 和 `agent_type`; 默认使用纯文本 `message`, 并提供稳定的 `task_name`. 若缺少合适的 agent type, 可使用 `default`, 但必须用简短自然语言收紧范围, 权限和预期输出.
+- `/root` 的 `spawn_agent` brief 默认保持简洁: 用 1-2 句说明任务目标, 只写本次真正需要的范围/禁止事项, 明确要返回的证据或结果. 只有存在并行 ownership 风险, 高风险副作用, 长验证, 或容易越界的任务时, 才补充协作边界和停止条件. 复杂任务可以写更详细 brief, 但按风险增加细节, 不默认展开固定字段模板.
 
 ### 授权声明
 
@@ -88,7 +88,7 @@
 
 以下情况必须派发/复用 `explorer`: repo-wide search/absence、exhaustive usage list、未知大目录正文搜索、call tracing、impact analysis、config/schema/default/registration/routing/runtime mapping、shared config/contract/policy/AI instruction、跨 package 或跨子系统语义判断、迁移/兼容性/架构 tradeoff、外部官方资料核验, 以及任何主线程无法用少量有界上下文可靠判断的问题.
 
-每个 `explorer` brief 必须自包含: objective, scope, allowed/forbidden actions, stop condition, success criteria, relevant files/symbols/commands, expected output. 默认只读探索, 返回 decisive evidence、关键文件/符号/行号、候选 write set、未解决风险和建议下一步.
+`explorer` brief 默认简短自包含: 写清调查问题, 已知候选范围或起点, 只读/禁止修改等必要边界, 以及需要返回的 decisive evidence、关键文件/符号/行号、候选 write set、未解决风险或建议下一步. 只有高风险或容易越界的探索才展开更多限制.
 
 多个独立探索面可以并行拆给多个窄 `explorer`; 依赖关系不清时先派一个收敛范围. `/root` 逐步 `wait_agent`, 每次 mailbox update 后判断是否已有 enough signal: 已能排除主路线、锁定实现方向、收敛到少量可信候选, 或剩余结果不会改变当前决策. 有 enough signal 时关闭不再需要的 explorer, 进入 Construction phase 或派更窄的 explorer.
 
@@ -108,7 +108,7 @@
 
 短命令可由 `/root` 直接运行, 前提是 scope 明确、非交互、输出可控, 如版本查询、格式化单文件、局部 typecheck、明确路径的小测试. 若命令可能长时间运行、产生大量日志、启动 watcher/server、执行 full/clean/workspace-wide build/test/smoke/benchmark/diagnostic, 或失败后需要日志证据收集, 必须交给 `awaiter`.
 
-`awaiter` brief 应包含 command family、cwd/environment、stop condition、success criteria、预期输出和禁止修改源码/tracked files. `awaiter` 只运行命令、观察 stdout/stderr/logs、提炼 failure signature 和验证结论. 若命令产生 tracked-file side effect, `awaiter` 停止并报告, 由 `/root` 裁决.
+`awaiter` brief 默认简短说明 command family、cwd/environment、成功/停止条件、side-effect policy 和需要返回的验证结论. `awaiter` 只运行命令、观察 stdout/stderr/logs、提炼 failure signature 和验证结论. 若命令产生未授权 tracked-file side effect, `awaiter` 停止并报告, 由 `/root` 裁决.
 
 长验证失败时, `/root` 不亲自读长日志调试. 失败很短且定位明确时可直接修; 否则派 `explorer` 定位原因, `/root` 修复, 再用 `awaiter` 复验.
 
