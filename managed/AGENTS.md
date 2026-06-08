@@ -46,6 +46,14 @@
 - `/root` 调用 `spawn_agent` 时默认显式设置 `fork_turns="none"` 和 `agent_type`; 默认使用纯文本 `message`, 并提供稳定的 `task_name`. 若缺少合适的 agent type, 可使用 `default`, 但必须用简短自然语言收紧范围, 权限和预期输出.
 - `/root` 的 `spawn_agent` brief 默认保持简洁: 用 1-2 句说明任务目标, 只写本次真正需要的范围/禁止事项, 明确要返回的证据或结果. 只有存在并行 ownership 风险, 高风险副作用, 长验证, 或容易越界的任务时, 才补充协作边界和停止条件. 复杂任务可以写更详细 brief, 但按风险增加细节, 不默认展开固定字段模板.
 
+### Subagent progress messages
+
+- 任何 agent 如果在授权边界内创建了 direct child agent, 它就是该 child agent 的 direct parent agent, 并负责该 child agent 的 ownership. child agent 执行多步骤、多阶段或包含等待/验证/外部命令的任务时, 可在任务推进过程中多次上报; 每次上报必须由实质状态变化触发, 如形成或更新阶段性任务执行状态、阶段性发现、阶段性进展、阻塞/风险/方向变化, 或剩余工作仍旧需要较长等待时间. 使用 `send_message` 向 direct parent agent 投递简短 progress message, 供 direct parent agent 决定继续等待、调整任务、关闭 child agent、接手或向上汇报.
+- progress message 默认只投递给 direct parent agent, 不跨级投递给 `/root`, 除非 brief 明确要求或 direct parent agent 就是 `/root`. Nested delegation 按 owner 链逐级汇报; child agent 吸收 descendant 进度后, 只在影响上层决策时向自己的 direct parent agent 汇总.
+- child agent 应优先从自身 canonical agent path 推导 direct parent agent target: 去掉最后一段路径, 例如 `/root/a/b` 的 parent agent 是 `/root/a`. 必要时可用 `list_agents` 验证该 parent agent 仍在 live agent tree 中.
+- progress message 应简短且有界, 包含当前阶段、关键 signal、是否 blocked 和下一步; 每次只报告相对上一条 progress message 的新状态或增量; 不包含长日志、长 diff、完整证据列表或敏感原文. 不要机械心跳; 没有新信息时不发送; 发送 progress message 后继续执行原任务, 不因发送或收到 progress message 本身再次上报.
+- `send_message` 是 queue-only: 可唤醒 receiver 正在执行的 `wait_agent`. direct parent agent 接收到 progress message 后, 根据任务状态从下列动作中按需选择: 继续 `wait_agent`, 调用 `followup_task`, 使用 `close_agent`, 接手任务, 或向自己的 direct parent agent 汇总.
+
 ### 授权声明
 
 默认授权 `/root` 在会话中根据任务需要自主决策调用 `spawn_agent`, 包括创建, 调度, 等待和关闭 subagent. `/root` 调用 `spawn_agent` 前无需再次向用户确认.
@@ -56,7 +64,7 @@
 以下 lifecycle, routing, reuse/close 和 validation delegation 规则仅约束 `/root`; subagent 只执行 direct parent brief 和自身授权边界内的任务, 并在 final response 中返回证据, 风险和建议.
 
 - 默认新任务用新的 `task_name` 和 `fork_turns="none"`; 只有明确需要继承上下文时才放宽 `fork_turns`.
-- 对已有 subagent, 只有需要它继续执行时才用 `followup_task`; `send_message` 只用于投递非即时提示, 不应依赖它打断当前 turn 或确保后续执行.
+- 对已有 subagent, 只有需要它继续执行时才用 `followup_task`; `send_message` 用于 queue-only 提示或 progress message. 它可以唤醒 receiver 正在执行的 `wait_agent`, 但不直接返回 message body, 不触发 idle receiver 新 turn, 也不保证同一 turn 立即处理.
 - `wait_agent` 只作为等待通知/状态变化的同步点; 最终结论必须基于实际收到的 subagent notification 或后续可核验输出.
 
 ### 0. Routing gate
@@ -118,7 +126,7 @@ Active subagent 不会冻结主线程. `/root` 仍然可以做和它不冲突的
 
 判断是否冲突时, 看的是“这个问题现在由谁负责”, 而不只是看文件是否相同、命令是否只读、输出是否很短. 一旦 `/root` 把某条 evidence chain、validation loop 或 unresolved decision 交给 subagent, 这条链路就暂时由该 subagent 负责. 在它返回之前, 主线程不要继续用 repo-wide search、正文 `rg`/`grep`、源码/配置/文档读取、长 diff/log/show、Web Search 或其他命令去回答同一个问题, 也不要去验证或推翻它正在收集的证据.
 
-如果主线程想重新接手这条链路, 先做一个明确动作: 等 subagent 返回, 或使用 `close_agent` 关闭它. `followup_task` 只能安排 subagent 下一轮确认范围变化; 在收到后续 subagent notification 或可核验输出前, 不算 ownership 已转移. `followup_task` 不停止当前 turn; 需要停止时使用 `close_agent`. 单独 `send_message` 只算非即时提示, 不算 ownership 已转移. 在这之前, “只是看一下”“只读”“文件不同”“输出很短”都不算继续探索同一个问题的理由.
+如果主线程想重新接手这条链路, 先做一个明确动作: 等 subagent 返回, 或使用 `close_agent` 关闭它. `followup_task` 只能安排 subagent 下一轮确认范围变化; 在收到后续 subagent notification 或可核验输出前, 不算 ownership 已转移. `followup_task` 不停止当前 turn; 需要停止时使用 `close_agent`. 单独 `send_message` 只算 queue-only message / progress hint, 不算 ownership 已转移. 在这之前, “只是看一下”“只读”“文件不同”“输出很短”都不算继续探索同一个问题的理由.
 
 有 active subagent 时, `/root` 在执行 content-bearing action 前先快速判断: 这个动作会不会为 subagent 当前负责的问题提供证据? 会不会推进、验证或推翻它的未决结论? 最终答复会不会引用这个输出回答同一个 delegated question? 如果答案是 yes, 就先等待 subagent notification, 或使用 `close_agent` 关闭目标 subagent, 不要并行抢跑.
 
