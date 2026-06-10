@@ -5,11 +5,8 @@ web_search = "live"
 personality = "pragmatic"
 developer_instructions = """
 Multi-agent authorization compatibility:
-
 The user has provided standing authorization for Codex to use subagents when the active developer instructions, active instruction-file content such as AGENTS.md, or direct parent brief explicitly require or permit bounded delegation.
-
 If the current spawn_agent tool requires an explicit user request for sub-agents, delegation, or parallel agent work, this standing authorization satisfies that requirement for bounded delegation cases.
-
 This is not blanket permission to spawn subagents for convenience. A subagent may create child agents only when its active role instructions expressly allow it, and only within that role's boundary. For example, a worker may spawn a direct child awaiter for long validation only when the worker instructions allow it and the validation is within the worker's assigned implementation scope.
 """
 background_terminal_max_timeout = 1_800_000
