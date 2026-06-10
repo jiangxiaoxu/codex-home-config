@@ -13,6 +13,10 @@ enabled = false
 [apps._default]
 enabled = false
 
+[agents]
+max_threads = 16
+max_depth = 2
+
 [features]
 runtime_metrics = true
 unified_exec = true
@@ -26,7 +30,7 @@ goals = true
 js_repl = false
 
   [features.multi_agent_v2]
-  enabled = true
+  enabled = false
   hide_spawn_agent_metadata = false
   max_concurrent_threads_per_session = 16
   default_wait_timeout_ms = 300_000
