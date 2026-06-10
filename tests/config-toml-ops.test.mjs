@@ -391,6 +391,50 @@ test('merge-install CLI allows a missing target file and writes UTF-8 TOML outpu
   });
 });
 
+test('merge-install CLI normalizes CRLF developer_instructions before writing TOML output', () => {
+  withTempDir((tempDir) => {
+    const sourcePath = join(tempDir, 'source.toml');
+    const targetPath = join(tempDir, 'missing-target.toml');
+    const outputPath = join(tempDir, 'output.toml');
+
+    writeFileSync(
+      sourcePath,
+      [
+        'developer_instructions = """',
+        'First line',
+        '',
+        'Second line',
+        '"""',
+        ''
+      ].join('\r\n'),
+      'utf8'
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        'tools/config-toml-ops.cjs',
+        'merge-install',
+        '--source',
+        sourcePath,
+        '--target',
+        targetPath,
+        '--output',
+        outputPath
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: 'utf8'
+      }
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    const outputText = readFileSync(outputPath, 'utf8');
+    assert.doesNotMatch(outputText, /\\r/);
+    assert.equal(TOML.parse(outputText).developer_instructions.includes('\r'), false);
+  });
+});
+
 test('orderTopLevelKeys always places model keys before other top-level entries', () => {
   assert.deepStrictEqual(
     Object.keys(orderTopLevelKeys({

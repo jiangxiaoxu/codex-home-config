@@ -2075,10 +2075,29 @@ function readTomlFile(filePath, { allowMissing = false } = {}) {
   }
   const content = readFileSync(resolvedPath, "utf8");
   try {
-    return TOML.parse(content);
+    return normalizeDeveloperInstructionNewlines(TOML.parse(content));
   } catch (error) {
     throw new Error(`Failed to parse TOML from ${resolvedPath}: ${error.message}`);
   }
+}
+function normalizeDeveloperInstructionNewlines(value) {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      normalizeDeveloperInstructionNewlines(item);
+    }
+    return value;
+  }
+  if (!isTomlObject(value)) {
+    return value;
+  }
+  for (const key of Object.keys(value)) {
+    if (key === "developer_instructions" && typeof value[key] === "string") {
+      value[key] = value[key].replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      continue;
+    }
+    normalizeDeveloperInstructionNewlines(value[key]);
+  }
+  return value;
 }
 function writeTomlFile(filePath, value) {
   const resolvedPath = resolve(filePath);
