@@ -15,16 +15,16 @@ This is not blanket permission to spawn subagents for convenience. A subagent ma
 background_terminal_max_timeout = 1_800_000
 approvals_reviewer = "user"
 
+[agents]
+max_threads = 16
+max_depth = 2
+
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"
 enabled = false
 
 [apps._default]
 enabled = false
-
-[agents]
-max_threads = 16
-max_depth = 2
 
 [features]
 runtime_metrics = true
