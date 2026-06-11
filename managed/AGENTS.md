@@ -66,7 +66,7 @@
 - 默认新任务使用新的稳定 task label/brief, 并选择不继承历史上下文的可用选项; 只有明确需要继承上下文时才放宽. 不要传入当前 tool schema 未暴露的字段.
 - 对已有 subagent, 只有需要它继续执行时才使用当前可用的 follow-up/input 工具; queue-only message 只在当前工具明确支持 parent-directed progress/提示时使用. 它可能唤醒正在等待的 receiver, 但不直接等同于完成结果, 不保证触发 idle receiver 新 turn, 也不保证同一 turn 立即处理.
 - `wait_agent` 只作为等待通知/状态变化的同步点. 某些实现会直接返回完成内容, 某些实现只返回 mailbox/status signal; 最终结论必须基于实际收到的 subagent notification、final payload、status payload 或后续可核验输出.
-- `wait_agent` 默认显式 `timeout_ms=600000`
+- `wait_agent` 默认显式 `timeout_ms=1200000`
 ### 0. Routing gate
 
 每个任务开始时, 以及每次准备执行新的 content-bearing action 前, `/root` 必须先判定当前动作属于 `direct work`, `shallow probe`, `explorer work` 还是 `awaiter work`.
