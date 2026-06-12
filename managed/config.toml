@@ -18,8 +18,6 @@ max_depth = 2
 
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"
-supports_parallel_tool_calls = true
-enabled = true
 
 [apps._default]
 enabled = false
