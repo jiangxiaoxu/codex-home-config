@@ -20,7 +20,6 @@ max_depth = 2
 url = "https://developers.openai.com/mcp"
 supports_parallel_tool_calls = true
 enabled = true
-default_tools_approval_mode = "approve"
 
 [apps._default]
 enabled = false
