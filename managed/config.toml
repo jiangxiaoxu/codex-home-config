@@ -20,8 +20,15 @@ max_depth = 2
 url = "https://developers.openai.com/mcp"
 supports_parallel_tool_calls = true
 enabled = true
+default_tools_approval_mode = "approve"
 
 [apps._default]
+enabled = false
+
+[apps.connector_68df038e0ba48191908c8434991bbac2]
+enabled = false
+
+[apps.connector_76869538009648d5b282a4bb21c3d157]
 enabled = false
 
 [features]
@@ -33,7 +40,7 @@ terminal_resize_reflow = true
 code_mode = true
 tool_suggest = false
 workspace_dependencies = false
-apps = false
+apps = true
 goals = true
 js_repl = false
 
@@ -58,7 +65,8 @@ status_line = [
   "project-name",
   "model-with-reasoning",
   "context-used",
-  "weekly-limit"
+  "weekly-limit",
+  "context-window-size"
 ]
 terminal_title = [ "spinner", "project", "status" ]
 status_line_use_colors = true
