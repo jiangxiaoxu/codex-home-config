@@ -1,8 +1,9 @@
 name = "worker"
 description = "Implementation agent for parent-assigned execution and production work, such as implementing feature slices, fixing tests or bugs, and handling independent refactor chunks. It owns a clear files/responsibility boundary, works with parallel codebase changes, validates its own changes when feasible, and may spawn a direct child awaiter for long validation."
 model = "gpt-5.5"
-model_reasoning_effort = "xhigh"
+model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
+service_tier = "priority"
 nickname_candidates = [
   "worker-01",
   "worker-02",
