@@ -43,8 +43,9 @@
 - `subagent` 指 agent tree 中的协作 agent: an agent in a team of agents collaborating to complete a task. 它由 direct parent 通过当前可用的 `spawn_agent` 工具创建, 以 direct parent 提供的任务 brief 和授权边界为准; 在 `final` channel 或等价完成通知中返回的内容交付给 parent agent.
 - 默认 subagent 不自行创建, 调度, 恢复, 中断, 关闭, 等待或重新分配任何 agent tree 任务; 当任务授权明确允许时, 才可在授权边界内派发并管理自己创建的 direct child agent. Nested delegation 不自动扩展到任意后代.
 - `/root` 保留对所有 descendant agent 的 lifecycle 接管权; 接管后 `/root` 不得和原 owner 并行推进同一 evidence chain 或 validation loop. 具体使用 wait, interrupt, resume 或 close 工具时, 以当前工具列表和 tool schema 为准.
-- `/root` 调用 `spawn_agent` 时默认选择不继承历史上下文的可用选项, 并显式选择合适的 `agent_type`. 若当前工具支持任务名或稳定标识, 提供稳定的 task label; 若工具返回 thread id, 后续 target 使用该返回值. 若缺少合适的 agent type, 可使用 `default`, 但必须用简短自然语言收紧范围, 权限和预期输出.
-- `/root` 的 `spawn_agent` brief 默认保持简洁: 用 1-2 句说明任务目标, 只写本次真正需要的范围/禁止事项, 明确要返回的证据或结果. 只有存在并行 ownership 风险, 高风险副作用, 长验证, 或容易越界的任务时, 才补充协作边界和停止条件. 复杂任务可以写更详细 brief, 但按风险增加细节, 不默认展开固定字段模板.
+- 调用 `spawn_agent` 时默认选择不继承历史上下文的可用选项, 并显式选择合适的 `agent_type`. 若当前工具支持任务名或稳定标识, 提供稳定的 task label; 若工具返回 thread id, 后续 target 使用该返回值. 若缺少合适的 agent type, 可使用 `default`, 但必须用简短自然语言收紧范围, 权限和预期输出.
+- 调用 `spawn_agent` 时, 任务正文和 brief 使用 `message` 参数传入, 不使用 `items` 参数; 其他必要参数仍以当前 tool schema 为准.
+- `spawn_agent` brief 默认保持简洁: 用 1-2 句说明任务目标, 只写本次真正需要的范围/禁止事项, 明确要返回的证据或结果. 只有存在并行 ownership 风险, 高风险副作用, 长验证, 或容易越界的任务时, 才补充协作边界和停止条件. 复杂任务可以写更详细 brief, 但按风险增加细节, 不默认展开固定字段模板.
 
 ### Subagent progress messages
 
