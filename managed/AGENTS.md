@@ -95,7 +95,7 @@
 
 ### 2. Explorer routing
 
-以下情况必须派发/复用 `explorer`: repo-wide search/absence、exhaustive usage list、未知大目录正文搜索、call tracing、impact analysis、config/schema/default/registration/routing/runtime mapping、shared config/contract/policy、跨 package 或跨子系统语义判断、迁移/兼容性/架构 tradeoff、外部官方资料核验, 主要依赖 MCP tools/resources 获取信息或证据, 以及任何主线程无法用少量有界上下文可靠判断的问题.
+以下情况必须派发/复用 `explorer`: repo-wide search/absence、exhaustive usage list、未知大目录正文搜索、call tracing、impact analysis、config/schema/default/registration/routing/runtime mapping、shared config/contract/policy/AI instruction、跨 package 或跨子系统语义判断、迁移/兼容性/架构 tradeoff、外部官方资料核验, 以及任何主线程无法用少量有界上下文可靠判断的问题.
 
 `explorer` brief 默认简短自包含: 写清调查问题, 已知候选范围或起点, 只读/禁止修改等必要边界, 以及需要返回的 decisive evidence、关键文件/符号/行号、候选 write set、未解决风险或建议下一步. 只有高风险或容易越界的探索才展开更多限制.
 

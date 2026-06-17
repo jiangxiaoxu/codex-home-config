@@ -35,6 +35,7 @@ workspace_dependencies = false
 apps = true
 goals = true
 js_repl = false
+resize_all_images = true
 
   [features.multi_agent_v2]
   enabled = false
