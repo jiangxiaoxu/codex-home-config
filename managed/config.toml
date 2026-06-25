@@ -29,7 +29,6 @@ enabled = false
 enabled = false
 
 [features]
-tool_search_always_defer_mcp_tools = true
 runtime_metrics = true
 unified_exec = true
 default_mode_request_user_input = true
@@ -40,7 +39,6 @@ workspace_dependencies = false
 apps = true
 goals = true
 js_repl = false
-resize_all_images = true
 
   [features.multi_agent_v2]
   enabled = false

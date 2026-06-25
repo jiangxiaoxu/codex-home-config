@@ -31,6 +31,10 @@
 - 不使用 `powershell`/`pwsh` 的 `-File`, `-Command`, `-c`, `-EncodedCommand` 再包一层, 除非确需新进程语义, 如切换版本, 隔离 session, 覆盖 `ExecutionPolicy` 或验证启动行为.
 - 当前 shell 为 `pwsh` 时, 不回退 Windows PowerShell 5.1, 除非已验证必须切换, 并说明原因和兼容性影响.
 
+## MCP 开发与调试
+
+- 开发或调试 MCP 时, 应尽量维护一份可通过 `node_repl` MCP 调用的接口模式, 并优先用它做快速测试和验证; 当前上下文中已载入的 MCP 工具可能不能反映最新实现.
+
 ## Web Search
 
 - 当问题依赖外部知识, 当前事实或本地上下文无法可靠确认的信息时, 先 Web Search 再回答或实现.
