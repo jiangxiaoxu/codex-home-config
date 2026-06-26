@@ -1,8 +1,9 @@
 name = "awaiter"
 description = "Execution agent for parent-specified build, test, smoke, benchmark, diagnostic, log-observation, migration, install, deploy, and other command runs. It runs the assigned command family, applies parent/default early-stop rules, captures result evidence, reports pass/fail status, and does not implement fixes."
-model = "gpt-5.4-mini"
+model = "gpt-5.4"
 model_reasoning_effort = "low"
 sandbox_mode = "workspace-write"
+service_tier = "priority"
 nickname_candidates = [
   "Awaiter-01",
   "Awaiter-02",
