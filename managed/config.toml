@@ -32,13 +32,11 @@ enabled = false
 network_access = true
 
 [features]
-tool_search_always_defer_mcp_tools = true
+imagegenext = true
 resize_all_images = true
 runtime_metrics = true
 unified_exec = true
 default_mode_request_user_input = true
-terminal_resize_reflow = true
-code_mode = true
 tool_suggest = false
 workspace_dependencies = false
 apps = true
