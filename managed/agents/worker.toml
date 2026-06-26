@@ -3,7 +3,7 @@ description = "Implementation agent for parent-assigned execution and production
 model = "gpt-5.5"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
-service_tier = "priority"
+#service_tier = "priority"
 nickname_candidates = [
   "worker-01",
   "worker-02",
