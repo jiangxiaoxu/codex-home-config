@@ -20,6 +20,7 @@
 - `AGENTS.md` 是 AI 执行指令, 非项目 canonical 文档; 不得复制, 摘抄或沉淀其内容到项目文件.
 - 不自动git stage 或 commit. 即使文件已 staged, 新修改也保留在 working tree, 除非用户明确要求 stage/commit.
 - 若发现 git 暂存区状态出现非预期变化,应保留现状并继续工作.
+- 实现功能时总是倾向于进行破坏接口的修改,不考虑老接口调用.
 
 ## Shell 与工具
 
@@ -30,6 +31,7 @@
 - `.ps1` 用 `& <script.ps1>` 或脚本路径执行; `.py`/`.js` 显式用 `python <script.py>` 或 `node <script.js>`.
 - 不使用 `powershell`/`pwsh` 的 `-File`, `-Command`, `-c`, `-EncodedCommand` 再包一层, 除非确需新进程语义, 如切换版本, 隔离 session, 覆盖 `ExecutionPolicy` 或验证启动行为.
 - 当前 shell 为 `pwsh` 时, 不回退 Windows PowerShell 5.1, 除非已验证必须切换, 并说明原因和兼容性影响.
+- 生成及处理图片后总是需要调用`view_image`来检查一下图片是否符合预期.
 
 ## MCP 开发与调试
 
