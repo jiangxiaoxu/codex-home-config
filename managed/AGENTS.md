@@ -45,6 +45,7 @@
 
 ## Subagent orchestration
 
+- `spawn_agent`, `wait_agent`, interrupt / close / stop / follow-up 等 subagent lifecycle 工具始终视为延迟加载工具; 若当前工具列表中没有直接暴露, 先用 `tool_search` 搜索 `spawn_agent subagent wait_agent` 或对应 lifecycle 关键词来暴露可用工具, 再判定是否真的不可用.
 - `/root` 指当前直接与用户交互并负责最终答复的主 agent; `/root` 是全局最终 owner, 负责面向用户的最终答复和全局收敛. 若当前 subagent 工具使用 thread id 而不是 canonical path, `/root` 仍作为本文档中的 ownership 名称使用.
 - `subagent` 指 agent tree 中的协作 agent: an agent in a team of agents collaborating to complete a task. 它由 direct parent 通过当前可用的 `spawn_agent` 工具创建, 以 direct parent 提供的任务 brief 和授权边界为准; 在 `final` channel 或等价完成通知中返回的内容交付给 parent agent.
 - 默认 subagent 不自行创建, 调度, 恢复, 中断, 关闭, 等待或重新分配任何 agent tree 任务; 当任务授权明确允许时, 才可在授权边界内派发并管理自己创建的 direct child agent. Nested delegation 不自动扩展到任意后代.
@@ -148,6 +149,8 @@ Active `explorer` 未回答前, 不实现依赖该答案的改动. Active `await
 ### 7. Reuse, stop, and wait
 
 派发前若当前工具提供 agent listing/status 能力, 先用它做 reuse-or-stop 判断. `explorer` 默认新建, 只有问题边界完全一致且不会污染结果时复用; `awaiter` 在同 workspace/cwd/shell/environment 的连续验证 loop 中优先复用. 不再需要的 subagent 使用当前可用的 interrupt/close/stop 工具处理; 若工具语义是永久关闭, 后续工作重新 `spawn_agent`; 若工具语义是中断但可继续, 只有需要保留上下文时才复用.
+
+当 `spawn_agent` 因 subagent 数量达到上限或类似 quota/concurrency limit 失败时, `/root` 必须先关闭当前会话中可见/已知的全部 subagent, 包括 completed / errored / interrupted / not_found 残留项对应的可关闭 handle, 再重新派发新的 subagent. 不要只关闭一两个后立即重试; 先完整释放可见/已知集合, 再创建新的任务 agent.
 
 ### Agent status 返回值解释
 
