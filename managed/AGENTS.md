@@ -19,8 +19,10 @@
 - 优先精确类型和泛型约束; 避免 `any`, `unknown`, `void*`; 必须用时说明原因, 风险和收敛路径.
 - `AGENTS.md` 是 AI 执行指令, 非项目 canonical 文档; 不得复制, 摘抄或沉淀其内容到项目文件.
 - 不自动git stage 或 commit. 即使文件已 staged, 新修改也保留在 working tree, 除非用户明确要求 stage/commit.
+- 使用 `git` 合并本地和远端分支时, 默认优先使用 `rebase`, 如 `git pull --rebase` 或先 `git fetch` 再 `git rebase`, 除非用户明确要求 merge commit 或当前仓库策略禁止 rebase.
 - 若发现 git 暂存区状态出现非预期变化,应保留现状并继续工作.
 - 实现功能时总是倾向于进行破坏接口的修改,不考虑老接口调用.
+- 编写代码时避免新增仅用于命名、转发调用或包参数的包装器函数; 只有具备实质抽象价值时才引入.
 
 ## Shell 与工具
 
