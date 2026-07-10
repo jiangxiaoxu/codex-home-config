@@ -2019,13 +2019,15 @@ var partiallyManagedTopLevelTables = /* @__PURE__ */ new Set([
 var syncExcludedTopLevelKeys = /* @__PURE__ */ new Set([
   "agents",
   "model",
+  "model_context_window",
   "model_reasoning_effort",
   "model_catalog_json",
   "service_tier",
   "plan_mode_reasoning_effort"
 ]);
 var installRemovedTopLevelKeys = /* @__PURE__ */ new Set([
-  "agents"
+  "agents",
+  "model_context_window"
 ]);
 var installRemovedNestedPaths = [
   ["notice", "model_migrations"]

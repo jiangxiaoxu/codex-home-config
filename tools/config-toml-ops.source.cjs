@@ -20,13 +20,15 @@ const partiallyManagedTopLevelTables = new Set([
 const syncExcludedTopLevelKeys = new Set([
   'agents',
   'model',
+  'model_context_window',
   'model_reasoning_effort',
   'model_catalog_json',
   'service_tier',
   'plan_mode_reasoning_effort'
 ])
 const installRemovedTopLevelKeys = new Set([
-  'agents'
+  'agents',
+  'model_context_window'
 ])
 const installRemovedNestedPaths = [
   ['notice', 'model_migrations']

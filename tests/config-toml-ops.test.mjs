@@ -101,8 +101,9 @@ test('merge-install always removes notice.model_migrations from the installed re
   );
 });
 
-test('merge-install always removes agents from the installed result', () => {
+test('merge-install always removes agents and model_context_window from the installed result', () => {
   const sourceConfig = {
+    model_context_window: 200000,
     agents: {
       reviewer: {
         model: 'gpt-5.4'
@@ -114,6 +115,7 @@ test('merge-install always removes agents from the installed result', () => {
   };
 
   const targetConfig = {
+    model_context_window: 100000,
     agents: {
       stale_local: {
         model: 'gpt-5.3-codex'
@@ -734,9 +736,10 @@ test('publish-sync CLI drops managed keys that are missing locally', () => {
   });
 });
 
-test('publish-sync excludes agents, model keys, and notice.model_migrations when they are in the managed allowlist', () => {
+test('publish-sync excludes agents, model keys, model_context_window, and notice.model_migrations when they are in the managed allowlist', () => {
   const localConfig = {
     model: 'gpt-5.4',
+    model_context_window: 200000,
     model_reasoning_effort: 'medium',
     plan_mode_reasoning_effort: 'low',
     agents: {
@@ -763,6 +766,7 @@ test('publish-sync excludes agents, model keys, and notice.model_migrations when
       }
     },
     model: 'gpt-5.3-codex',
+    model_context_window: 100000,
     model_reasoning_effort: 'high',
     service_tier: 'default',
     plan_mode_reasoning_effort: 'xhigh',
