@@ -1,49 +1,39 @@
 ## 沟通
 
-- 使用中文和用户沟通; 技术术语和专有名词保留英文, 如 `Promise`, `API`, `React`.
-- 正文和代码注释使用半角符号.
-- 聊天时输出 本地路径使用绝对路径 Markdown link, 如 `[settings.md](C:/settings.md)`; 路径含空格时 link target 用尖括号.
-- 不在 Codex CLI 环境时, 解释`流程`,`时序`时可额外输出 Mermaid DSL 以提高可读性.
+- 使用中文和用户沟通; 技术术语、代码标识符及产品或框架等专有名词保留英文.
+- 写入或改写文档、代码注释、commit message 等持久化文本时, 始终使用半角符号; 聊天正文不受此规则约束.
 
 ## 澄清
 
-- `request_user_input` 工具可用时, 若不确定性会实质影响实现方向, 外部行为, 接口契约, 兼容性, 风险边界, 验收标准或用户预期, 且无法由上下文, 代码, 文档, 测试或运行结果消除, 必须先问.
-- 多个可行方案在侵入性, 可维护性, 性能, 兼容性, 依赖, 风险或 UX 上存在实质 tradeoff 时, 先简述差异并询问偏好.
-- 分析, 实现, 调试, 验证或收尾中出现新的关键不确定性时, 再次确认; 不用“合理 assumption”替代.
-- 提问聚焦目标, 边界, 成功标准, 失败处理和方案取舍. Default Mode 只在关键点暂停; Plan Mode 只要不确定性仍可能改变方案就继续问.
-- 若无法使用 `request_user_input`, 选择低风险, 可逆, 低侵入路径并在最终答复标注 assumption; 若无安全 assumption, 停止并说明 blocker.
+- 当不确定性或方案 tradeoff 可能实质改变实现方向, 外部行为, 接口契约, 兼容性, 风险边界, 验收标准或用户预期, 且无法从上下文, 代码, 文档, 测试或运行结果消除时, 使用 `request_user_input` 说明差异并确认; 后续出现同类关键不确定性时再次确认.
+- 这个工具不可用时, 仅在存在低风险, 可逆, 低侵入方案时继续并在最终答复标注 assumption; 否则停止并说明 blocker.
 
-## 搜索, 代码与操作
+## 搜索
 
 - `rg`: 使用 `--heading -n`; 位置参数只传真实目录或文件; glob 放 `-g/--glob`; 复杂 pattern 先存变量; 不用 `&&` 或 `;` 串联多个含引号/括号的 `rg`.
-- 优先精确类型和泛型约束; 避免 `any`, `unknown`, `void*`; 必须用时说明原因, 风险和收敛路径.
-- `AGENTS.md` 是 AI 执行指令, 非项目 canonical 文档; 不得复制, 摘抄或沉淀其内容到项目文件.
-- 使用 `git` 整合本地与远端分支时, 默认优先采用 `rebase` 以保持线性历史; 若用户明确要求 merge、仓库策略要求 merge commit, 或 rebase 会重写已共享历史, 则不要擅自 rebase.
+
+## 代码
+
+- 优先精确类型和泛型约束; 避免 `any` 和 `void*`; untrusted boundaries 应使用 `unknown`; 无论在何处使用 `unknown`, 均必须先 narrowing 再访问. 使用不精确类型时说明原因, 风险和收敛路径.
 - 编写代码时避免新增仅用于命名、转发调用或打包参数的薄包装函数; 只有当它封装稳定语义、维护不变量、复用实质逻辑或明确隔离边界时才引入.
-- 不自动git stage 或 commit. 即使文件已 staged, 新修改也保留在 working tree, 除非用户明确要求 stage/commit.
-- 若发现 git 暂存区状态出现非预期变化,应保留现状并继续工作.
-- 实现功能时总是倾向于进行破坏接口的修改,不考虑老接口调用.
+- 实现功能时默认倾向 breaking change, 不考虑旧接口调用.
+
+## 操作
+
+- `AGENTS.md` 是 AI 执行指令, 非项目 canonical 文档; 不得复制, 摘抄或沉淀其内容到项目文件.
+- 当任务已授权整合本地与远端分支时, 默认优先采用 `rebase` 以保持线性历史; 若用户明确要求 merge、仓库策略要求 merge commit, 或 rebase 会重写已共享历史, 则不要擅自 rebase.
+- 不自动 `git stage` 或 `git commit`; 即使文件已 staged, 新修改仍保留在 working tree. 暂存区状态出现非预期变化时保留现状, 除非用户明确要求 stage/commit.
 
 ## Shell 与工具
 
-- 以当前会话 shell 为准; `powershell` 与 `pwsh` 视为同族. 不为转义或模板额外包一层同族 shell.
-- 复杂编排, 重复逻辑, 跨平台处理, 文件/JSON/文本转换和可复用脚本优先用 `python`/`.py`; 只有依赖 PowerShell 语义, Windows 管理能力或既有 `.ps1` 入口时才用 `.ps1`.
-- 遇到复杂引号, 正则, JSON 或模板, 拆成简单命令并用变量承载中间结果.
-- 命令过长, 多行, 控制流复杂或管道/重定向多时, 写临时脚本后用当前 shell 原生执行; `python -c` 和 `node -e` 同理.
-- `.ps1` 用 `& <script.ps1>` 或脚本路径执行; `.py`/`.js` 显式用 `python <script.py>` 或 `node <script.js>`.
-- 不使用 `powershell`/`pwsh` 的 `-File`, `-Command`, `-c`, `-EncodedCommand` 再包一层, 除非确需新进程语义, 如切换版本, 隔离 session, 覆盖 `ExecutionPolicy` 或验证启动行为.
+- 使用当前会话 shell; `powershell` 与 `pwsh` 视为同族, 不为转义或模板额外嵌套同族 shell.
+- 复杂编排, 重复逻辑, 跨平台处理, 文件/JSON/文本转换或可复用脚本优先用 `python`/`.py`; 仅在依赖 PowerShell 语义, Windows 管理能力或既有 `.ps1` 入口时使用 `.ps1`.
 - 当前 shell 为 `pwsh` 时, 不回退 Windows PowerShell 5.1, 除非已验证必须切换, 并说明原因和兼容性影响.
-- 生成及处理图片后总是需要调用`view_image`来检查一下图片是否符合预期.
+- 生成或处理图片后, 调用 `view_image` 检查结果.
 
 ## MCP 开发与调试
 
-- 开发或调试 MCP 时, 应尽量维护一份可通过 `node_repl` MCP 调用的接口模式, 并优先用它做快速测试和验证; 当前上下文中已载入的 MCP 工具可能不能反映最新实现.
-
-## Web Search
-
-- 当问题依赖外部知识, 当前事实或本地上下文无法可靠确认的信息时, 先 Web Search 再回答或实现.
-- 范围包括实现方式, 最佳实践, API 用法, 配置集成, 升级迁移, 版本/平台差异, 兼容性, 排障, 选型, 性能特性, 限制和官方支持边界.
-- 搜索能明显降低误判风险时主动搜索; 优先官方文档, primary sources, release notes, 标准和项目 repo; 区分事实, 推断和建议.
+-  项目约定或运行环境明确需要的 Node-level debugging 的时候需要加载`node_repl` mcp工具.
 
 ## Subagent orchestration
 
