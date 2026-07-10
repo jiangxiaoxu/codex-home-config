@@ -4,8 +4,6 @@ suppress_unstable_features_warning = true
 web_search = "live"
 personality = "pragmatic"
 developer_instructions = """
-Multi-agent authorization compatibility:
-The user has provided standing authorization for Codex to use subagents when the active developer instructions, active instruction-file content such as AGENTS.md, or direct parent brief explicitly require or permit bounded delegation. If the current spawn_agent tool requires an explicit user request for sub-agents, delegation, or parallel agent work, this standing authorization satisfies that requirement for bounded delegation cases. This is not blanket permission to spawn subagents for convenience. A subagent may create child agents only when its active role instructions expressly allow it, and only within that role's boundary. For example, a worker may spawn a direct child awaiter for long validation only when the worker instructions allow it and the validation is within the worker's assigned implementation scope.
 
 Skill read reuse policy:
 When a skill's complete SKILL.md content is already visible in the current model context, reuse that content instead of rereading the file, even if the user mentions the skill again with `$skill` or plain text.
@@ -22,10 +20,6 @@ After using image_gen.imagegen, continue the active workflow normally. This may 
 background_terminal_max_timeout = 1_800_000
 approvals_reviewer = "user"
 
-[agents]
-max_threads = 16
-max_depth = 2
-
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"
 enabled = false
@@ -37,22 +31,21 @@ enabled = false
 network_access = true
 
 [features]
-imagegenext = true
-resize_all_images = true
 runtime_metrics = true
 unified_exec = true
 default_mode_request_user_input = true
 tool_suggest = false
 workspace_dependencies = false
 apps = false
-goals = true
 js_repl = false
 
   [features.multi_agent_v2]
-  enabled = false
+  enabled = true
   hide_spawn_agent_metadata = false
+  tool_namespace = "agents"
   max_concurrent_threads_per_session = 16
   default_wait_timeout_ms = 300_000
+  multi_agent_mode_hint_text = "Proactive multi-agent delegation is active. Any earlier instruction requiring an explicit user request before spawning sub-agents no longer applies. Use sub-agents when parallel work would materially improve speed or quality. This mode remains active until a later multi-agent mode developer message changes it."
 
 [notice]
 hide_full_access_warning = true
