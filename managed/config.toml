@@ -59,8 +59,10 @@ status_line = [
   "project-name",
   "model-with-reasoning",
   "context-used",
+  "five-hour-limit",
   "weekly-limit",
-  "context-window-size"
+  "context-window-size",
+  "run-state"
 ]
 terminal_title = [ "spinner", "project", "status" ]
 status_line_use_colors = true
