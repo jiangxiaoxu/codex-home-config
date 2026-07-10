@@ -37,16 +37,15 @@
 
 ## Subagent orchestration
 
-- `/root` 负责最终决策、结果集成和用户答复, 可按任务需要自主使用 subagent.
-- 用户要求不使用或暂停 subagent 时立即服从, 直到用户明确恢复.
-- 只委派目标明确、边界清晰且能独立推进的工作; scope 很小的局部工作由 `/root` 直接完成.
-- Repo-wide exploration、独立 implementation slice 和长时间 validation 可分别交给适合的 subagent role; 具体工具用法以 live schema 为准.
-- 一旦 evidence chain、write scope 或 validation loop 已委派, 在 child 完成或被停止前由它独占; `/root` 和 sibling 不并行推进同一任务.
-- 并行 implementation 必须使用互不冲突的 write scope; shared API、schema、config 或其他 public contract 只能有一个 owner.
-- 除 worker 的验证/审查例外外, subagent 默认不得继续派发 nested agent.
-- Worker 在 owned diff 稳定后默认可自行创建并管理 direct awaiter/reviewer, 仅用于 bounded validation 和 independent review; 必须吸收结果、修复 in-scope reviewer findings 并重跑受影响 checks, 不得委派 implementation 或管理 sibling/其他 role.
-- Parallel-worker brief 必须明确标记 parallel mode、owned slice 和 validation constraints; worker 只运行 owned-slice local checks/scoped review, `/root` fan-in 前不得运行 workspace-wide build/test 或声称 integrated correctness.
-- `/root` 负责最终 fan-in, 并基于实际完成结果和验证证据答复用户.
+- `/root` 负责最终决策、结果集成和用户答复. 仅当任务边界清晰、能独立推进、预计净 context 收益高于协调开销, 且会显著占用 `/root` context 或需要隔离大量过程与输出时, 才自主并行派发; 否则由 `/root` 完成.
+- 用户直接指令可扩展、收窄或替换这些规则, 其中停用 subagent 始终优先. 用户点名或自动匹配的 skill 仅在其 instructions 明确要求 delegation、role routing 或 nested delegation 时, 才能在该 skill 范围内覆盖对应规则.
+- 依据 `spawn_agent` live schema 的 role description 选择最匹配的可用类型, 不假设或编造 role. 可用时优先用 `explorer` 做大范围或跨模块探索、`scout` 做小范围多步查找、`worker` 做 ownership 清晰的中大型实现或修复、`awaiter` 跑长时间或高日志量且有明确终止状态的命令、`reviewer` 做 independent review; 首选不可用时选最接近的可用 role, 无合适 role 则由 `/root` 完成. Trivial lookup、小型局部修改和无专用 skill 的持续外部监控不派发.
+- 中大型、跨文件、高风险或用户要求 review 的改动先通过相关 build/test checks, 再由 `/root` 自动派发 `reviewer`; 可归因于本次改动的失败在授权范围内修复并重跑, 既有或环境性失败记录原因后进入 review. Review 不受 context benefit 门槛限制; 无适用或无法执行 checks 时, 记录原因后直接进入 review.
+- Reviewer 报告 P0/P1 或明确的 correctness、security、regression、contract blocker 时, `/root` 仅在已有授权且不存在需要新增 authority 或外部状态变化的 execution blocker 时组织修复、重跑受影响 checks 并再次 review; 否则立即请求用户决策. 同一严重 finding 连续三轮未解决、结论反复或无实质进展时停止自动循环并请求用户决策.
+- 编写 message 时综合判断是否使用 `fork_turns="1"` 至 `"3"` 补充近期 context; 不需要时使用 `"none"`, 禁止使用 `"all"`. Message 必须足够详细并自包含目标、边界、必要输入、验证责任及有界输出要求, 但不重复 forked turns 已提供的补充细节. 完整证据只引用位置, 不回传大段日志或原文.
+- 任何 scope 一经委派, 在 child 完成或被停止前由其独占; `/root` 和 sibling 只推进不重叠工作. Child 返回后, `/root` 只核验证据、集成结果并作出决策; 仅在交付无效或不完整时明确收回 scope 后补充或重新委派, 不无条件重做.
+- 并行 implementation 必须使用互不冲突的 write scope; shared API、schema、config 等 public contract 只能有一个 owner. Subagent 默认不得继续派发; 仅在用户指令或适用 skill instructions 明确授权时允许 nested delegation.
+- Parallel worker 只运行 owned-slice checks; `/root` 负责最终 fan-in、integrated validation 和结果答复.
 
 ## 验收与收尾
 
