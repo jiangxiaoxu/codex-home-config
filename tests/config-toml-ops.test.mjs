@@ -101,7 +101,7 @@ test('merge-install always removes notice.model_migrations from the installed re
   );
 });
 
-test('merge-install preserves the managed agents table in the installed result', () => {
+test('merge-install always removes agents from the installed result', () => {
   const sourceConfig = {
     agents: {
       reviewer: {
@@ -127,11 +127,6 @@ test('merge-install preserves the managed agents table in the installed result',
   assert.deepStrictEqual(
     buildMergeInstallConfig(sourceConfig, targetConfig),
     {
-      agents: {
-        reviewer: {
-          model: 'gpt-5.4'
-        }
-      },
       features: {
         runtime_metrics: true
       },
@@ -273,7 +268,7 @@ test('merge-install preserves local sandbox_workspace_write.writable_roots as an
   );
 });
 
-test('publish-sync emits agents from local config in addition to managed allowlist keys and skips projects plus notice.model_migrations', () => {
+test('publish-sync excludes agents, projects, and notice.model_migrations', () => {
   const localConfig = {
     model: 'gpt-5.4',
     model_reasoning_effort: 'medium',
@@ -326,11 +321,6 @@ test('publish-sync emits agents from local config in addition to managed allowli
   assert.deepStrictEqual(
     buildPublishedSyncConfig(localConfig, managedConfig),
     {
-      agents: {
-        reviewer: {
-          model: 'gpt-5.4'
-        }
-      },
       features: {
         runtime_metrics: true,
         guardian_approval: false
@@ -744,7 +734,7 @@ test('publish-sync CLI drops managed keys that are missing locally', () => {
   });
 });
 
-test('publish-sync includes agents while still excluding model keys and notice.model_migrations when they are in the managed allowlist', () => {
+test('publish-sync excludes agents, model keys, and notice.model_migrations when they are in the managed allowlist', () => {
   const localConfig = {
     model: 'gpt-5.4',
     model_reasoning_effort: 'medium',
@@ -790,11 +780,6 @@ test('publish-sync includes agents while still excluding model keys and notice.m
   assert.deepStrictEqual(
     buildPublishedSyncConfig(localConfig, managedConfig),
     {
-      agents: {
-        reviewer: {
-          model: 'gpt-5.4'
-        }
-      },
       notice: {
         hide_full_access_warning: true
       },
