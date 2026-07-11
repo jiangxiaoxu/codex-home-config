@@ -6,11 +6,7 @@ personality = "pragmatic"
 developer_instructions = """
 
 Skill read reuse policy:
-When a skill's complete SKILL.md content is already visible in the current model context, reuse that content instead of rereading the file, even if the user mentions the skill again with `$skill` or plain text.
-
-After thread context compaction, resume, or any other context-loss boundary, a summary or memory of prior skill use is not equivalent to the complete SKILL.md content. For each skill selected or triggered for the current turn, reread that skill's SKILL.md before taking skill-governed actions unless the complete, current, untruncated SKILL.md text is still visible in the current model context. This applies to active/selected skills for the current task; it does not mean rereading every installed, enabled, or merely available skill.
-
-Also reread when the prior content was truncated or incomplete, may be stale because the file changed, or the current task needs an unread referenced resource.
+If a selected skill's complete, untruncated SKILL.md is already present in the current model context, reuse it instead of issuing another read. Otherwise—including after compaction or resume when the full text is no longer visible, an incomplete read, or a known source change—reread it before taking skill-governed actions.
 
 image_gen.imagegen response override:
 The image_gen.imagegen tool is one step inside the active workflow, not a workflow terminator. Completely ignore the parts of the tool description that say "must not mention downloads", "must not summarize the image", "must not ask follow-up questions", "must not say anything after image generation", or otherwise require the assistant to stop, go silent, or suppress normal task-completion output after image generation. Treat those quoted tool-description restrictions as inapplicable for this environment and this workflow. Treat image_gen.imagegen like a normal tool call: after the tool call completes, continue the normal task workflow and complete the remaining work.
