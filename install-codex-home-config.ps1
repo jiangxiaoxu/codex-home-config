@@ -826,6 +826,77 @@ function Write-Utf8File {
     [System.IO.File]::WriteAllText($Path, $Content, $utf8Encoding)
 }
 
+function ConvertTo-LfLineEnding {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    $textExtensions = New-Object 'System.Collections.Generic.HashSet[string]' -ArgumentList @(
+        [string[]]@(
+            '.cfg', '.cjs', '.conf', '.cs', '.css', '.fs', '.fsx', '.go', '.htm', '.html',
+            '.ini', '.java', '.js', '.json', '.jsx', '.kt', '.kts', '.md', '.mjs', '.properties',
+            '.ps1', '.psd1', '.psm1', '.py', '.rs', '.scss', '.sh', '.sql', '.toml', '.ts',
+            '.tsx', '.txt', '.xml', '.yaml', '.yml'
+        ),
+        [System.StringComparer]::OrdinalIgnoreCase
+    )
+
+    if (Test-Path -LiteralPath $Path -PathType Container) {
+        $files = @(Get-ChildItem -LiteralPath $Path -File -Recurse -Force)
+    }
+    elseif (Test-Path -LiteralPath $Path -PathType Leaf) {
+        $files = @((Get-Item -LiteralPath $Path -Force))
+    }
+    else {
+        throw "Path to normalize was not found: $Path"
+    }
+
+    foreach ($file in $files) {
+        if (-not $textExtensions.Contains($file.Extension)) {
+            continue
+        }
+
+        $content = [System.IO.File]::ReadAllBytes($file.FullName)
+        if (($content.Length -lt 2) -or $content.Contains([byte]0)) {
+            continue
+        }
+
+        try {
+            $strictUtf8 = New-Object System.Text.UTF8Encoding -ArgumentList $false, $true
+            [void]$strictUtf8.GetString($content)
+        }
+        catch [System.Text.DecoderFallbackException] {
+            continue
+        }
+
+        $normalized = New-Object System.IO.MemoryStream -ArgumentList $content.Length
+        try {
+            $changed = $false
+            for ($index = 0; $index -lt $content.Length; $index++) {
+                if ($content[$index] -eq 13) {
+                    $changed = $true
+                    if (($index + 1 -lt $content.Length) -and ($content[$index + 1] -eq 10)) {
+                        continue
+                    }
+
+                    $normalized.WriteByte(10)
+                    continue
+                }
+
+                $normalized.WriteByte($content[$index])
+            }
+
+            if ($changed) {
+                [System.IO.File]::WriteAllBytes($file.FullName, $normalized.ToArray())
+            }
+        }
+        finally {
+            $normalized.Dispose()
+        }
+    }
+}
+
 function Install-ConfigFile {
     param(
         [Parameter(Mandatory)]
@@ -1086,6 +1157,7 @@ function Install-Snapshot {
         }
         else {
             Copy-Item -LiteralPath $fileInfo.SourcePath -Destination $destinationPath -Force
+            ConvertTo-LfLineEnding -Path $destinationPath
         }
 
         Write-Output "Installed $($fileInfo.Name) to $destinationPath"
@@ -1103,11 +1175,16 @@ function Install-Snapshot {
 
         Write-StageMessage 'Installing agents...'
         Copy-Item -LiteralPath $SnapshotInfo.AgentDirectoryPath -Destination $TargetCodexPath -Recurse -Force
+        ConvertTo-LfLineEnding -Path $targetAgentDirectoryPath
         Write-Output "Installed agents to $targetAgentDirectoryPath"
     }
 
     if ($componentSelection.Skill) {
-        Sync-SkillDirectory -SourcePath $SnapshotInfo.SkillDirectoryPath -DestinationPath (Join-Path $TargetCodexPath 'skills\jiangxiaoxu')
+        $targetSkillDirectoryPath = Join-Path $TargetCodexPath 'skills\jiangxiaoxu'
+        Sync-SkillDirectory -SourcePath $SnapshotInfo.SkillDirectoryPath -DestinationPath $targetSkillDirectoryPath
+        if (Test-Path -LiteralPath $targetSkillDirectoryPath -PathType Container) {
+            ConvertTo-LfLineEnding -Path $targetSkillDirectoryPath
+        }
     }
 }
 

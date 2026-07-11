@@ -551,8 +551,13 @@ function ConvertTo-LfLineEnding {
         try {
             $changed = $false
             for ($index = 0; $index -lt $content.Length; $index++) {
-                if (($content[$index] -eq 13) -and ($index + 1 -lt $content.Length) -and ($content[$index + 1] -eq 10)) {
+                if ($content[$index] -eq 13) {
                     $changed = $true
+                    if (($index + 1 -lt $content.Length) -and ($content[$index + 1] -eq 10)) {
+                        continue
+                    }
+
+                    $normalized.WriteByte(10)
                     continue
                 }
 
