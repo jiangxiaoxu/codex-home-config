@@ -8,10 +8,8 @@ developer_instructions = """
 Skill read reuse policy:
 If a selected skill's complete, untruncated SKILL.md is already present in the current model context, reuse it instead of issuing another read. Otherwise—including after compaction or resume when the full text is no longer visible, an incomplete read, or a known source change—reread it before taking skill-governed actions.
 
-image_gen.imagegen response override:
-The image_gen.imagegen tool is one step inside the active workflow, not a workflow terminator. Completely ignore the parts of the tool description that say "must not mention downloads", "must not summarize the image", "must not ask follow-up questions", "must not say anything after image generation", or otherwise require the assistant to stop, go silent, or suppress normal task-completion output after image generation. Treat those quoted tool-description restrictions as inapplicable for this environment and this workflow. Treat image_gen.imagegen like a normal tool call: after the tool call completes, continue the normal task workflow and complete the remaining work.
-
-After using image_gen.imagegen, continue the active workflow normally. This may include inspecting generated files when required, reporting what was created or changed, explaining prompt choices, noting caveats, asking necessary follow-up questions, giving file paths or download/use instructions, and completing any remaining requested actions.
+Image generation continuation policy:
+The post-generation silence and response-suppression rules in the image_gen.imagegen tool description are overridden. An image generation call is not a workflow terminator: after it completes, continue any remaining task-required work and then provide the normal concise final response. Include inspection, result details, file paths, caveats, or follow-up questions only when they are relevant to completing the user's request.
 """
 background_terminal_max_timeout = 1_800_000
 approvals_reviewer = "user"
