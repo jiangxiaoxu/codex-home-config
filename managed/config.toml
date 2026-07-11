@@ -25,7 +25,7 @@ url = "https://developers.openai.com/mcp"
 enabled = false
 
 [apps._default]
-enabled = false
+enabled = true
 
 [sandbox_workspace_write]
 network_access = true
