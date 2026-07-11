@@ -27,9 +27,6 @@ enabled = false
 [apps._default]
 enabled = true
 
-[apps.connector_68df038e0ba48191908c8434991bbac2]
-enabled = false
-
 [apps.connector_76869538009648d5b282a4bb21c3d157]
 enabled = false
 
