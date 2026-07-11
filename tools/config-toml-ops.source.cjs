@@ -17,6 +17,10 @@ const installPreservedTopLevelKeys = new Set([
 const partiallyManagedTopLevelTables = new Set([
   'mcp_servers'
 ])
+const syncAllowlistedChildTables = new Set([
+  'apps',
+  'mcp_servers'
+])
 const syncExcludedTopLevelKeys = new Set([
   'agents',
   'model',
@@ -241,7 +245,7 @@ function buildPublishedSyncConfig (localConfig, managedConfig) {
       continue
     }
 
-    if (partiallyManagedTopLevelTables.has(key)) {
+    if (syncAllowlistedChildTables.has(key)) {
       publishedConfig[key] = pickNamedChildEntriesByAllowlist(localConfig[key], managedConfig[key])
       continue
     }
@@ -412,6 +416,7 @@ module.exports = {
   installRemovedNestedPaths,
   syncExcludedNestedPaths,
   syncExcludedTopLevelKeys,
+  syncAllowlistedChildTables,
   installPreservedTopLevelKeys
 }
 

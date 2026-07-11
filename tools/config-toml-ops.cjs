@@ -2016,6 +2016,10 @@ var installPreservedTopLevelKeys = /* @__PURE__ */ new Set([
 var partiallyManagedTopLevelTables = /* @__PURE__ */ new Set([
   "mcp_servers"
 ]);
+var syncAllowlistedChildTables = /* @__PURE__ */ new Set([
+  "apps",
+  "mcp_servers"
+]);
 var syncExcludedTopLevelKeys = /* @__PURE__ */ new Set([
   "agents",
   "model",
@@ -2195,7 +2199,7 @@ function buildPublishedSyncConfig(localConfig, managedConfig) {
     if (key === "projects" || syncExcludedTopLevelKeys.has(key) || !hasOwn(localConfig, key)) {
       continue;
     }
-    if (partiallyManagedTopLevelTables.has(key)) {
+    if (syncAllowlistedChildTables.has(key)) {
       publishedConfig[key] = pickNamedChildEntriesByAllowlist(localConfig[key], managedConfig[key]);
       continue;
     }
@@ -2335,6 +2339,7 @@ module.exports = {
   installRemovedNestedPaths,
   syncExcludedNestedPaths,
   syncExcludedTopLevelKeys,
+  syncAllowlistedChildTables,
   installPreservedTopLevelKeys
 };
 if (require.main === module) {

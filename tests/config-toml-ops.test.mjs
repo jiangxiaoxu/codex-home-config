@@ -236,6 +236,44 @@ test('merge-install syncs managed mcp servers by server name and preserves unman
   );
 });
 
+test('merge-install applies the complete managed apps table', () => {
+  const sourceConfig = {
+    apps: {
+      _default: {
+        enabled: true
+      },
+      connector_managed_only: {
+        enabled: true
+      }
+    }
+  };
+
+  const targetConfig = {
+    apps: {
+      _default: {
+        enabled: false
+      },
+      connector_local_only: {
+        enabled: true
+      }
+    }
+  };
+
+  assert.deepStrictEqual(
+    buildMergeInstallConfig(sourceConfig, targetConfig),
+    {
+      apps: {
+        _default: {
+          enabled: true
+        },
+        connector_managed_only: {
+          enabled: true
+        }
+      }
+    }
+  );
+});
+
 test('merge-install preserves local sandbox_workspace_write.writable_roots as an unmanaged nested path', () => {
   const sourceConfig = {
     sandbox_workspace_write: {
@@ -492,6 +530,50 @@ test('publish-sync only emits managed mcp servers by server name', () => {
             '-Command',
             'node "local.js"'
           ]
+        }
+      }
+    }
+  );
+});
+
+test('publish-sync only emits managed apps by app name', () => {
+  const localConfig = {
+    apps: {
+      _default: {
+        enabled: true
+      },
+      connector_managed: {
+        enabled: false
+      },
+      connector_local_only: {
+        enabled: true
+      }
+    }
+  };
+
+  const managedConfig = {
+    apps: {
+      _default: {
+        enabled: false
+      },
+      connector_managed: {
+        enabled: true
+      },
+      connector_published_only: {
+        enabled: true
+      }
+    }
+  };
+
+  assert.deepStrictEqual(
+    buildPublishedSyncConfig(localConfig, managedConfig),
+    {
+      apps: {
+        _default: {
+          enabled: true
+        },
+        connector_managed: {
+          enabled: false
         }
       }
     }
