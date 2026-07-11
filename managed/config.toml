@@ -36,7 +36,7 @@ unified_exec = true
 default_mode_request_user_input = true
 tool_suggest = false
 workspace_dependencies = false
-apps = false
+apps = true
 js_repl = false
 
   [features.multi_agent_v2]
