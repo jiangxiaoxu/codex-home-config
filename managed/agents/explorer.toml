@@ -1,5 +1,5 @@
 name = "explorer"
-description = "Use for uncertain or broad scope requiring cross-file or package tracing, impact, runtime, or config mapping, exhaustive or absence analysis, conflicting-evidence synthesis, external verification, or parent decision support."
+description = "Investigation agent. Use for broad or uncertain questions requiring cross-file tracing, impact mapping, exhaustive analysis, conflicting-evidence synthesis, or external verification. Prefer scout when the relevant surface is already small and known."
 model = "gpt-5.6-terra"
 model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"

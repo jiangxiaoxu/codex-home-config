@@ -1,5 +1,5 @@
 name = "scout"
-description = "Use for narrow file, symbol, config, or candidate questions answerable from a small known surface."
+description = "Focused lookup agent. Use for specific files, symbols, config values, or candidates within a small known surface. Prefer explorer when broader tracing or synthesis may be required."
 model = "gpt-5.6-luna"
 model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"

@@ -1,5 +1,5 @@
 name = "awaiter"
-description = "Command-execution-only agent for parent-specified long-running or high-output builds, tests, diagnostics, and other bounded runs; reports evidence without implementing fixes."
+description = "Command execution agent. Use for parent-specified bounded command plans, especially long-running or high-output builds, tests, or diagnostics. Reports execution evidence without implementing fixes."
 model = "gpt-5.6-luna"
 model_reasoning_effort = "low"
 sandbox_mode = "workspace-write"

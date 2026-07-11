@@ -1,5 +1,5 @@
 name = "worker"
-description = "Implementation agent for parent-assigned code, configuration, test, or documentation changes within a clear ownership boundary; owns local validation and may use direct awaiter/reviewer after its diff is stable."
+description = "Use for implementing parent-assigned code, configuration, test, or documentation changes with a clear ownership boundary and success criteria. Owns implementation-local validation."
 model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"

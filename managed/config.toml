@@ -45,6 +45,7 @@ js_repl = false
   tool_namespace = "agents"
   max_concurrent_threads_per_session = 16
   default_wait_timeout_ms = 300_000
+  multi_agent_mode_hint_text = "Proactive multi-agent delegation is active for `/root`. For `/root`, any earlier instruction requiring an explicit user request before spawning sub-agents no longer applies; `/root` should use sub-agents when parallel work would materially improve speed or quality. A sub-agent must not spawn additional sub-agents unless explicitly authorized to do so by `/root`, by a user instruction applying to that sub-agent, or by a separate developer instruction. This message authorizes proactive delegation only for `/root` and is not itself authorization for sub-agents to delegate. This mode remains active until superseded by a later multi-agent mode developer message."
 
 [notice]
 hide_full_access_warning = true
