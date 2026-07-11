@@ -131,6 +131,7 @@ When publishing `config.toml`, the sync script uses the current `managed/config.
 When `-Components` is omitted, the sync script processes `Skill` as part of the full publish. If `.codex/skills/jiangxiaoxu` exists, it is copied into `managed/skills/jiangxiaoxu`; otherwise the managed skill directory is removed. Explicit partial sync runs leave `Skill` untouched unless it is selected.
 `-Components` accepts `Config`, `AgentFile`, `AgentFolder`, and `Skill`. If omitted, the sync script still publishes all four managed components.
 The same `-Components` values apply here: `Config` -> `config.toml`, `AgentFile` -> `AGENTS.md`, `AgentFolder` -> `agents`, `Skill` -> `skills/jiangxiaoxu`.
+Published UTF-8 text files with known text extensions are normalized to LF line endings before the repository diff is reviewed and committed. Binary assets, other encodings, and files with unknown extensions are left unchanged.
 
 ## Development
 

@@ -499,6 +499,76 @@ function Copy-ItemIfDifferentPath {
     Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
 }
 
+function ConvertTo-LfLineEnding {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    $textExtensions = [System.Collections.Generic.HashSet[string]]::new(
+        [string[]]@(
+            '.cfg', '.cjs', '.conf', '.cs', '.css', '.fs', '.fsx', '.go', '.htm', '.html',
+            '.ini', '.java', '.js', '.json', '.jsx', '.kt', '.kts', '.md', '.mjs', '.properties',
+            '.ps1', '.psd1', '.psm1', '.py', '.rs', '.scss', '.sh', '.sql', '.toml', '.ts',
+            '.tsx', '.txt', '.xml', '.yaml', '.yml'
+        ),
+        [System.StringComparer]::OrdinalIgnoreCase
+    )
+
+    if (Test-Path -LiteralPath $Path -PathType Container) {
+        $files = @(Get-ChildItem -LiteralPath $Path -File -Recurse -Force)
+    }
+    elseif (Test-Path -LiteralPath $Path -PathType Leaf) {
+        $files = @((Get-Item -LiteralPath $Path -Force))
+    }
+    else {
+        throw "Path to normalize was not found: $Path"
+    }
+
+    foreach ($file in $files) {
+        if (-not $textExtensions.Contains($file.Extension)) {
+            continue
+        }
+
+        $content = [System.IO.File]::ReadAllBytes($file.FullName)
+        if ($content.Length -lt 2) {
+            continue
+        }
+
+        if ($content.Contains([byte]0)) {
+            continue
+        }
+
+        try {
+            $strictUtf8 = [System.Text.UTF8Encoding]::new($false, $true)
+            [void]$strictUtf8.GetString($content)
+        }
+        catch [System.Text.DecoderFallbackException] {
+            continue
+        }
+
+        $normalized = [System.IO.MemoryStream]::new($content.Length)
+        try {
+            $changed = $false
+            for ($index = 0; $index -lt $content.Length; $index++) {
+                if (($content[$index] -eq 13) -and ($index + 1 -lt $content.Length) -and ($content[$index + 1] -eq 10)) {
+                    $changed = $true
+                    continue
+                }
+
+                $normalized.WriteByte($content[$index])
+            }
+
+            if ($changed) {
+                [System.IO.File]::WriteAllBytes($file.FullName, $normalized.ToArray())
+            }
+        }
+        finally {
+            $normalized.Dispose()
+        }
+    }
+}
+
 function Get-ConfigTextNewLine {
     param(
         [Parameter(Mandatory)]
@@ -824,10 +894,13 @@ try {
             managed = $managedConfigPath
             output  = $managedConfigPath
         }
+        ConvertTo-LfLineEnding -Path $managedConfigPath
     }
 
     if ($componentSelection.AgentFile) {
-        Copy-ItemIfDifferentPath -SourcePath $sourceAgentsPath -DestinationPath (Join-Path $repoManagedPath 'AGENTS.md')
+        $managedAgentsPath = Join-Path $repoManagedPath 'AGENTS.md'
+        Copy-ItemIfDifferentPath -SourcePath $sourceAgentsPath -DestinationPath $managedAgentsPath
+        ConvertTo-LfLineEnding -Path $managedAgentsPath
     }
 
     if ($componentSelection.AgentFolder) {
@@ -837,13 +910,20 @@ try {
         }
 
         Copy-Item -LiteralPath $sourceAgentDirectoryPath -Destination $repoManagedPath -Recurse -Force
+        ConvertTo-LfLineEnding -Path $repoAgentDirectoryPath
     }
 
     if ($componentSelection.Skill) {
-        Sync-ManagedSkillDirectory -SourcePath $sourceSkillDirectoryPath -DestinationPath (Join-Path $repoManagedPath 'skills\jiangxiaoxu')
+        $managedSkillDirectoryPath = Join-Path $repoManagedPath 'skills\jiangxiaoxu'
+        Sync-ManagedSkillDirectory -SourcePath $sourceSkillDirectoryPath -DestinationPath $managedSkillDirectoryPath
+        if (Test-Path -LiteralPath $managedSkillDirectoryPath -PathType Container) {
+            ConvertTo-LfLineEnding -Path $managedSkillDirectoryPath
+        }
     }
 
-    Copy-ItemIfDifferentPath -SourcePath $sourceSyncScriptPath -DestinationPath (Join-Path $RepoPath 'sync-codex-home-config-repo.ps1')
+    $repoSyncScriptPath = Join-Path $RepoPath 'sync-codex-home-config-repo.ps1'
+    Copy-ItemIfDifferentPath -SourcePath $sourceSyncScriptPath -DestinationPath $repoSyncScriptPath
+    ConvertTo-LfLineEnding -Path $repoSyncScriptPath
 
     $legacyConfigPath = Join-Path $RepoPath 'config.toml'
     if (Test-Path -LiteralPath $legacyConfigPath -PathType Leaf) {
