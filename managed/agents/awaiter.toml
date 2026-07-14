@@ -1,5 +1,5 @@
 name = "awaiter"
-description = "Command-execution agent for parent-defined plans, especially long-running or high-output builds, tests, benchmarks, and diagnostic commands. A parent agent should prefer delegating extended command runs to awaiter instead of blocking on them directly. Executes commands and reports evidence without diagnosing causes or implementing fixes."
+description = "Command-execution role for a specified plan. Best suited to long-running, high-output, or wait-heavy builds, tests, benchmarks, and bounded diagnostic commands when the task is to execute and report evidence rather than analyze failures or change code."
 model = "gpt-5.6-luna"
 model_reasoning_effort = "low"
 sandbox_mode = "workspace-write"

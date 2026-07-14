@@ -1,5 +1,5 @@
 name = "explorer"
-description = "Investigation agent. Use for broad or uncertain questions requiring cross-file tracing, impact mapping, exhaustive analysis, conflicting-evidence synthesis, or external verification. Prefer scout when the relevant surface is already small and known."
+description = "Investigation role for broad or uncertain questions requiring cross-file tracing, impact mapping, evidence reconciliation, exhaustive coverage, or targeted external verification. Prefer scout when the answer can be established within a small known surface."
 model = "gpt-5.6-terra"
 model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"

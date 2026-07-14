@@ -1,5 +1,5 @@
 name = "reviewer"
-description = "Use for independent review of a stable implementation or existing diff for correctness, regressions, security, API or contract safety, and test coverage. Reports findings without implementing fixes."
+description = "Independent, read-only assessment of a stable implementation or existing diff for correctness, regressions, security, API or contract safety, and test coverage. Intended for changes ready for assessment; use explorer when the task is to investigate an open question before a stable diff exists."
 model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"

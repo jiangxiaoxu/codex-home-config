@@ -1,5 +1,5 @@
 name = "bounded_worker"
-description = "Default delegation target for narrow, low-risk implementation tasks whose ownership boundary, intended behavior, and acceptance criteria are already clear. A parent agent should prefer delegating such work to bounded_worker instead of implementing it directly. Escalate complex, cross-module, or high-judgment implementation work, including implementation work that requires complex diagnosis, to worker. Route standalone investigation or diagnosis to explorer."
+description = "Default implementation choice for a narrow, low-risk change with a clear write boundary, intended behavior, and local acceptance criteria. Best suited to self-contained patches; use worker when the change requires cross-module coordination, contract decisions, compatibility analysis, security or concurrency judgment, or substantial diagnosis."
 model = "gpt-5.6-terra"
 model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"

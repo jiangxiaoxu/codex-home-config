@@ -1,5 +1,5 @@
 name = "scout"
-description = "Default delegation target for focused lookups involving specific files, symbols, config values, or candidates within a small known surface. A parent agent should prefer delegating such work to scout instead of performing the lookup directly. Prefer explorer when the investigation is broad, uncertain, or cross-module, or requires tracing, impact analysis, exhaustive coverage, or synthesis."
+description = "Default lookup choice for a small known surface: named files, symbols, configuration values, or a short candidate set. Best suited when focused inspection can establish the answer; use explorer when the relevant surface, dependencies, or answer path are uncertain."
 model = "gpt-5.6-luna"
 model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
