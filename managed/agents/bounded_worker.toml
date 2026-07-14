@@ -1,9 +1,8 @@
 name = "bounded_worker"
 description = "Narrow implementation role for a self-contained, low-risk change with a clear solution, write boundary, intended behavior, and local acceptance criteria. Best suited to localized patches; use `worker` when implementation spans modules or requires contract, compatibility, security, concurrency, architecture, or substantial diagnostic judgment."
 model = "gpt-5.6-terra"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
-#service_tier = "priority"
 nickname_candidates = [
   "bounded-worker-a",
   "bounded-worker-b",
