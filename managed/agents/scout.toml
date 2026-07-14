@@ -1,9 +1,8 @@
 name = "scout"
-description = "Focused lookup agent. Use for specific files, symbols, config values, or candidates within a small known surface. Prefer explorer when broader tracing or synthesis may be required."
+description = "Default delegation target for focused lookups involving specific files, symbols, config values, or candidates within a small known surface. A parent agent should prefer delegating such work to scout instead of performing the lookup directly. Prefer explorer when the investigation is broad, uncertain, or cross-module, or requires tracing, impact analysis, exhaustive coverage, or synthesis."
 model = "gpt-5.6-luna"
 model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
-#service_tier = "priority"
 nickname_candidates = [
   "scout-a",
   "scout-b",

@@ -3,7 +3,6 @@ description = "Command execution agent. Use for parent-specified bounded command
 model = "gpt-5.6-luna"
 model_reasoning_effort = "low"
 sandbox_mode = "workspace-write"
-service_tier = "priority"
 nickname_candidates = [
   "awaiter-a",
   "awaiter-b",

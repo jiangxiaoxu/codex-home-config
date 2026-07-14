@@ -1,14 +1,15 @@
-name = "worker"
-description = "Implementation agent for parent-assigned code, configuration, test, or documentation changes that require substantial judgment or a stronger correctness boundary. Use for contracts, architecture, compatibility, security, concurrency, cross-cutting behavior, or other non-routine implementation work. Complex diagnosis belongs here only when it is necessary to complete an already assigned implementation or fix; route standalone investigation or diagnosis to explorer. Prefer bounded_worker when the solution is already clear, local, low risk, and can be validated within a narrow ownership boundary. Owns implementation-local validation."
-model = "gpt-5.6-sol"
-model_reasoning_effort = "high"
+name = "bounded_worker"
+description = "Default delegation target for narrow, low-risk implementation tasks whose ownership boundary, intended behavior, and acceptance criteria are already clear. A parent agent should prefer delegating such work to bounded_worker instead of implementing it directly. Escalate complex, cross-module, or high-judgment implementation work, including implementation work that requires complex diagnosis, to worker. Route standalone investigation or diagnosis to explorer."
+model = "gpt-5.6-terra"
+model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
+#service_tier = "priority"
 nickname_candidates = [
-  "worker-a",
-  "worker-b",
-  "worker-c",
-  "worker-d",
-  "worker-e",
+  "bounded-worker-a",
+  "bounded-worker-b",
+  "bounded-worker-c",
+  "bounded-worker-d",
+  "bounded-worker-e",
 ]
 
 developer_instructions = """

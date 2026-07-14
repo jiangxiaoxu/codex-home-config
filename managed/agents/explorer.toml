@@ -3,7 +3,6 @@ description = "Investigation agent. Use for broad or uncertain questions requiri
 model = "gpt-5.6-terra"
 model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
-#service_tier = "priority"
 nickname_candidates = [
   "explorer-a",
   "explorer-b",

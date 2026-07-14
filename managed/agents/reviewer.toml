@@ -3,7 +3,6 @@ description = "Use for independent review of a stable implementation or existing
 model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
-#service_tier = "priority"
 nickname_candidates = [
   "reviewer-a",
   "reviewer-b",
