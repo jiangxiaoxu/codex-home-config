@@ -1,5 +1,5 @@
 name = "bounded_worker"
-description = "Default implementation choice for a narrow, low-risk change with a clear write boundary, intended behavior, and local acceptance criteria. Best suited to self-contained patches; use worker when the change requires cross-module coordination, contract decisions, compatibility analysis, security or concurrency judgment, or substantial diagnosis."
+description = "Narrow implementation role for a self-contained, low-risk change with a clear solution, write boundary, intended behavior, and local acceptance criteria. Best suited to localized patches; use worker when implementation spans modules or requires contract, compatibility, security, concurrency, architecture, or substantial diagnostic judgment."
 model = "gpt-5.6-terra"
 model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"

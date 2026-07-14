@@ -1,5 +1,5 @@
 name = "scout"
-description = "Default lookup choice for a small known surface: named files, symbols, configuration values, or a short candidate set. Best suited when focused inspection can establish the answer; use explorer when the relevant surface, dependencies, or answer path are uncertain."
+description = "Focused information gathering within a given small, known surface: named files, symbols, configuration values, or a short candidate set. Best suited when focused inspection can establish the answer without material synthesis; use explorer when the surface must be discovered or evidence reconciliation, impact analysis, or material synthesis is required."
 model = "gpt-5.6-luna"
 model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"

@@ -1,5 +1,5 @@
 name = "worker"
-description = "Implementation role for changes requiring substantial judgment or a strong correctness boundary, including contracts, architecture, compatibility, security, concurrency, cross-cutting behavior, and implementation-coupled diagnosis. Prefer bounded_worker when the solution and write scope are already clear, local, and low risk."
+description = "Complex implementation role for cross-module, cross-cutting, or high-judgment changes requiring a strong correctness boundary. Suited to contracts, architecture, compatibility, security, concurrency, migrations, and implementation-coupled diagnosis; use bounded_worker when the solution and write scope are already clear, local, and low risk."
 model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
