@@ -19,9 +19,6 @@ url = "https://developers.openai.com/mcp"
 enabled = false
 
 [apps._default]
-enabled = true
-
-[apps.connector_76869538009648d5b282a4bb21c3d157]
 enabled = false
 
 [sandbox_workspace_write]
@@ -33,7 +30,7 @@ unified_exec = true
 default_mode_request_user_input = true
 tool_suggest = false
 workspace_dependencies = false
-apps = true
+apps = false
 js_repl = false
 
   [features.multi_agent_v2]
