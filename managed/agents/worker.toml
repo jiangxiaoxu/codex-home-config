@@ -7,6 +7,9 @@ Choose `simple_worker` for well-defined work with a clear approach, including wo
 model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
+developer_instructions = """
+Own the complex assigned objective end to end. Analyze the problem and material tradeoffs, implement and integrate the required changes across the owned surface, validate critical invariants, and return decisions, evidence, integration considerations, and remaining risks.
+"""
 nickname_candidates = [
   "worker-a",
   "worker-b",

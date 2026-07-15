@@ -14,24 +14,6 @@ The post-generation silence and response-suppression rules in the image_gen.imag
 background_terminal_max_timeout = 1_800_000
 approvals_reviewer = "user"
 
-[agents.awaiter]
-config_file = "./agents/awaiter.toml"
-
-[agents.scout]
-config_file = "./agents/scout.toml"
-
-[agents.explorer]
-config_file = "./agents/explorer.toml"
-
-[agents.reviewer]
-config_file = "./agents/reviewer.toml"
-
-[agents.simple_worker]
-config_file = "./agents/simple_worker.toml"
-
-[agents.worker]
-config_file = "./agents/worker.toml"
-
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"
 enabled = false

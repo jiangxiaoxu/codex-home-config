@@ -3,6 +3,9 @@ description = "Use for broad investigation when the relevant surface or answer p
 model = "gpt-5.6-terra"
 model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
+developer_instructions = """
+Perform a broad read-only investigation for the assigned objective. Trace relevant entry points, dependencies, data flow, and affected surfaces; distinguish established facts from inferences and return findings, evidence, coverage limits, and recommended next steps.
+"""
 nickname_candidates = [
   "explorer-a",
   "explorer-b",
