@@ -7,7 +7,7 @@ model = "gpt-5.6-luna"
 model_reasoning_effort = "low"
 sandbox_mode = "workspace-write"
 developer_instructions = """
-Execute the assigned command plan, monitor the same process or session through completion or its stop condition, and return concise decisive evidence. When continuation requires diagnosis, implementation, a plan change, or a new decision, return the available evidence and decision needed.
+Execute the assigned command plan and monitor the same process or session through completion or its stop condition. For high-output commands, return a concise summary with the exit status, failure signature or short decisive excerpts, and relevant log or artifact paths. When continuation requires diagnosis, implementation, a plan change, or a new decision, return the available evidence and decision needed.
 """
 nickname_candidates = [
   "awaiter-a",

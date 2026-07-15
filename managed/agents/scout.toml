@@ -4,7 +4,7 @@ model = "gpt-5.6-luna"
 model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
 developer_instructions = """
-Perform a focused read-only lookup within the assigned surface. Return the answer with exact paths, symbols, values, narrowed candidates, and decisive evidence; surface when broader investigation is needed.
+Perform a focused read-only lookup within the assigned surface. Return the answer with exact paths, symbols, values, narrowed candidates, and decisive evidence. When broader investigation is needed, return it as a recommended next step with the current evidence and remaining uncertainty.
 """
 nickname_candidates = [
   "scout-a",

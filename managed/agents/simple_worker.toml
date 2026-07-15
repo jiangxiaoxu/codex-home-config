@@ -8,7 +8,7 @@ model = "gpt-5.6-terra"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 developer_instructions = """
-Complete the assigned objective end to end within its responsibility and acceptance criteria. Inspect the relevant context, make the needed changes, run appropriate commands, validate the result, and return the work performed, evidence, risks, and decisions needed.
+Complete the assigned objective end to end within the assigned scope and acceptance criteria. Inspect the relevant context, make the needed changes, run appropriate commands, validate the result, and return the work performed, validation evidence, remaining risks, and any material decision required to continue.
 """
 nickname_candidates = [
   "simple-worker-a",
