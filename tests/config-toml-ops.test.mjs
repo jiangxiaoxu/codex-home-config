@@ -101,7 +101,7 @@ test('merge-install always removes notice.model_migrations from the installed re
   );
 });
 
-test('merge-install always removes agents and model_context_window from the installed result', () => {
+test('merge-install replaces the complete agents table and removes model_context_window', () => {
   const sourceConfig = {
     model_context_window: 200000,
     agents: {
@@ -129,11 +129,46 @@ test('merge-install always removes agents and model_context_window from the inst
   assert.deepStrictEqual(
     buildMergeInstallConfig(sourceConfig, targetConfig),
     {
+      agents: {
+        reviewer: {
+          model: 'gpt-5.4'
+        }
+      },
       features: {
         runtime_metrics: true
       },
       windows: {
         sandbox: 'elevated'
+      }
+    }
+  );
+});
+
+test('merge-install preserves local agents when the managed snapshot does not define agents', () => {
+  const sourceConfig = {
+    features: {
+      runtime_metrics: true
+    }
+  };
+
+  const targetConfig = {
+    agents: {
+      reviewer: {
+        model: 'gpt-5.3-codex'
+      }
+    }
+  };
+
+  assert.deepStrictEqual(
+    buildMergeInstallConfig(sourceConfig, targetConfig),
+    {
+      features: {
+        runtime_metrics: true
+      },
+      agents: {
+        reviewer: {
+          model: 'gpt-5.3-codex'
+        }
       }
     }
   );
@@ -308,7 +343,7 @@ test('merge-install preserves local sandbox_workspace_write.writable_roots as an
   );
 });
 
-test('publish-sync excludes agents, projects, and notice.model_migrations', () => {
+test('publish-sync excludes unmanaged top-level keys, projects, and notice.model_migrations', () => {
   const localConfig = {
     model: 'gpt-5.4',
     model_reasoning_effort: 'medium',
@@ -415,6 +450,64 @@ test('merge-install CLI allows a missing target file and writes UTF-8 TOML outpu
         model: 'gpt-5.4',
         features: {
           runtime_metrics: true
+        }
+      }
+    );
+  });
+});
+
+test('merge-install CLI round-trips an agents profile with config_file', () => {
+  withTempDir((tempDir) => {
+    const sourcePath = join(tempDir, 'source.toml');
+    const targetPath = join(tempDir, 'target.toml');
+    const outputPath = join(tempDir, 'output.toml');
+
+    writeFileSync(
+      sourcePath,
+      [
+        '[agents.xxxx]',
+        'config_file = "./agents/xxxx.toml"',
+        ''
+      ].join('\n'),
+      'utf8'
+    );
+
+    writeFileSync(
+      targetPath,
+      [
+        '[agents.stale_local]',
+        'config_file = "./agents/stale-local.toml"',
+        ''
+      ].join('\n'),
+      'utf8'
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        'tools/config-toml-ops.cjs',
+        'merge-install',
+        '--source',
+        sourcePath,
+        '--target',
+        targetPath,
+        '--output',
+        outputPath
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: 'utf8'
+      }
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepStrictEqual(
+      TOML.parse(readFileSync(outputPath, 'utf8')),
+      {
+        agents: {
+          xxxx: {
+            config_file: './agents/xxxx.toml'
+          }
         }
       }
     );
@@ -818,7 +911,7 @@ test('publish-sync CLI drops managed keys that are missing locally', () => {
   });
 });
 
-test('publish-sync excludes agents, model keys, model_context_window, and notice.model_migrations when they are in the managed allowlist', () => {
+test('publish-sync replaces the complete managed agents table while excluding local-only keys', () => {
   const localConfig = {
     model: 'gpt-5.4',
     model_context_window: 200000,
@@ -827,6 +920,9 @@ test('publish-sync excludes agents, model keys, model_context_window, and notice
     agents: {
       reviewer: {
         model: 'gpt-5.4'
+      },
+      explorer: {
+        config_file: './agents/explorer.toml'
       }
     },
     service_tier: 'fast',
@@ -866,6 +962,14 @@ test('publish-sync excludes agents, model keys, model_context_window, and notice
   assert.deepStrictEqual(
     buildPublishedSyncConfig(localConfig, managedConfig),
     {
+      agents: {
+        reviewer: {
+          model: 'gpt-5.4'
+        },
+        explorer: {
+          config_file: './agents/explorer.toml'
+        }
+      },
       notice: {
         hide_full_access_warning: true
       },

@@ -22,7 +22,6 @@ const syncAllowlistedChildTables = new Set([
   'mcp_servers'
 ])
 const syncExcludedTopLevelKeys = new Set([
-  'agents',
   'model',
   'model_context_window',
   'model_reasoning_effort',
@@ -31,7 +30,6 @@ const syncExcludedTopLevelKeys = new Set([
   'plan_mode_reasoning_effort'
 ])
 const installRemovedTopLevelKeys = new Set([
-  'agents',
   'model_context_window'
 ])
 const installRemovedNestedPaths = [

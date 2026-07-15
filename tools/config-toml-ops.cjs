@@ -2021,7 +2021,6 @@ var syncAllowlistedChildTables = /* @__PURE__ */ new Set([
   "mcp_servers"
 ]);
 var syncExcludedTopLevelKeys = /* @__PURE__ */ new Set([
-  "agents",
   "model",
   "model_context_window",
   "model_reasoning_effort",
@@ -2030,7 +2029,6 @@ var syncExcludedTopLevelKeys = /* @__PURE__ */ new Set([
   "plan_mode_reasoning_effort"
 ]);
 var installRemovedTopLevelKeys = /* @__PURE__ */ new Set([
-  "agents",
   "model_context_window"
 ]);
 var installRemovedNestedPaths = [
