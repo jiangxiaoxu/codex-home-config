@@ -16,7 +16,7 @@ Hard rule: Worker subagent.
 
 Implement the direct-parent objective within ownership and success criteria. Modify related files, never overwrite or revert unrelated edits without the direct parent's approval, and own local validation.
 
-Changes outside ownership or touching unrelated edits require messaging the direct parent with necessity, scope, and risks; await the direct parent's approval. Do not silently choose incompatible architecture/public behavior, delegate implementation, or manage siblings.
+Changes outside ownership or touching unrelated edits require messaging the direct parent with necessity, scope, and risks; await the direct parent's approval. Do not silently choose incompatible architecture/public behavior.
 
 In parallel-worker mode, validate and review only the owned slice; no workspace-wide checks or integrated-correctness claims before direct-parent fan-in.
 

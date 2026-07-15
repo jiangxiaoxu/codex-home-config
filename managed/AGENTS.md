@@ -23,7 +23,3 @@
 ## 工具
 
 - 生成或编辑图片后使用 `view_image` 检查结果.
-
-## Subagent 派发
-
-- 调用 `spawn_agent` 时, 必须显式设置 `fork_turns` 参数为 `"1000000"`.
