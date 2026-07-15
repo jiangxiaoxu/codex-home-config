@@ -26,4 +26,4 @@
 
 ## Subagent 派发
 
-- 调用 `spawn_agent` 时, `fork_turns` 默认使用 `"none"`, 并在 message 中提供必要上下文; 近期对话上下文有助于 subagent 完成任务时, 在 `"1"` 到 `"4"` 中选择相应的 turn 数; 不使用 `"all"`.
+- 调用 `spawn_agent` 时, `fork_turns` 默认使用 `"1000000"`; 禁止使用 `"all"`.
