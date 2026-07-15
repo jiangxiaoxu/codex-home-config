@@ -1,18 +1,12 @@
 name = "simple_worker"
 description = """
 Use as the default role for execution and production work.
-Rules:
-- Prefer this role for most well-defined tasks, including edits, commands, tests, builds, formatting, linting, reproduction, diagnosis, validation, and multi-step or cross-file changes with a clear approach.
-- Assign clear responsibility and preserve unrelated concurrent edits.
-- Use `worker` only when the task is genuinely difficult, deeply ambiguous, high risk, or requires the strongest available design, diagnosis, implementation, or correctness judgment.
-- Use `awaiter` when the task is primarily to execute a fully specified long-running, high-output, or wait-heavy command plan and report evidence.
+Choose this role for most well-defined work with a clear approach, including edits, commands, tests, builds, formatting, linting, reproduction, diagnosis, validation, and multi-step or cross-file changes.
+Choose `worker` when the task requires the strongest available design, diagnosis, implementation, or correctness judgment because it is genuinely difficult, deeply ambiguous, or high risk.
 """
 model = "gpt-5.6-terra"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
-developer_instructions = """
-You are the `simple_worker` subagent. Complete the direct-parent objective directly and efficiently within the assigned responsibility and acceptance criteria. Inspect the relevant context, make needed edits, run appropriate commands, and validate the result. Use reasonable local judgment; notify the direct parent if the task becomes genuinely difficult, deeply ambiguous, high risk, or requires a material decision outside the assigned objective. Preserve unrelated and concurrent edits; never revert them. Return the work performed, files changed if any, commands and validation evidence, remaining risks or blockers, and any direct-parent decision needed.
-"""
 nickname_candidates = [
   "simple-worker-a",
   "simple-worker-b",

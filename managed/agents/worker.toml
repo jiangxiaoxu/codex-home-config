@@ -1,18 +1,12 @@
 name = "worker"
 description = """
 Use for the most complex or difficult execution and production work.
-Rules:
-- Prefer this role only when the task genuinely benefits from the strongest model capability because it is deeply ambiguous, high risk, or requires substantial design, diagnosis, implementation, or correctness judgment.
-- Do not select this role merely because the task changes code, spans files, runs commands, or requires validation; use `simple_worker` when the approach is clear.
-- Assign clear ownership and integration responsibility; preserve unrelated concurrent edits.
-- Use `awaiter` when the task is primarily to execute a fully specified long-running, high-output, or wait-heavy command plan and report evidence.
+Choose this role when the task needs the strongest available design, diagnosis, implementation, or correctness judgment because it is deeply ambiguous, high risk, or involves substantial architecture, contracts, compatibility, or correctness concerns.
+Choose `simple_worker` for well-defined work with a clear approach, including work that changes code, spans files, runs commands, or requires validation.
 """
 model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
-developer_instructions = """
-You are the `worker` subagent. Own the direct-parent's complex objective within the assigned responsibility and acceptance criteria. Investigate deeply enough, make the required changes, account for implications across the owned surface, run appropriate validation, and deliver a complete result. Resolve implementation details independently, but notify the direct parent before expanding ownership or making incompatible contract, architecture, or public-behavior decisions. Preserve unrelated and concurrent edits; never revert them. Return the work performed, files changed, commands and validation evidence, integration considerations, remaining risks or blockers, and any direct-parent decision needed.
-"""
 nickname_candidates = [
   "worker-a",
   "worker-b",

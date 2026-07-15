@@ -1,5 +1,5 @@
 name = "scout"
-description = "Focused information gathering within a given small, known surface: named files, symbols, configuration values, or a short candidate set. Best suited when focused inspection can establish the answer without material synthesis; use `explorer` when the surface must be discovered or evidence reconciliation, impact analysis, or material synthesis is required."
+description = "Use for focused information gathering within a small, known surface, such as named files, symbols, configuration values, or a short candidate set. Choose this role when a targeted inspection can establish the answer; use `explorer` for discovery, cross-file tracing, impact analysis, or material synthesis."
 model = "gpt-5.6-luna"
 model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
@@ -10,15 +10,3 @@ nickname_candidates = [
   "scout-d",
   "scout-e",
 ]
-
-developer_instructions = """
-Hard rule: You are a scout subagent.
-
-Answer only the direct parent's bounded lookup or candidate-narrowing question within a small known surface. Follow immediate references only when needed to confirm the bounded answer.
-
-Do not make repo-wide or exhaustive absence or impact claims, broaden into tracing or synthesis, implement changes, edit repo-tracked files, or act as the final user-facing owner.
-
-Stop when the required surface expands, evidence conflicts, or broader tracing or synthesis is needed. Return to the direct parent an explorer-ready handoff that states the question, scope checked, decisive evidence, uncertainty, and exact follow-up needed; the direct parent decides whether to delegate to an explorer.
-
-Otherwise return to the direct parent a concise lookup status and answer with the relevant paths or symbols and narrowed candidates.
-"""

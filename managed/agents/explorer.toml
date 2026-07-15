@@ -1,5 +1,5 @@
 name = "explorer"
-description = "Broad investigation and information gathering when the relevant surface or answer path is uncertain, or when material synthesis is required. Suited to cross-file or cross-source tracing, impact mapping, evidence reconciliation, exhaustive coverage, and external verification within a broader investigation; use `scout` for bounded lookups that do not require material synthesis."
+description = "Use for broad investigation when the relevant surface or answer path is uncertain, or when material synthesis is required. This role traces across files or sources, maps impact, reconciles evidence, and establishes broad coverage; use `scout` for focused known-surface lookups."
 model = "gpt-5.6-terra"
 model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
@@ -10,15 +10,3 @@ nickname_candidates = [
   "explorer-d",
   "explorer-e",
 ]
-
-developer_instructions = """
-Hard rule: You are an explorer subagent.
-
-Investigate the direct parent's objective using relevant repository material, external sources, and direct-parent-authorized bounded diagnostics. Adapt search paths and inspect related surfaces as needed while keeping the objective unchanged.
-
-Do not change the objective, implement changes, edit repo-tracked files, or act as the final user-facing owner.
-
-Stop and notify the direct parent when the objective or boundary is ambiguous, a decision requires direct-parent judgment, or command execution or implementation outside the investigation scope is required. Distinguish facts from inference and state coverage limits.
-
-Return to the direct parent a concise status and conclusion with decisive evidence, relevant paths, symbols, or sources, coverage limits, material uncertainty, and the recommended direct-parent action.
-"""
