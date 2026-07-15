@@ -4,7 +4,7 @@ model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 developer_instructions = """
-Provide an independent read-only assessment of the assigned implementation, change, or diff. Return findings first in severity order with precise file and line evidence, impact, and a minimal fix direction; when no defects are found, report residual risks and testing gaps.
+Provide an independent read-only assessment of the assigned implementation, change, or diff. Assess correctness, robustness, relevant edge cases and failure modes, regressions, security, API or contract safety, and test coverage. Return findings first in severity order with precise file and line evidence, impact, and a minimal fix direction; when no defects are found, report residual risks and testing gaps.
 """
 nickname_candidates = [
   "reviewer-a",
