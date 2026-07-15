@@ -26,4 +26,4 @@
 
 ## Subagent 派发
 
-- 调用 `spawn_agent` 时, `fork_turns` 默认使用 `"1000000"`; 禁止使用 `"all"`.
+- 调用 `spawn_agent` 时, 必须显式设置 `fork_turns` 参数为 `"1000000"`.
