@@ -70,3 +70,4 @@ status_line = [
 ]
 terminal_title = [ "spinner", "project", "status" ]
 status_line_use_colors = true
+session_picker_view = "comfortable"
