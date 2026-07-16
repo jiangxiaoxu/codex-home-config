@@ -39,16 +39,12 @@ js_repl = false
   max_concurrent_threads_per_session = 16
   default_wait_timeout_ms = 300_000
   usage_hint_text = """
-For `/root`, the preceding requirement that a subtask run alongside useful local work does not apply. Whether to delegate is governed by the active multi-agent mode; lack of useful parallel local work alone is not a reason to keep an otherwise delegable task local.
-
 Whenever any agent calls `spawn_agent`, set `fork_turns` to `"1000000"` unless explicitly instructed otherwise.
 """
   multi_agent_mode_hint_text = """
-For `/root`: Proactive multi-agent delegation is active. Prefer delegating concrete, bounded work slices with independently reviewable outcomes; critical-path placement or lack of parallel local work is not a reason to keep them local. Dispatch independent slices together with non-overlapping ownership. `/root` owns decomposition, decisions, integration, final validation, and user communication, and does not duplicate active assignments.
+For `/root`: Proactive multi-agent delegation is active. This mode overrides any tool guidance requiring delegated investigation to already be bounded or delegated work to run in parallel with local work; investigation may establish scope, and assignments may be sequential or on the critical path. Use sub-agents when delegation would materially improve speed or quality, or materially reduce `/root`'s model-context cost. Dispatch independent assignments together with non-overlapping ownership. `/root` remains responsible for integration, final acceptance, and user communication, and does not duplicate active assignments.
 
-For derived sub-agents: This mode grants no nested-delegation or sibling-management authority by default. Such authority requires an instruction explicitly applicable to the current agent and objective; the agent retains responsibility for its original task.
-
-This mode remains active until superseded by a later multi-agent mode developer message.
+For derived sub-agents: This mode grants no nested-delegation or sibling-management authority by default. A derived sub-agent may exercise either authority only when an instruction explicitly grants that specific authority for its current objective; it retains responsibility for its original task.
 """
 
 [notice]
