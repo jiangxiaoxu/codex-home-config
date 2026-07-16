@@ -4,16 +4,16 @@ Public Codex home configuration for the installable content under `managed/` and
 
 ## Install
 
-Copy and run one of these in PowerShell. `Node.js 18+` is required for both install and restore because `config.toml` is merged through the repository Node helper. Online install uses the published `release` branch only. Local install from a repository checkout uses the current local branch snapshot.
+Copy and run one of these in PowerShell. `Node.js 18+` is required for both install and restore because `config.toml` is merged through the repository Node helper. Online install uses the published `release` branch only and does not require Git. Local install from a repository checkout requires Git and a clean worktree, pulls the current branch with `git pull --rebase origin <branch>`, and then installs the updated local branch snapshot. A failed or conflicting pull stops before backup or installation. When the pull changes `HEAD`, the installer relaunches the updated repository copy with the original arguments.
 Before `Update config`, the installer prints the install source commit metadata, including the branch name when available, commit SHA, subject, description, commit time, and commit URL.
 
-Interactive install menu:
+Update the default `$HOME/.codex` directly:
 
 ```powershell
 iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/release/install-codex-home-config.ps1' | iex
 ```
 
-Direct update to the default `$HOME/.codex`:
+Equivalent explicit update:
 
 ```powershell
 &([scriptblock]::Create((iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/release/install-codex-home-config.ps1'))) -Action Update
@@ -25,11 +25,7 @@ Direct update for `config.toml` only:
 &([scriptblock]::Create((iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/release/install-codex-home-config.ps1'))) -Action Update -Components Config
 ```
 
-The installer starts with an interactive menu:
-
-- `1. Update config`
-- `2. Restore config`
-- `Q. Quit`
+The installer defaults directly to `Update config`; it does not show a main action menu. Use `-Action Restore` to enter backup restore.
 
 `Update config` writes into `$HOME/.codex`, installs `managed/config.toml`, installs `managed/AGENTS.md` as `.codex/AGENTS.md`, replaces `managed/agents` into `.codex/agents`, and syncs `managed/skills/jiangxiaoxu` to `.codex/skills/jiangxiaoxu` when it exists.
 During `Update config`, the installer performs a structured TOML merge. Repository-managed top-level scalars and top-level tables replace the local values, unmanaged local paths are preserved, the local `projects` table is always kept as-is, and `model_context_window` plus `[notice.model_migrations]` are always removed. The top-level keys `service_tier` and `plan_mode_reasoning_effort` always keep the local value even when the managed snapshot defines them. The managed `agents` table is applied in full: every `[agents.<name>]` profile comes from the managed snapshot, and the snapshot replaces the target `agents` table instead of merging profiles by name. The managed `apps` table is also applied in full, including managed connectors that do not yet exist in the local config. The `mcp_servers` table is merged by server name: each managed `[mcp_servers.<name>]` block fully replaces the matching local block, while local server blocks that are not present in the managed snapshot are preserved. Within `[sandbox_workspace_write]`, the nested `writable_roots` value remains local and is not managed by the repository snapshot.
@@ -51,7 +47,7 @@ After a successful update, the installer keeps only the latest 5 backup versions
 - `AgentFolder` -> `agents`
 - `Skill` -> `skills/jiangxiaoxu`
 
-For non-interactive update, use:
+To update from a local repository checkout, use:
 
 ```powershell
 .\install-codex-home-config.ps1 -Action Update
@@ -81,7 +77,7 @@ Update `config.toml` and `agents` together:
 .\install-codex-home-config.ps1 -Action Update -Components Config,AgentFolder
 ```
 
-For non-interactive restore entry, use:
+To select and restore a local backup, use:
 
 ```powershell
 .\install-codex-home-config.ps1 -Action Restore
@@ -126,13 +122,13 @@ Sync `config.toml` and `AGENTS.md` only:
 The sync script requires `pwsh` 7+ and `Node.js 18+`. If it is started from an older PowerShell host, it relaunches itself in `pwsh.exe` and then continues.
 The sync script uses `$HOME/.codex` as the managed content source and defaults `RepoPath` to the repository root where the script lives.
 Before it publishes managed content, the sync script verifies that the repository is clean, pulls `origin/main`, and relaunches itself from the repository copy when that pull updates the local `HEAD`.
-After it prepares repository changes, the sync script prints the pending diff and waits for confirmation. Press `y` or Enter to continue with commit and push; answer `n` to stop before publishing.
+After it prepares repository changes, the sync script waits for confirmation. Press `y` or Enter to continue with commit and push; answer `n` to stop before publishing.
 After it pushes `origin/main`, the sync script prompts whether the same commit should also be published to `origin/release`. If you answer `No`, only `main` is updated. If `origin/release` does not exist yet and you answer `Yes`, the push creates it automatically.
 When publishing `config.toml`, the sync script uses the current `managed/config.toml` top-level keys as the allowlist for managed paths. When that allowlist contains `agents`, the entire local `agents` table is copied, including every `[agents.<name>]` profile; agent profile names are not filtered through a child-name allowlist. The local `projects` table is never committed, the top-level keys `model`, `model_context_window`, `model_reasoning_effort`, `model_catalog_json`, `service_tier`, and `plan_mode_reasoning_effort` are always excluded from sync, and `[notice.model_migrations]` is also always excluded from sync. Within `[sandbox_workspace_write]`, the nested `writable_roots` value is also excluded from sync so it stays local-only. Within `[tui]`, `model_availability_nux` is excluded from sync. For `apps` and `mcp_servers`, the existing managed child names are the allowlists, so only matching `[apps.<name>]` and `[mcp_servers.<name>]` blocks are copied from the local Codex home; newly discovered local apps and MCP servers do not enter the managed snapshot automatically.
 When `-Components` is omitted, the sync script processes `Skill` as part of the full publish. If `.codex/skills/jiangxiaoxu` exists, it is copied into `managed/skills/jiangxiaoxu`; otherwise the managed skill directory is removed. Explicit partial sync runs leave `Skill` untouched unless it is selected.
 `-Components` accepts `Config`, `AgentFile`, `AgentFolder`, and `Skill`. If omitted, the sync script still publishes all four managed components.
 The same `-Components` values apply here: `Config` -> `config.toml`, `AgentFile` -> `AGENTS.md`, `AgentFolder` -> `agents`, `Skill` -> `skills/jiangxiaoxu`.
-Published UTF-8 text files with known text extensions are normalized to LF line endings before the repository diff is reviewed and committed. Binary assets, other encodings, and files with unknown extensions are left unchanged.
+Published UTF-8 text files with known text extensions are normalized to LF line endings before they are committed. Binary assets, other encodings, and files with unknown extensions are left unchanged.
 
 ## Development
 

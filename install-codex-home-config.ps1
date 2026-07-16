@@ -4,12 +4,15 @@ param(
     [string]$TargetCodexPath = (Join-Path $HOME '.codex'),
 
     [Parameter()]
-    [ValidateSet('Prompt', 'Update', 'Restore')]
-    [string]$Action = 'Prompt',
+    [ValidateSet('Update', 'Restore')]
+    [string]$Action = 'Update',
 
     [Parameter()]
     [ValidateSet('Config', 'AgentFile', 'AgentFolder', 'Skill')]
-    [string[]]$Components = @('Config', 'AgentFile', 'AgentFolder', 'Skill')
+    [string[]]$Components = @('Config', 'AgentFile', 'AgentFolder', 'Skill'),
+
+    [Parameter(DontShow = $true)]
+    [switch]$SkipRepositoryPull
 )
 
 Set-StrictMode -Version Latest
@@ -31,6 +34,8 @@ $runtimeState = [pscustomobject]@{
     NodeExecutable        = ''
     NodeVersionText       = ''
     PublishedCommitInfo   = $null
+    GitExecutable         = ''
+    RelaunchedInstaller   = $false
 }
 
 function Write-StageMessage {
@@ -187,6 +192,36 @@ function Get-NodeExecutable {
     return $null
 }
 
+function Get-GitExecutable {
+    if (-not [string]::IsNullOrWhiteSpace($runtimeState.GitExecutable)) {
+        return $runtimeState.GitExecutable
+    }
+
+    $gitCommand = Get-Command git -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -eq $gitCommand) {
+        return $null
+    }
+
+    foreach ($propertyName in @('Source', 'Path')) {
+        $property = $gitCommand.PSObject.Properties[$propertyName]
+        if ($null -ne $property -and -not [string]::IsNullOrWhiteSpace($property.Value)) {
+            $runtimeState.GitExecutable = $property.Value
+            return $runtimeState.GitExecutable
+        }
+    }
+
+    return $null
+}
+
+function Assert-GitEnvironment {
+    $gitExecutable = Get-GitExecutable
+    if ([string]::IsNullOrWhiteSpace($gitExecutable)) {
+        throw 'Git is required to update a local repository checkout. Install Git and retry.'
+    }
+
+    return $gitExecutable
+}
+
 function Assert-NodeEnvironment {
     if (-not [string]::IsNullOrWhiteSpace($runtimeState.NodeExecutable) -and -not [string]::IsNullOrWhiteSpace($runtimeState.NodeVersionText)) {
         return $runtimeState.NodeExecutable
@@ -250,6 +285,106 @@ function Get-LocalRepositoryRoot {
     }
 
     return $null
+}
+
+function Get-GitHeadCommit {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RepositoryPath
+    )
+
+    $gitExecutable = Assert-GitEnvironment
+    $headCommit = (& $gitExecutable -C $RepositoryPath rev-parse HEAD 2>$null | Out-String).Trim()
+    if (($LASTEXITCODE -ne 0) -or [string]::IsNullOrWhiteSpace($headCommit)) {
+        throw "git rev-parse HEAD failed in $RepositoryPath"
+    }
+
+    return $headCommit
+}
+
+function Get-PowerShellExecutablePath {
+    foreach ($candidateName in @('pwsh.exe', 'powershell.exe', 'pwsh', 'powershell')) {
+        $candidatePath = Join-Path $PSHOME $candidateName
+        if (Test-Path -LiteralPath $candidatePath -PathType Leaf) {
+            return $candidatePath
+        }
+    }
+
+    throw "Unable to find the current PowerShell executable under $PSHOME"
+}
+
+function Invoke-LatestInstaller {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RepositoryPath
+    )
+
+    $installerPath = Join-Path $RepositoryPath 'install-codex-home-config.ps1'
+    if (-not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
+        throw "Updated installer was not found: $installerPath"
+    }
+
+    $argumentList = [System.Collections.Generic.List[string]]::new()
+    $argumentList.Add('-NoProfile')
+    if ($env:OS -eq 'Windows_NT') {
+        $argumentList.Add('-ExecutionPolicy')
+        $argumentList.Add('Bypass')
+    }
+
+    $installerLiteral = "'" + $installerPath.Replace("'", "''") + "'"
+    $targetLiteral = "'" + $TargetCodexPath.Replace("'", "''") + "'"
+    $actionLiteral = "'" + $Action.Replace("'", "''") + "'"
+    $componentLiterals = @($Components | ForEach-Object { "'" + $_.Replace("'", "''") + "'" })
+    $commandText = "& $installerLiteral -TargetCodexPath $targetLiteral -Action $actionLiteral -Components @($($componentLiterals -join ', ')) -SkipRepositoryPull"
+    $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($commandText))
+    $argumentList.Add('-EncodedCommand')
+    $argumentList.Add($encodedCommand)
+
+    Write-StageMessage "Repository updated; relaunching the latest installer from $installerPath"
+    $powerShellExecutable = Get-PowerShellExecutablePath
+    & $powerShellExecutable @($argumentList)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Relaunched installer failed with exit code $LASTEXITCODE."
+    }
+
+    $runtimeState.RelaunchedInstaller = $true
+}
+
+function Invoke-LocalRepositoryPull {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RepositoryPath
+    )
+
+    $gitExecutable = Assert-GitEnvironment
+    $statusOutput = & $gitExecutable -C $RepositoryPath status --porcelain
+    if ($LASTEXITCODE -ne 0) {
+        throw "git status failed in $RepositoryPath"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace(($statusOutput | Out-String))) {
+        throw "Repository '$RepositoryPath' has uncommitted changes. Commit or discard them before installing."
+    }
+
+    $branchName = (& $gitExecutable -C $RepositoryPath branch --show-current 2>$null | Out-String).Trim()
+    if (($LASTEXITCODE -ne 0) -or [string]::IsNullOrWhiteSpace($branchName)) {
+        throw "The current branch could not be determined in $RepositoryPath. Check out a branch before installing."
+    }
+
+    $prePullHead = Get-GitHeadCommit -RepositoryPath $RepositoryPath
+    Write-StageMessage "Pulling latest changes for local branch '$branchName'..."
+    & $gitExecutable -C $RepositoryPath pull --rebase origin $branchName
+    if ($LASTEXITCODE -ne 0) {
+        throw "git pull --rebase origin $branchName failed in $RepositoryPath. Resolve or abort any rebase conflict before retrying."
+    }
+
+    $postPullHead = Get-GitHeadCommit -RepositoryPath $RepositoryPath
+    if ($prePullHead -ne $postPullHead) {
+        Invoke-LatestInstaller -RepositoryPath $RepositoryPath
+        return
+    }
+
+    Write-StageMessage "Local branch '$branchName' is up to date."
 }
 
 function Invoke-GitHubApiRequest {
@@ -1049,29 +1184,6 @@ function Show-MenuSection {
     }
 }
 
-function Select-MainAction {
-    while ($true) {
-        Show-MenuSection -Lines @(
-            'Select an action:',
-            '1. Update config',
-            '2. Restore config',
-            'Q. Quit'
-        )
-
-        $choice = (Read-Host 'Enter choice [1]').Trim()
-        if ($choice -eq '') {
-            $choice = '1'
-        }
-
-        switch -Regex ($choice) {
-            '^(1|update|u)$' { return 'Update' }
-            '^(2|restore|r)$' { return 'Restore' }
-            '^(q|quit|exit)$' { return 'Quit' }
-            default { Write-Warning "Unsupported choice: $choice" }
-        }
-    }
-}
-
 function Select-BackupSnapshot {
     $backupDirectories = @(Get-BackupVersionDirectory)
     if ($backupDirectories.Count -eq 0) {
@@ -1320,20 +1432,22 @@ try {
         throw "Target path '$TargetCodexPath' points to a file."
     }
 
+    $localRepositoryRoot = Get-LocalRepositoryRoot
+    if (-not $SkipRepositoryPull -and -not [string]::IsNullOrWhiteSpace($localRepositoryRoot)) {
+        Invoke-LocalRepositoryPull -RepositoryPath $localRepositoryRoot
+        if ($runtimeState.RelaunchedInstaller) {
+            return
+        }
+    }
+
     $null = Assert-NodeEnvironment
     $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
 
-    $selectedAction = $Action
-    if ($selectedAction -eq 'Prompt') {
-        $selectedAction = Select-MainAction
-    }
-
     try {
-        switch ($selectedAction) {
+        switch ($Action) {
             'Update' { Invoke-UpdateAction -SelectedComponents $Components }
             'Restore' { Invoke-RestoreAction }
-            'Quit' { Write-Output 'Operation cancelled.' }
-            default { throw "Unexpected action selection: $selectedAction" }
+            default { throw "Unexpected action selection: $Action" }
         }
     }
     finally {

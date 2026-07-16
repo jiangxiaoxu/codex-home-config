@@ -345,45 +345,6 @@ function Publish-ReleaseBranch {
     }
 }
 
-function Write-PendingRepositoryDiff {
-    param(
-        [Parameter(Mandatory)]
-        [string]$RepositoryPath
-    )
-
-    Write-Output "Pending repository changes in $RepositoryPath"
-
-    & git -C $RepositoryPath status --short
-    if ($LASTEXITCODE -ne 0) {
-        throw "git status failed in $RepositoryPath"
-    }
-
-    Write-Output ''
-    Write-Output 'Tracked file diff:'
-    & git -C $RepositoryPath diff --
-    if ($LASTEXITCODE -ne 0) {
-        throw "git diff failed in $RepositoryPath"
-    }
-
-    $untrackedFiles = @(& git -C $RepositoryPath ls-files --others --exclude-standard)
-    if ($LASTEXITCODE -ne 0) {
-        throw "git ls-files failed in $RepositoryPath"
-    }
-
-    if ($untrackedFiles.Count -eq 0) {
-        return
-    }
-
-    Write-Output ''
-    Write-Output 'Untracked file diffs:'
-    foreach ($untrackedFile in $untrackedFiles) {
-        & git -C $RepositoryPath diff --no-index -- /dev/null $untrackedFile
-        if (($LASTEXITCODE -ne 0) -and ($LASTEXITCODE -ne 1)) {
-            throw "git diff --no-index failed for $untrackedFile in $RepositoryPath"
-        }
-    }
-}
-
 function Get-NodeExecutable {
     $candidatePaths = [System.Collections.Generic.List[string]]::new()
 
@@ -960,9 +921,8 @@ try {
         return
     }
 
-    Write-PendingRepositoryDiff -RepositoryPath $RepoPath
     if (-not (Read-YesOrEnterChoice -Prompt 'Continue with committing and publishing these changes?')) {
-        Write-Output 'Stopped before commit and push. Pending repository changes were left in place for review.'
+        Write-Output 'Stopped before commit and push. Pending repository changes were left in place.'
         return
     }
 

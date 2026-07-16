@@ -7,22 +7,23 @@
 ## Preferred Workflow
 
 * When the user wants a copy-paste command to share with other people, prefer the public one-liners from `README.md` instead of local repo commands.
-* Prefer the interactive public installer command when the user wants menu-driven install or restore.
-* Prefer the public `-Action Update` one-liner when the user wants a direct update into the default `$HOME\.codex`.
+* Prefer the public installer one-liner when the user wants to update the default `$HOME\.codex`.
+* Use the explicit `-Action Restore` entry when the user wants to choose and restore a local backup.
 * When the user asks to sync the current local Codex configuration to GitHub, prefer:
   `.\sync-codex-home-config-repo.ps1`
 * That script treats `$HOME\.codex` as the source of truth, defaults `RepoPath` to the current repository root, relaunches itself in `pwsh` 7+ if needed, checks that the repo is clean, runs `git pull --rebase origin main`, relaunches from the repository copy if that pull updates local `HEAD`, copies the managed files and the managed skill directory into `managed/`, commits and pushes `main`, then prompts whether the same commit should also be published to `release`.
-* When the user asks to download or install the latest published repository content into a local Codex home, prefer:
+* When the user asks to install the current local repository branch into a Codex home, prefer:
   `.\install-codex-home-config.ps1`
 * For a custom target directory, use:
   `.\install-codex-home-config.ps1 -TargetCodexPath '<path>'`
-* For non-interactive update, prefer:
+* For an explicit update, use:
   `.\install-codex-home-config.ps1 -Action Update`
-* For restore entry without the main menu, prefer:
+* For restore, use:
   `.\install-codex-home-config.ps1 -Action Restore`
-* The installer starts with an interactive menu for `Update config`, `Restore config`, or `Quit`.
+* The installer defaults directly to `Update`; it does not show a main action menu.
+* When run from this repository, the installer requires a clean worktree, pulls the current branch from `origin` with rebase, relaunches the updated installer when `HEAD` changes, and stops before installation if the pull fails or conflicts.
 * The installer itself is expected to work in Windows PowerShell 5.1 and `pwsh`.
-* `install-codex-home-config.ps1` installs published content from the `release` branch only; it must not install unpublished `main` branch content.
+* The public online installer installs published content from the `release` branch only. A local repository checkout installs its pulled current branch, including unpublished content when the current branch is not `release`.
 
 ## Safety Rules
 
@@ -33,7 +34,7 @@
 * The sync script is also allowed to assume `pwsh` 7+ after its bootstrap re-launch check.
 * `Update config -Components ...` should back up only the selected components before installation.
 * `Restore config` should restore the components that exist in the selected backup snapshot and should not create a new backup before restore.
-* `-Action Restore` skips the main menu, but it still requires the user to choose one local backup version.
+* `-Action Restore` requires the user to choose one local backup version.
 * After `Update config`, only the latest 5 backup versions should remain under the backup root; older versions should be moved to the Recycle Bin when possible.
 * Unless the user explicitly asks for a repo-only edit, avoid manually editing the repository snapshot and pushing it directly. Prefer updating `$HOME\.codex` first, then run the sync script.
 * If the repository already has uncommitted changes before syncing, stop and explain the conflict instead of overwriting it.
