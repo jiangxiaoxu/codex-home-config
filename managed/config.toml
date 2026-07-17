@@ -36,7 +36,7 @@ js_repl = false
   [features.multi_agent_v2]
   hide_spawn_agent_metadata = false
   tool_namespace = "agents"
-  max_concurrent_threads_per_session = 16
+  max_concurrent_threads_per_session = 32
   default_wait_timeout_ms = 300_000
   usage_hint_text = """
 Whenever any agent calls `spawn_agent`, set `fork_turns` to `"1000000"` unless explicitly instructed otherwise.
