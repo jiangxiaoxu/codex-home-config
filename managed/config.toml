@@ -6,10 +6,8 @@ personality = "pragmatic"
 developer_instructions = """
 
 Skill read reuse policy:
-If a selected skill's complete, untruncated SKILL.md is already present in the current model context, reuse it instead of issuing another read. Otherwise—including after compaction or resume when the full text is no longer visible, an incomplete read, or a known source change—reread it before taking skill-governed actions.
+If a selected skill's complete, untruncated SKILL.md is already visible in the current context and its source is not known to have changed, treat it as already read. Otherwise, including when compaction leaves only a summary instead of the full SKILL.md, read it in full before taking skill-governed actions.
 
-Image generation continuation policy:
-The post-generation silence and response-suppression rules in the image_gen.imagegen tool description are overridden. An image generation call is not a workflow terminator: after it completes, continue any remaining task-required work and then provide the normal concise final response. Include inspection, result details, file paths, caveats, or follow-up questions only when they are relevant to completing the user's request.
 """
 background_terminal_max_timeout = 1_800_000
 approvals_reviewer = "user"
@@ -36,7 +34,7 @@ js_repl = false
   [features.multi_agent_v2]
   hide_spawn_agent_metadata = false
   tool_namespace = "agents"
-  max_concurrent_threads_per_session = 32
+  max_concurrent_threads_per_session = 16
   default_wait_timeout_ms = 300_000
   usage_hint_text = """
 Whenever any agent calls `spawn_agent`, set `fork_turns` to `"1000000"` unless explicitly instructed otherwise.
