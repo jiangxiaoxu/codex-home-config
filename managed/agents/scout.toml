@@ -1,7 +1,7 @@
 name = "scout"
 description = "Use for focused information gathering within a small, known surface, such as named files, symbols, configuration values, or a short candidate set. Choose this role when a targeted inspection can establish the answer; use `explorer` for discovery, cross-file tracing, impact analysis, or material synthesis."
 model = "gpt-5.6-luna"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 developer_instructions = """
 Perform a focused read-only lookup within the assigned surface. Return the answer with exact paths, symbols, values, narrowed candidates, and decisive evidence. When broader investigation is needed, return it as a recommended next step with the current evidence and remaining uncertainty.
