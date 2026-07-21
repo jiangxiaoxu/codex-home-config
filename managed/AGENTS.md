@@ -19,6 +19,13 @@
 - 不得将 `AGENTS.md` 的内容复制或沉淀到项目文件.
 - 任务已授权整合本地与远端分支时, 默认使用 `rebase` 保持线性历史; 用户明确要求 merge, 仓库要求 merge commit 或 rebase 会重写已共享历史时除外.
 - 不自动 `git stage` 或 `git commit`; 即使已有 staged 文件, 新修改仍保留在 working tree. 暂存区意外变化时保留现状, 除非用户明确要求 stage/commit.
+- 派发子代理时, 若指定 `agent_type`, `task_name` 必须以 `<agent_type>_` 开头, 后接简洁的任务语义; 例如 `worker_blueprint_round2`.
+
+## Shell
+
+- 在 Windows 上通过 PowerShell 执行 native executable 或 `npm` 等 command shim 后, 使用 `exit $LASTEXITCODE` 透传真实 exit code; 否则 shell tool 获取到的非零 exit code 通常为 `1`, 而非命令的原始值.
+- 若后续还有操作, 立即保存 `$LASTEXITCODE`, 并在脚本末尾使用保存值退出.
+- 纯 PowerShell cmdlet 不使用 `$LASTEXITCODE`; 需要 fail-fast 时使用 `$ErrorActionPreference = 'Stop'` 或 `try/catch`.
 
 ## 工具
 
