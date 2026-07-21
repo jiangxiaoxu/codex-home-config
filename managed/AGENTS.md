@@ -24,8 +24,7 @@
 ## Shell
 
 - 在 Windows 上通过 PowerShell 执行 native executable 或 `npm` 等 command shim 后, 使用 `exit $LASTEXITCODE` 透传真实 exit code; 否则 shell tool 获取到的非零 exit code 通常为 `1`, 而非命令的原始值.
-- 若后续还有操作, 立即保存 `$LASTEXITCODE`, 并在脚本末尾使用保存值退出.
-- 纯 PowerShell cmdlet 不使用 `$LASTEXITCODE`; 需要 fail-fast 时使用 `$ErrorActionPreference = 'Stop'` 或 `try/catch`.
+- 若后续还有操作, 可以打印 `$LASTEXITCODE`避免非零 exit code被吞掉.
 
 ## 工具
 
