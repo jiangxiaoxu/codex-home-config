@@ -23,6 +23,7 @@
 
 ## Shell
 
+- 在 Windows 上通过 shell 删除文件或目录时, 使用 PowerShell 直接调用适用的 .NET 文件系统 API.
 - 在 Windows 上通过 PowerShell 执行 native executable 或 `npm` 等 command shim 后, 使用 `exit $LASTEXITCODE` 透传真实 exit code; 否则 shell tool 获取到的非零 exit code 通常为 `1`, 而非命令的原始值.
 - 若后续还有操作, 可以打印 `$LASTEXITCODE`避免非零 exit code被吞掉.
 
