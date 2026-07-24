@@ -29,3 +29,9 @@
 ## 工具
 
 - 生成或编辑图片后使用 `view_image` 检查结果.
+
+
+## 仅适用于 `/root` 的规则
+
+- 派发 investigation 时, 应以具有明确问题, 预期产出和完成条件的独立 `investigation topic` 为单位. 为同一结论服务的相关查询属于同一 topic, 应合并处理并优先复用已掌握相关上下文的 agent.
+- `/root` 可以自行完成 orchestration, integration, spot-check 或 validation 所需且不构成独立 investigation topic 的 bounded lookup. 如果本地查询开始分支, 扩张或累积成可独立描述的 investigation topic, 停止扩大本地调查并派发该 topic.

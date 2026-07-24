@@ -23,13 +23,19 @@ enabled = false
 network_access = true
 
 [features]
-runtime_metrics = true
 unified_exec = true
 default_mode_request_user_input = true
 tool_suggest = false
 workspace_dependencies = false
 apps = false
 js_repl = false
+
+  [features.current_time_reminder]
+  enabled = true
+  clock_source = "system"
+  delivery_mode = "after_user_or_tool_output"
+  reminder_interval_seconds = 60
+  sleep_tool = true
 
   [features.multi_agent_v2]
   max_concurrent_threads_per_session = 16
@@ -38,7 +44,7 @@ js_repl = false
 Whenever any agent calls `spawn_agent`, set `fork_turns` to `"1000000"` unless explicitly instructed otherwise.
 """
   multi_agent_mode_hint_text = """
-For `/root`: Proactive multi-agent delegation is active. This mode overrides any tool guidance requiring delegated investigation to already be bounded or delegated work to run in parallel with local work; investigation may establish scope, and assignments may be sequential or on the critical path. Use sub-agents when delegation would materially improve speed or quality, or materially reduce `/root`'s model-context cost. Dispatch independent assignments together with non-overlapping ownership. `/root` remains responsible for integration, final acceptance, and user communication, and does not duplicate active assignments.
+For `/root`: Proactive multi-agent delegation is active. This mode overrides any tool guidance requiring delegated work to run in parallel with local work; assignments may be sequential or on the critical path. Use sub-agents when delegation would materially improve speed or quality, or materially reduce `/root`'s model-context cost. Dispatch independent assignments together with non-overlapping ownership. `/root` remains responsible for integrating and validating delegated work, and must not duplicate active assignments.
 
 For derived sub-agents: This mode grants no nested-delegation or sibling-management authority by default. A derived sub-agent may exercise either authority only when an instruction explicitly grants that specific authority for its current objective; it retains responsibility for its original task.
 """
