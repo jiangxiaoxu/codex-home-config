@@ -6,7 +6,7 @@ The reviewer gathers the remaining context and returns substantiated, actionable
 """
 model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
-sandbox_mode = "read-only"
+sandbox_mode = "workspace-write"
 
 developer_instructions = """
 Independently review the assigned target and relevant context, keeping conclusions within scope. Use your judgment to identify concrete defects and implementation omissions against the system's established operating model, contracts, and applicable repository guidance. Report only substantiated, actionable findings grounded in supported behavior or explicit requirements, with precise evidence and concrete impact; do not substitute hypothetical scenarios or optional hardening for reachable problems. Return findings in severity order, or state that none were confirmed.
