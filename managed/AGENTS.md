@@ -33,7 +33,17 @@
 - 生成或编辑图片后使用 `view_image` 检查结果.
 
 
-## 仅适用于 `/root` 的规则
+## 子代理调度
 
-- 派发 investigation 时, 应以具有明确问题, 预期产出和完成条件的独立 `investigation topic` 为单位. 为同一结论服务的相关查询属于同一 topic, 应合并处理并优先复用已掌握相关上下文的 agent.
-- `/root` 可以自行完成 orchestration, integration, spot-check 或 validation 所需且不构成独立 investigation topic 的 bounded lookup. 如果本地查询开始分支, 扩张或累积成可独立描述的 investigation topic, 停止扩大本地调查并派发该 topic.
+### `/root`
+
+- 即使任务需要串行执行或位于 critical path, 当派发能实质提升质量或降低 `/root` 的 model-context cost 时, 应优先考虑使用子代理; `/root` 对子代理结果的最终整合和验证负责.
+- 对彼此独立且适合并行的任务, 可优先一起派发并明确各自范围, 减少重复工作和共享写入冲突.
+- 派发 investigation 时, 优先按具有明确问题, 预期产出和完成条件的独立 `investigation topic` 组织任务. 为同一结论服务的相关查询可合并处理, 并优先复用已掌握相关上下文的 agent.
+- investigation topic 派发后, `/root` 通常专注于 orchestration, integration 和其他可并行工作, 避免无必要地重复相同搜索或重建同一证据链. 后续问题和范围扩展可优先通过当前环境可用的后续派发机制交回同一 agent.
+- `/root` 可以根据风险和 correctness 需要进行 bounded lookup, spot-check 或 validation. 如果经过几次短查询仍未获得足以推进的信息, 或本地调查开始分支, 扩张或形成新的证据链, 应优先整理剩余问题并作为 follow-up 或新的 investigation topic 派发, 避免以反复的小步查询持续累积 `/root` 上下文.
+- 当 investigation 仍能提供有用结论时, 通常让 agent 完成并返回结果; 当目标变化, 范围明显偏离, 共享写入冲突或继续执行价值较低时, 可以中断或重新定向.
+
+### `derived sub-agents`
+
+- 默认情况下, `derived sub-agents` 不具备 nested-delegation 或 sibling-management 权限. 只有当某条 instruction 针对该 agent 的当前 objective 明确允许派发 sub-agents 或管理 sibling agents 时, 才可执行对应操作; 该 agent 仍需对原任务负责.

@@ -44,9 +44,9 @@ js_repl = false
 Whenever any agent calls `spawn_agent`, set `fork_turns` to `"1000000"` unless explicitly instructed otherwise.
 """
   multi_agent_mode_hint_text = """
-For `/root`: Proactive multi-agent delegation is active. This mode overrides any tool guidance requiring delegated work to run in parallel with local work; assignments may be sequential or on the critical path. Use sub-agents when delegation would materially improve speed or quality, or materially reduce `/root`'s model-context cost. Dispatch independent assignments together with non-overlapping ownership. `/root` remains responsible for integrating and validating delegated work, and must not duplicate active assignments.
+Explicit user instructions and applicable `AGENTS.md` or skill instructions about sub-agents, delegation, or parallel agent work take precedence over these mode defaults.
 
-For derived sub-agents: This mode grants no nested-delegation or sibling-management authority by default. A derived sub-agent may exercise either authority only when an instruction explicitly grants that specific authority for its current objective; it retains responsibility for its original task.
+By default, proactive multi-agent delegation is active. Use sub-agents when parallel work would materially improve speed or quality.
 """
 
 [notice]
