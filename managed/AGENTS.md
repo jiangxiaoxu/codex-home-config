@@ -40,9 +40,12 @@
 - 即使任务需要串行执行或位于 critical path, 当派发能实质提升质量或降低 `/root` 的 model-context cost 时, 应优先考虑使用子代理; `/root` 对子代理结果的最终整合和验证负责.
 - 对彼此独立且适合并行的任务, 可优先一起派发并明确各自范围, 减少重复工作和共享写入冲突.
 - 派发 investigation 时, 优先按具有明确问题, 预期产出和完成条件的独立 `investigation topic` 组织任务. 为同一结论服务的相关查询可合并处理, 并优先复用已掌握相关上下文的 agent.
-- investigation topic 派发后, `/root` 通常专注于 orchestration, integration 和其他可并行工作, 避免无必要地重复相同搜索或重建同一证据链. 后续问题和范围扩展可优先通过当前环境可用的后续派发机制交回同一 agent.
-- `/root` 可以根据风险和 correctness 需要进行 bounded lookup, spot-check 或 validation. 如果经过几次短查询仍未获得足以推进的信息, 或本地调查开始分支, 扩张或形成新的证据链, 应优先整理剩余问题并作为 follow-up 或新的 investigation topic 派发, 避免以反复的小步查询持续累积 `/root` 上下文.
-- 当 investigation 仍能提供有用结论时, 通常让 agent 完成并返回结果; 当目标变化, 范围明显偏离, 共享写入冲突或继续执行价值较低时, 可以中断或重新定向.
+- 派发 `investigation topic` 后, 该 topic 的证据搜索和结论构建由被派发 agent 负责, 直到其完成, 被中断或被明确重新定向. `/root` 不得并行重复该 topic 的搜索, 不得自行重建相同证据链; 应专注于 orchestration, integration 和不重叠的工作.
+- `/root` 在已派发 topic 内只可进行 bounded spot-check: 读取 routing / configuration 入口, 检查 agent 已指出的 exact file / symbol / line, 或执行最终结论所需的最小 validation. 默认不超过一次批量查询; 不得由 spot-check 发起 repo-wide / Engine-wide 搜索, 新假设分支, 多跳引用追踪或连续依赖查询.
+- 出现以下任一情况时, 本地查询不再属于 bounded spot-check, `/root` 必须停止并将剩余问题 follow-up 给当前 topic owner: 尚不知道 exact file / symbol; 需要扩大目录或语言范围; 一次查询结果决定下一次搜索方向; 出现新的机制, 例外或证据分支; 需要两轮以上依赖查询才能形成结论.
+- 用户在 investigation 进行期间补充证据来源, 验收标准或范围约束时, 若仍属于原 topic, `/root` 应将补充要求发送给当前 owner, 不得以用户追问为由接管并重复调查. 只有原 agent 已完成, 被中断, 明确阻塞或继续执行价值较低时, `/root` 才可重新分配或显式接管该 topic.
+- agent 结果不完整时, `/root` 应先列出缺失问题并 follow-up 给同一 agent. 最终 validation 用于验证 agent 结论, 不用于重新进行完整 investigation.
+- 等待 investigation 返回期间, `/root` 可以推进不重叠的工作或等待; 不得仅因为处于等待状态而搜索该 agent 正在调查的范围.
 
 ### `derived sub-agents`
 

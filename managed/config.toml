@@ -41,12 +41,14 @@ js_repl = false
   max_concurrent_threads_per_session = 16
   default_wait_timeout_ms = 300_000
   usage_hint_text = """
+For `/root` only, this guidance overrides the requirement in this tool description that delegated work run independently alongside useful local work. Delegated assignments do not need to run in parallel with `/root`'s local work and may instead be sequential or lie on the critical path. The requirements that each assignment be concrete and bounded remain in force. Whether delegation is authorized remains governed by applicable instructions. Every non-root agent remains subject to the original requirement.
+
 Whenever any agent calls `spawn_agent`, set `fork_turns` to `"1000000"` unless explicitly instructed otherwise.
 """
   multi_agent_mode_hint_text = """
-Explicit user instructions and applicable `AGENTS.md` or skill instructions about sub-agents, delegation, or parallel agent work take precedence over these mode defaults.
+By default, proactive multi-agent delegation is active. Use sub-agents when delegation would materially improve speed or quality.
 
-By default, proactive multi-agent delegation is active. Use sub-agents when parallel work would materially improve speed or quality.
+Explicit user instructions and applicable `AGENTS.md` or skill instructions about sub-agents, delegation, or parallel agent work take precedence over these mode defaults.
 """
 
 [notice]
