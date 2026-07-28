@@ -66,7 +66,8 @@ status_line = [
   "five-hour-limit",
   "weekly-limit",
   "context-window-size",
-  "run-state"
+  "run-state",
+  "git-branch"
 ]
 terminal_title = [ "spinner", "project", "status" ]
 status_line_use_colors = true
