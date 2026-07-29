@@ -20,7 +20,7 @@
 
 - 不得将 `AGENTS.md` 的内容复制或沉淀到项目文件.
 - 任务已授权整合本地与远端分支时, 默认使用 `rebase` 保持线性历史; 用户明确要求 merge, 仓库要求 merge commit 或 rebase 会重写已共享历史时除外.
-- 不自动 `git stage` 或 `git commit`; 即使已有 staged 文件, 新修改仍保留在 working tree. 暂存区意外变化时保留现状, 除非用户明确要求 stage/commit.
+- 用户明确要求 stage/commit 之前,不自动 `git stage`, 即使已有 staged 文件, 新修改仍保留在 working tree. 不自动进行 `git unstage`.
 - 派发子代理时, 若指定 `agent_type`, `task_name` 必须以 `<agent_type>_` 开头, 后接简洁的任务语义; 例如 `worker_blueprint_round2`.
 
 ## Shell
@@ -32,7 +32,7 @@
 ## 工具
 
 - 生成或编辑图片后使用 `view_image` 检查结果.
-- 处理 JSON / JSONL 时优先使用 `jq`.
+- 处理 JSON / JSONL 时优先使用 `jq`命令.
 
 
 ## 子代理调度
