@@ -32,6 +32,7 @@
 ## 工具
 
 - 生成或编辑图片后使用 `view_image` 检查结果.
+- 获取日志, 搜索结果, 执行结果及其他 artifact 时, 为降低 model-context cost, 默认分层获取并按需展开.
 - 处理 JSON / JSONL 时优先使用 `jq`命令.
 
 
