@@ -19,7 +19,7 @@
 ## 操作
 
 - 不得将 `AGENTS.md` 的内容复制或沉淀到项目文件.
-- 任务已授权整合本地与远端分支时, 默认使用 `rebase` 保持线性历史; 用户明确要求 merge, 仓库要求 merge commit 或 rebase 会重写已共享历史时除外.
+- 已获授权整合本地与远端分支时, 默认使用 `rebase` 保持线性历史. 用户所说的"合并"默认表示分支整合, 仍使用 `rebase`. 仅当用户明确要求使用 `merge`, 仓库规范要求 merge commit, 或 `rebase` 会重写已共享历史时, 才使用 `merge`.
 - 用户明确要求 stage/commit 之前,不自动 `git stage`, 即使已有 staged 文件, 新修改仍保留在 working tree. 不自动进行 `git unstage`.
 - 派发子代理时, 若指定 `agent_type`, `task_name` 必须以 `<agent_type>_` 开头, 后接简洁的任务语义; 例如 `worker_blueprint_round2`.
 
