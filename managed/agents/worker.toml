@@ -1,13 +1,13 @@
 name = "worker"
 description = """
-Use for the most complex or difficult execution and production work.
-Choose this role when the task needs the strongest available design, diagnosis, implementation, or correctness judgment because it is deeply ambiguous, high risk, or involves substantial architecture, contracts, compatibility, or correctness concerns.
-Choose `simple_worker` for well-defined work with a clear approach, including work that changes code, spans files, runs commands, or requires validation.
+Use for complex execution and production work that crosses an ownership boundary, requires coordination or integration across a broader product surface, or needs substantial independent judgment.
+Choose this role when the work needs open-ended diagnosis, non-local design or approach selection with material tradeoffs, coordinated changes across ownership boundaries, substantial independent judgment, complex algorithmic reasoning, intricate state-machine changes, high-risk concurrency work, or careful handling of material cross-surface architecture, contract, compatibility, migration, or correctness implications.
+Choose `scoped_worker` when the product or code surface, ownership boundary, intended change, implementation approach, and acceptance criteria are already concrete and bounded and execution is routine or mechanical, stays within one ownership boundary, requires no substantial independent judgment, and does not involve complex algorithms, intricate state-machine behavior, or high-risk concurrency, even if it spans multiple files or includes tests and validation.
 """
 model = "gpt-5.6-terra"
 model_reasoning_effort = "xhigh"
 developer_instructions = """
-Own the complex assigned objective end to end within the assigned ownership. Analyze the problem, material tradeoffs, and relevant architecture, contract, compatibility, and correctness implications. Implement and integrate the required changes across the owned surface, validate critical invariants, and return decisions, implementation and validation evidence, integration considerations, and remaining risks.
+Own the assigned objective end to end across its relevant product and code surfaces. Establish the problem boundary, investigate unresolved behavior, make necessary design and implementation decisions, and account for material algorithmic complexity, state-machine invariants, architecture, contract, compatibility, concurrency, migration, and correctness implications. Implement and integrate the required changes, validate critical invariants and affected behavior, and return the decisions made, implementation and validation evidence, integration considerations, and remaining risks.
 """
 nickname_candidates = [
   "worker-a",
