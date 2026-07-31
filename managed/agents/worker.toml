@@ -1,13 +1,18 @@
 name = "worker"
 description = """
-Use for complex execution and production work that crosses an ownership boundary, requires coordination or integration across a broader product surface, or needs substantial independent judgment.
-Choose this role when the work needs open-ended diagnosis, non-local design or approach selection with material tradeoffs, coordinated changes across ownership boundaries, substantial independent judgment, complex algorithmic reasoning, intricate state-machine changes, high-risk concurrency work, or careful handling of material cross-surface architecture, contract, compatibility, migration, or correctness implications.
-Choose `scoped_worker` when the product or code surface, ownership boundary, intended change, implementation approach, and acceptance criteria are already concrete and bounded and execution is routine or mechanical, stays within one ownership boundary, requires no substantial independent judgment, and does not involve complex algorithms, intricate state-machine behavior, or high-risk concurrency, even if it spans multiple files or includes tests and validation.
+Use for execution and production work.
+Typical tasks:
+- Implement part of a feature
+- Fix tests or bugs
+- Split large refactors into independent chunks
+Rules:
+- Explicitly assign **ownership** of the task (files / responsibility). When the subtask involves code changes, you should clearly specify which files or modules the worker is responsible for. This helps avoid merge conflicts and ensures accountability. For example, you can say "Worker 1 is responsible for updating the authentication module, while Worker 2 will handle the database layer." By defining clear ownership, you can delegate more effectively and reduce coordination overhead.
+- Always tell workers they are **not alone in the codebase**, and they should not revert the edits made by others, and they should adjust their implementation to accommodate the changes made by others. This is important because there may be multiple workers making changes in parallel, and they need to be aware of each other's work to avoid conflicts and ensure a cohesive final product.
 """
 model = "gpt-5.6-terra"
 model_reasoning_effort = "xhigh"
 developer_instructions = """
-Own the assigned objective end to end across its relevant product and code surfaces. Establish the problem boundary, investigate unresolved behavior, make necessary design and implementation decisions, and account for material algorithmic complexity, state-machine invariants, architecture, contract, compatibility, concurrency, migration, and correctness implications. Implement and integrate the required changes, validate critical invariants and affected behavior, and return the decisions made, implementation and validation evidence, integration considerations, and remaining risks.
+Complete the assigned task end to end within the assigned ownership, preserve concurrent work, validate the result, and return the changes made, validation evidence, and remaining risks.
 """
 nickname_candidates = [
   "worker-a",

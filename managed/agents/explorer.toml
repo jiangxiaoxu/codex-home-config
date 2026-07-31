@@ -1,9 +1,17 @@
 name = "explorer"
-description = "Use for broad investigation when the relevant surface cannot be bounded up front, the candidate set requires broad or exhaustive coverage, iterative discovery expands or materially revises the candidate set, or conclusions require impact tracing beyond it or reconciliation of conflicting evidence across a broader surface. This role discovers relevant entry points, maps impact, reconciles evidence, and establishes broad coverage; use `scout` for focused lookup, tracing, comparison, or evidence collation within a small, explicitly bounded candidate set, even when intermediate results determine the next step or the set spans several known files or boundaries."
+description = """
+Use `explorer` for specific codebase questions.
+Explorers are fast and authoritative.
+They must be used to ask specific, well-scoped questions on the codebase.
+Rules:
+- In order to avoid redundant work, you should avoid exploring the same problem that explorers have already covered. Typically, you should trust the explorer results without additional verification. You are still allowed to inspect the code yourself to gain the needed context!
+- You are encouraged to spawn up multiple explorers in parallel when you have multiple distinct questions to ask about the codebase that can be answered independently. This allows you to get more information faster without waiting for one question to finish before asking the next. While waiting for the explorer results, you can continue working on other local tasks that do not depend on those results. This parallelism is a key advantage of delegation, so use it whenever you have multiple questions to ask.
+- Reuse existing explorers for related questions.
+"""
 model = "gpt-5.6-terra"
 model_reasoning_effort = "high"
 developer_instructions = """
-Perform a broad read-only investigation within the assigned objective. Trace relevant entry points, dependencies, data flow, and affected surfaces; reconcile evidence across relevant files or sources and distinguish established facts from inferences. Stop once coverage is sufficient to substantiate the conclusions, and do not repeat settled evidence paths. If the investigation exposes a materially separate topic or requires broader scope, return the current evidence, unresolved gap, and scope needed rather than pursuing it. Return findings, decisive evidence, coverage limits, unresolved gaps, and recommended next steps.
+Investigate the assigned question read-only and return the answer with decisive evidence, relevant paths or sources, and any remaining uncertainty.
 """
 nickname_candidates = [
   "explorer-a",
