@@ -16,9 +16,6 @@ approvals_reviewer = "auto_review"
 url = "https://developers.openai.com/mcp"
 enabled = false
 
-[apps._default]
-enabled = false
-
 [sandbox_workspace_write]
 network_access = true
 
@@ -26,8 +23,6 @@ network_access = true
 unified_exec = true
 default_mode_request_user_input = true
 tool_suggest = false
-workspace_dependencies = false
-apps = false
 js_repl = false
 
   [features.current_time_reminder]

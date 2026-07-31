@@ -10,39 +10,72 @@ const preferredTopLevelKeyOrder = [
   'model',
   'model_reasoning_effort'
 ]
-const installPreservedTopLevelKeys = new Set([
-  'service_tier',
-  'plan_mode_reasoning_effort'
-])
-const partiallyManagedTopLevelTables = new Set([
-  'mcp_servers'
-])
-const syncAllowlistedChildTables = new Set([
-  'apps',
-  'mcp_servers'
-])
-const syncExcludedTopLevelKeys = new Set([
-  'model',
-  'model_context_window',
-  'model_reasoning_effort',
-  'model_catalog_json',
-  'service_tier',
-  'plan_mode_reasoning_effort'
-])
-const installRemovedTopLevelKeys = new Set([
-  'model_context_window'
-])
-const installRemovedNestedPaths = [
-  ['notice', 'model_migrations']
-]
-const installPreservedNestedPaths = [
-  ['sandbox_workspace_write', 'writable_roots']
-]
-const syncExcludedNestedPaths = [
-  ['notice', 'model_migrations'],
-  ['sandbox_workspace_write', 'writable_roots'],
-  ['tui', 'model_availability_nux']
-]
+const configTomlPolicy = {
+  syncExcludedInstallPreservedNestedPaths: [
+    ['features', 'workspace_dependencies'],
+    ['features', 'apps']
+  ],
+  sync: {
+    topLevelAllowlistSource: 'managed/config.toml',
+    excludedTopLevelKeys: [
+      'projects',
+      'model',
+      'model_context_window',
+      'model_reasoning_effort',
+      'model_catalog_json',
+      'service_tier',
+      'plan_mode_reasoning_effort',
+      'apps'
+    ],
+    excludedNestedPaths: [
+      ['notice', 'model_migrations'],
+      ['sandbox_workspace_write', 'writable_roots'],
+      ['tui', 'model_availability_nux']
+    ],
+    childAllowlistedTables: [
+      'mcp_servers'
+    ]
+  },
+  install: {
+    defaultTopLevelMerge: {
+      sourceDefinedAction: 'replace',
+      targetOnlyAction: 'preserve'
+    },
+    preservedTopLevelKeys: [
+      'service_tier',
+      'plan_mode_reasoning_effort'
+    ],
+    preservedTopLevelTables: [
+      'projects'
+    ],
+    preservedNestedPaths: [
+      ['sandbox_workspace_write', 'writable_roots']
+    ],
+    removedTopLevelKeys: [
+      'model_context_window'
+    ],
+    removedNestedPaths: [
+      ['notice', 'model_migrations']
+    ],
+    namedChildMergedTables: [
+      'mcp_servers'
+    ]
+  }
+}
+
+configTomlPolicy.sync.excludedNestedPaths.push(...configTomlPolicy.syncExcludedInstallPreservedNestedPaths)
+configTomlPolicy.install.preservedNestedPaths.push(...configTomlPolicy.syncExcludedInstallPreservedNestedPaths)
+
+const installPreservedTopLevelKeys = new Set(configTomlPolicy.install.preservedTopLevelKeys)
+const installPreservedTopLevelTables = new Set(configTomlPolicy.install.preservedTopLevelTables)
+const partiallyManagedTopLevelTables = new Set(configTomlPolicy.install.namedChildMergedTables)
+const syncAllowlistedChildTables = new Set(configTomlPolicy.sync.childAllowlistedTables)
+const syncExcludedTopLevelKeys = new Set(configTomlPolicy.sync.excludedTopLevelKeys)
+const installRemovedTopLevelKeys = new Set(configTomlPolicy.install.removedTopLevelKeys)
+const installRemovedNestedPaths = configTomlPolicy.install.removedNestedPaths
+const syncExcludedInstallPreservedNestedPaths = configTomlPolicy.syncExcludedInstallPreservedNestedPaths
+const installPreservedNestedPaths = configTomlPolicy.install.preservedNestedPaths
+const syncExcludedNestedPaths = configTomlPolicy.sync.excludedNestedPaths
 
 function hasOwn (object, key) {
   return Object.prototype.hasOwnProperty.call(object, key)
@@ -197,7 +230,7 @@ function buildMergeInstallConfig (sourceConfig, targetConfig) {
   const mergedConfig = {}
 
   for (const key of Object.keys(sourceConfig)) {
-    if (key === 'projects' || installRemovedTopLevelKeys.has(key) || installPreservedTopLevelKeys.has(key)) {
+    if (installPreservedTopLevelTables.has(key) || installRemovedTopLevelKeys.has(key) || installPreservedTopLevelKeys.has(key)) {
       continue
     }
 
@@ -210,7 +243,7 @@ function buildMergeInstallConfig (sourceConfig, targetConfig) {
   }
 
   for (const key of Object.keys(targetConfig)) {
-    if (key === 'projects' || installRemovedTopLevelKeys.has(key)) {
+    if (installPreservedTopLevelTables.has(key) || installRemovedTopLevelKeys.has(key)) {
       continue
     }
 
@@ -226,8 +259,10 @@ function buildMergeInstallConfig (sourceConfig, targetConfig) {
     mergedConfig[key] = targetConfig[key]
   }
 
-  if (hasOwn(targetConfig, 'projects')) {
-    mergedConfig.projects = targetConfig.projects
+  for (const tableName of installPreservedTopLevelTables) {
+    if (hasOwn(targetConfig, tableName)) {
+      mergedConfig[tableName] = targetConfig[tableName]
+    }
   }
 
   preserveNestedPaths(mergedConfig, targetConfig, installPreservedNestedPaths)
@@ -237,14 +272,16 @@ function buildMergeInstallConfig (sourceConfig, targetConfig) {
 
 function buildPublishedSyncConfig (localConfig, managedConfig) {
   const publishedConfig = {}
+  const managedTopLevelKeys = new Set(Object.keys(managedConfig))
 
-  for (const key of Object.keys(managedConfig)) {
-    if (key === 'projects' || syncExcludedTopLevelKeys.has(key) || !hasOwn(localConfig, key)) {
+  for (const key of managedTopLevelKeys) {
+    if (syncExcludedTopLevelKeys.has(key) || !hasOwn(localConfig, key)) {
       continue
     }
 
     if (syncAllowlistedChildTables.has(key)) {
-      publishedConfig[key] = pickNamedChildEntriesByAllowlist(localConfig[key], managedConfig[key])
+      const managedAllowlist = isTomlObject(managedConfig[key]) ? managedConfig[key] : {}
+      publishedConfig[key] = pickNamedChildEntriesByAllowlist(localConfig[key], managedAllowlist)
       continue
     }
 
@@ -405,6 +442,7 @@ function runCli () {
 module.exports = {
   buildMergeInstallConfig,
   buildPublishedSyncConfig,
+  configTomlPolicy,
   ensureSupportedNodeVersion,
   mergeInstallConfig,
   orderTopLevelKeys,
@@ -415,7 +453,8 @@ module.exports = {
   syncExcludedNestedPaths,
   syncExcludedTopLevelKeys,
   syncAllowlistedChildTables,
-  installPreservedTopLevelKeys
+  installPreservedTopLevelKeys,
+  syncExcludedInstallPreservedNestedPaths
 }
 
 if (require.main === module) {

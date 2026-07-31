@@ -10,6 +10,7 @@ const require = createRequire(import.meta.url);
 const {
   buildMergeInstallConfig,
   buildPublishedSyncConfig,
+  configTomlPolicy,
   orderTopLevelKeys
 } = require('../tools/config-toml-ops.cjs');
 const TOML = require('@iarna/toml');
@@ -271,7 +272,7 @@ test('merge-install syncs managed mcp servers by server name and preserves unman
   );
 });
 
-test('merge-install applies the complete managed apps table', () => {
+test('merge-install preserves local feature values but applies source apps without special handling', () => {
   const sourceConfig = {
     apps: {
       _default: {
@@ -280,6 +281,11 @@ test('merge-install applies the complete managed apps table', () => {
       connector_managed_only: {
         enabled: true
       }
+    },
+    features: {
+      workspace_dependencies: true,
+      apps: true,
+      unified_exec: true
     }
   };
 
@@ -291,6 +297,10 @@ test('merge-install applies the complete managed apps table', () => {
       connector_local_only: {
         enabled: true
       }
+    },
+    features: {
+      workspace_dependencies: false,
+      apps: false
     }
   };
 
@@ -304,7 +314,71 @@ test('merge-install applies the complete managed apps table', () => {
         connector_managed_only: {
           enabled: true
         }
+      },
+      features: {
+        workspace_dependencies: false,
+        apps: false,
+        unified_exec: true
       }
+    }
+  );
+});
+
+test('merge-install omits preserved feature values absent from target without filtering source apps', () => {
+  assert.deepStrictEqual(
+    buildMergeInstallConfig(
+      {
+        apps: {
+          _default: {
+            enabled: false
+          },
+          connector_managed: {
+            enabled: true
+          }
+        },
+        features: {
+          workspace_dependencies: false,
+          apps: false,
+          unified_exec: true
+        }
+      },
+      {}
+    ),
+    {
+      apps: {
+        _default: {
+          enabled: false
+        },
+        connector_managed: {
+          enabled: true
+        }
+      },
+      features: {
+        unified_exec: true
+      }
+    }
+  );
+});
+
+test('merge-install preserves all local apps when the managed snapshot has no apps table', () => {
+  const targetConfig = {
+    apps: {
+      _default: {
+        enabled: false
+      },
+      local_app: {
+        enabled: true
+      }
+    }
+  };
+
+  assert.deepStrictEqual(
+    buildMergeInstallConfig({ features: { unified_exec: true } }, targetConfig),
+    {
+      features: {
+        unified_exec: true
+      },
+      apps: targetConfig.apps
     }
   );
 });
@@ -629,7 +703,7 @@ test('publish-sync only emits managed mcp servers by server name', () => {
   );
 });
 
-test('publish-sync only emits managed apps by app name', () => {
+test('publish-sync excludes the entire apps table even when apps are already managed', () => {
   const localConfig = {
     apps: {
       _default: {
@@ -660,17 +734,179 @@ test('publish-sync only emits managed apps by app name', () => {
 
   assert.deepStrictEqual(
     buildPublishedSyncConfig(localConfig, managedConfig),
-    {
-      apps: {
-        _default: {
-          enabled: true
+    {}
+  );
+});
+
+test('publish-sync excludes apps and locally preserved feature values', () => {
+  assert.deepStrictEqual(
+    buildPublishedSyncConfig(
+      {
+        apps: {
+          _default: {
+            enabled: false
+          },
+          connector_managed: {
+            enabled: true
+          }
         },
-        connector_managed: {
-          enabled: false
+        features: {
+          workspace_dependencies: false,
+          apps: false,
+          unified_exec: true
         }
+      },
+      {
+        apps: {
+          _default: {
+            enabled: true
+          },
+          connector_managed: {
+            enabled: false
+          }
+        },
+        features: {
+          workspace_dependencies: true,
+          apps: true,
+          unified_exec: false
+        }
+      }
+    ),
+    {
+      features: {
+        unified_exec: true
       }
     }
   );
+});
+
+test('publish-sync excludes apps with the real managed allowlist', () => {
+  const managedConfig = TOML.parse(readFileSync(join(process.cwd(), 'managed', 'config.toml'), 'utf8'));
+  assert.equal(Object.hasOwn(managedConfig, 'apps'), false);
+
+  assert.deepStrictEqual(
+    buildPublishedSyncConfig(
+      {
+        apps: {
+          _default: {
+            enabled: false,
+            other_setting: 'published'
+          },
+          unlisted_local_app: {
+            enabled: true
+          }
+        }
+      },
+      managedConfig
+    ),
+    {}
+  );
+});
+
+test('managed config.toml contains no sync-excluded configuration', () => {
+  const managedConfig = TOML.parse(readFileSync(join(process.cwd(), 'managed', 'config.toml'), 'utf8'));
+  const hasPath = (pathSegments) => {
+    let value = managedConfig;
+    for (const pathSegment of pathSegments) {
+      if (value === null || typeof value !== 'object' || !Object.hasOwn(value, pathSegment)) {
+        return false;
+      }
+      value = value[pathSegment];
+    }
+    return true;
+  };
+
+  for (const key of configTomlPolicy.sync.excludedTopLevelKeys) {
+    assert.equal(Object.hasOwn(managedConfig, key), false, `managed/config.toml must exclude ${key}`);
+  }
+
+  for (const pathSegments of configTomlPolicy.sync.excludedNestedPaths) {
+    assert.equal(hasPath(pathSegments), false, `managed/config.toml must exclude ${pathSegments.join('.')}`);
+  }
+});
+
+test('README config.toml 同步策略完整记录用户可见的同步排除规则', () => {
+  const readme = readFileSync(join(process.cwd(), 'README.md'), 'utf8');
+  const sectionMatch = readme.match(/## config\.toml 同步策略\n([\s\S]*?)(?=\n## |$)/);
+  assert.notEqual(sectionMatch, null, 'README 必须包含集中的 config.toml 同步策略章节');
+  const policySection = sectionMatch[1];
+  const exampleMatch = policySection.match(/```toml\n([\s\S]*?)\n```/);
+  assert.notEqual(exampleMatch, null, 'README 同步策略必须包含 TOML 示例');
+  const exampleConfig = TOML.parse(exampleMatch[1]);
+  const pathNames = (paths) => paths.map((pathSegments) => pathSegments.join('.'));
+  const exampleHasPath = (pathSegments) => {
+    let value = exampleConfig;
+    for (const pathSegment of pathSegments) {
+      if (value === null || typeof value !== 'object' || !Object.hasOwn(value, pathSegment)) {
+        return false;
+      }
+      value = value[pathSegment];
+    }
+    return true;
+  };
+  const policyRows = new Map(
+    [...policySection.matchAll(/^\| ([^|]+) \| ([^|]+) \|$/gm)]
+      .map((match) => [match[1].trim(), match[2].trim()])
+  );
+  const localOnlyPaths = pathNames(configTomlPolicy.syncExcludedInstallPreservedNestedPaths);
+  const regularExcludedNestedPaths = pathNames(configTomlPolicy.sync.excludedNestedPaths)
+    .filter((pathName) => !localOnlyPaths.includes(pathName));
+  const installPreservedLocalOnlyPaths = pathNames(configTomlPolicy.install.preservedNestedPaths)
+    .filter((pathName) => localOnlyPaths.includes(pathName));
+  assert.deepStrictEqual(
+    new Set(installPreservedLocalOnlyPaths),
+    new Set(localOnlyPaths),
+    '所有本地专属配置都必须在安装时保留'
+  );
+  const expectedNamesByRow = new Map([
+    ['顶层配置', configTomlPolicy.sync.excludedTopLevelKeys],
+    ['嵌套配置', regularExcludedNestedPaths],
+    ['本地专属配置', localOnlyPaths]
+  ]);
+
+  for (const policyName of new Set([
+    configTomlPolicy.sync.topLevelAllowlistSource,
+    ...configTomlPolicy.sync.childAllowlistedTables
+  ])) {
+    assert.ok(policySection.includes(`\`${policyName}\``), `同步范围说明必须记录 ${policyName}`);
+  }
+
+  for (const [rowName, policyNames] of expectedNamesByRow) {
+    const rowText = policyRows.get(rowName);
+    assert.notEqual(rowText, undefined, `README config.toml 同步策略章节必须包含 ${rowName} 行`);
+    for (const policyName of new Set(policyNames)) {
+      assert.ok(rowText.includes(`\`${policyName}\``), `${rowName} 必须记录 ${policyName}`);
+    }
+  }
+
+  for (const policyName of installPreservedLocalOnlyPaths) {
+    assert.ok(policySection.includes(`\`${policyName}\``), `local-only 说明必须记录 ${policyName}`);
+  }
+
+  for (const policyName of [
+    ...configTomlPolicy.install.preservedTopLevelKeys,
+    ...configTomlPolicy.install.preservedTopLevelTables,
+    ...pathNames(configTomlPolicy.install.preservedNestedPaths),
+    ...configTomlPolicy.install.removedTopLevelKeys,
+    ...pathNames(configTomlPolicy.install.removedNestedPaths)
+  ]) {
+    assert.ok(policySection.includes(`\`${policyName}\``), `安装行为说明必须记录 ${policyName}`);
+  }
+
+  assert.match(policySection, /`apps` 整张 table 不会上传/);
+  assert.match(policySection, /`local_mcp` 不会上传/);
+  assert.match(policySection, /snapshot 不包含 `apps`[^\n]*本机 `apps` 会完整保留/);
+  assert.match(policySection, /`mcp_servers`[\s\S]*按名称合并/);
+
+  for (const pathSegments of [
+    ...configTomlPolicy.sync.excludedTopLevelKeys.map((key) => [key]),
+    ...configTomlPolicy.sync.excludedNestedPaths
+  ]) {
+    assert.ok(exampleHasPath(pathSegments), `TOML 示例必须包含 ${pathSegments.join('.')}`);
+  }
+
+  assert.match(readme, /文件会完整复制, 不应用下面的同步排除规则/);
+  assert.match(policySection, /备份会原样保留上述配置/);
 });
 
 test('publish-sync excludes sandbox_workspace_write.writable_roots from managed output', () => {

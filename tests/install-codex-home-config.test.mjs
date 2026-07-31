@@ -4,6 +4,7 @@ import {
   cpSync,
   mkdtempSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync
@@ -167,6 +168,46 @@ test('installation updates selected files without printing a diff', { skip: !has
     assert.equal(readFileSync(join(targetPath, 'AGENTS.md'), 'utf8'), 'base instructions\n');
     assert.equal(readFileSync(join(targetPath, 'agents', 'reviewer.toml'), 'utf8'), 'base agent\n');
     assert.doesNotMatch(result.stdout, /Installation diff:|diff --git|Binary files/);
+  });
+});
+
+test('Config update preserves local apps and protected feature values while backing up config.toml unchanged', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const targetPath = join(tempDir, 'target');
+    mkdirSync(targetPath, { recursive: true });
+    writeFileSync(join(localPath, 'managed', 'config.toml'), [
+      '[features]',
+      'unified_exec = true',
+      ''
+    ].join('\n'), 'utf8');
+    commitAll(localPath, 'Use managed config for local-only test');
+    const originalConfig = [
+      '[apps._default]',
+      'enabled = false',
+      '',
+      '[features]',
+      'workspace_dependencies = false',
+      'apps = false',
+      'local_before_update = true',
+      ''
+    ].join('\n');
+    writeFileSync(join(targetPath, 'config.toml'), originalConfig, 'utf8');
+
+    const result = runInstaller(localPath, targetPath, ['-Components', 'Config']);
+    assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
+
+    const installedConfig = readFileSync(join(targetPath, 'config.toml'), 'utf8');
+    assert.match(installedConfig, /\[apps\._default\][\s\S]*enabled = false/);
+    assert.match(installedConfig, /workspace_dependencies = false/);
+    assert.match(installedConfig, /apps = false/);
+    assert.match(installedConfig, /unified_exec = true/);
+
+    const backupRoot = join(targetPath, 'sync_codex-home-config_backup');
+    const backupVersions = readdirSync(backupRoot);
+    assert.equal(backupVersions.length, 1);
+    const backupConfig = readFileSync(join(backupRoot, backupVersions[0], 'config.toml'), 'utf8');
+    assert.equal(backupConfig, originalConfig);
   });
 });
 
