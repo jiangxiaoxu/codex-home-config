@@ -12,7 +12,6 @@ If a selected skill's complete, untruncated SKILL.md is already visible in the c
 """
 background_terminal_max_timeout = 1_800_000
 
-
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"
 enabled = false
