@@ -55,7 +55,6 @@ sandbox = "unelevated"
 
 [tui]
 status_line = [
-  "project-name",
   "model-with-reasoning",
   "context-used",
   "five-hour-limit",
