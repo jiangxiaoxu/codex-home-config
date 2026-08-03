@@ -1,6 +1,6 @@
 # codex-home-config
 
-用于发布和安装 Codex home 配置. 可安装内容位于 `managed/`.
+用于发布和安装 Codex home 配置. 可安装内容位于 `managed/`, 包括 `config.toml`, `models.local.json`, `AGENTS.md`, `agents/` 和 `skills/jiangxiaoxu/`.
 
 ## 使用前提
 
@@ -15,9 +15,31 @@
 iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/release/install-codex-home-config.ps1' | iex
 ```
 
+安装器始终执行默认 `Update`, 不提供 `-Action`, `-Components` 或 Restore 选择.
+
+## 本地仓库 DryRun
+
+在本地仓库中, 可先预览实际安装结果:
+
+```powershell
+.\install-codex-home-config.ps1 -DryRun
+```
+
+指定目标路径时:
+
+```powershell
+.\install-codex-home-config.ps1 -TargetCodexPath '<path>' -DryRun
+```
+
+`-DryRun` 只读取 managed snapshot 和目标配置, 跳过本地仓库 `git pull`, 不创建备份且不修改目标. 它会输出按实际安装规则计算的目标文件 diff, 包括 `config.toml` 合并后的结果和将原样复制的 `models.local.json`.
+
 ## 备份
 
-备份保存在 `<TargetCodexPath>/sync_codex-home-config_backup/<timestamp>/`. 每次更新只备份本次涉及的组件. 文件会完整复制, 不应用下面的同步排除规则. 更新成功后仅保留最新 5 个备份版本, 更早的版本会尽可能移入 Recycle Bin.
+备份保存在 `<TargetCodexPath>/sync_codex-home-config_backup/<timestamp>/`. 每次更新会在覆盖前备份目标路径中已有的可安装内容. `models.local.json` 是独立的可选 snapshot 文件: 仅在 managed snapshot 和目标文件都存在时备份. 文件会完整复制, 不应用下面的同步排除规则. `models.local.json` 会原样复制, 不处理 CRLF. 更新成功后仅保留最新 5 个备份版本, 更早的版本会尽可能移入 Recycle Bin.
+
+## models.local.json 同步策略
+
+`models.local.json` 是独立的可选 snapshot 文件. 同步时, 本地 `.codex/models.local.json` 存在才会原样复制到 `managed/models.local.json`, 不处理 CRLF, 也不受 `config.toml` 同步排除规则影响; 源文件缺失时会跳过并保留 managed 现状. 安装更新时, managed snapshot 存在才会原样复制并覆盖目标文件; snapshot 缺失时会跳过并保留目标现状.
 
 ## config.toml 同步策略
 

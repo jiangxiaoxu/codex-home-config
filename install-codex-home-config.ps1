@@ -4,12 +4,7 @@ param(
     [string]$TargetCodexPath = (Join-Path $HOME '.codex'),
 
     [Parameter()]
-    [ValidateSet('Update', 'Restore')]
-    [string]$Action = 'Update',
-
-    [Parameter()]
-    [ValidateSet('Config', 'AgentFile', 'AgentFolder', 'Skill')]
-    [string[]]$Components = @('Config', 'AgentFile', 'AgentFolder', 'Skill'),
+    [switch]$DryRun,
 
     [Parameter(DontShow = $true)]
     [switch]$SkipRepositoryPull
@@ -90,6 +85,7 @@ function Wait-OnFatalError {
 function Get-ComponentSelection {
     param(
         [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
         [string[]]$SelectedComponents
     )
 
@@ -97,6 +93,7 @@ function Get-ComponentSelection {
         Config      = $false
         AgentFile   = $false
         AgentFolder = $false
+        ModelsLocalFile = $false
         Skill       = $false
     }
 
@@ -316,7 +313,9 @@ function Get-PowerShellExecutablePath {
 function Invoke-LatestInstaller {
     param(
         [Parameter(Mandatory)]
-        [string]$RepositoryPath
+        [string]$RepositoryPath,
+
+        [switch]$DryRun
     )
 
     $installerPath = Join-Path $RepositoryPath 'install-codex-home-config.ps1'
@@ -333,9 +332,10 @@ function Invoke-LatestInstaller {
 
     $installerLiteral = "'" + $installerPath.Replace("'", "''") + "'"
     $targetLiteral = "'" + $TargetCodexPath.Replace("'", "''") + "'"
-    $actionLiteral = "'" + $Action.Replace("'", "''") + "'"
-    $componentLiterals = @($Components | ForEach-Object { "'" + $_.Replace("'", "''") + "'" })
-    $commandText = "& $installerLiteral -TargetCodexPath $targetLiteral -Action $actionLiteral -Components @($($componentLiterals -join ', ')) -SkipRepositoryPull"
+    $commandText = "& $installerLiteral -TargetCodexPath $targetLiteral -SkipRepositoryPull"
+    if ($DryRun) {
+        $commandText += ' -DryRun'
+    }
     $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($commandText))
     $argumentList.Add('-EncodedCommand')
     $argumentList.Add($encodedCommand)
@@ -353,7 +353,9 @@ function Invoke-LatestInstaller {
 function Invoke-LocalRepositoryPull {
     param(
         [Parameter(Mandatory)]
-        [string]$RepositoryPath
+        [string]$RepositoryPath,
+
+        [switch]$DryRun
     )
 
     $gitExecutable = Assert-GitEnvironment
@@ -380,7 +382,7 @@ function Invoke-LocalRepositoryPull {
 
     $postPullHead = Get-GitHeadCommit -RepositoryPath $RepositoryPath
     if ($prePullHead -ne $postPullHead) {
-        Invoke-LatestInstaller -RepositoryPath $RepositoryPath
+        Invoke-LatestInstaller -RepositoryPath $RepositoryPath -DryRun:$DryRun
         return
     }
 
@@ -766,7 +768,8 @@ function Backup-CurrentSnapshot {
 
     foreach ($fileInfo in @(
             @{ Name = 'config.toml'; SourcePath = $currentSnapshot.ConfigPath; RelativeBackupPath = 'config.toml'; Component = 'Config' },
-            @{ Name = 'AGENTS.md'; SourcePath = $currentSnapshot.AgentsPath; RelativeBackupPath = 'AGENTS.md'; Component = 'AgentFile' }
+            @{ Name = 'AGENTS.md'; SourcePath = $currentSnapshot.AgentsPath; RelativeBackupPath = 'AGENTS.md'; Component = 'AgentFile' },
+            @{ Name = 'models.local.json'; SourcePath = $currentSnapshot.ModelsLocalFilePath; RelativeBackupPath = 'models.local.json'; Component = 'ModelsLocalFile' }
         )) {
         if (-not $componentSelection[$fileInfo.Component]) {
             continue
@@ -1081,6 +1084,7 @@ function Get-SnapshotInfo {
         ConfigPath         = (Join-Path $RootPath 'config.toml')
         AgentsPath         = (Join-Path $RootPath 'AGENTS.md')
         AgentDirectoryPath = (Join-Path $RootPath 'agents')
+        ModelsLocalFilePath = (Join-Path $RootPath 'models.local.json')
         SkillDirectoryPath = (Join-Path $RootPath 'skills\jiangxiaoxu')
     }
 }
@@ -1091,7 +1095,7 @@ function Test-SnapshotInfo {
         [pscustomobject]$SnapshotInfo,
 
         [Parameter()]
-        [string[]]$SelectedComponents = @('Config', 'AgentFile', 'AgentFolder', 'Skill')
+        [string[]]$SelectedComponents = @('Config', 'AgentFile', 'AgentFolder', 'ModelsLocalFile', 'Skill')
     )
 
     $missingItems = [System.Collections.Generic.List[string]]::new()
@@ -1125,7 +1129,7 @@ function Assert-SnapshotInfo {
         [string]$SnapshotLabel,
 
         [Parameter()]
-        [string[]]$SelectedComponents = @('Config', 'AgentFile', 'AgentFolder', 'Skill')
+        [string[]]$SelectedComponents = @('Config', 'AgentFile', 'AgentFolder', 'ModelsLocalFile', 'Skill')
     )
 
     $validationResult = Test-SnapshotInfo -SnapshotInfo $SnapshotInfo -SelectedComponents $SelectedComponents
@@ -1133,32 +1137,6 @@ function Assert-SnapshotInfo {
         $missingText = $validationResult.MissingItems -join ', '
         throw "$SnapshotLabel is incomplete. Missing: $missingText"
     }
-}
-
-function Get-AvailableSnapshotComponent {
-    param(
-        [Parameter(Mandatory)]
-        [pscustomobject]$SnapshotInfo
-    )
-
-    $components = [System.Collections.Generic.List[string]]::new()
-    if (Test-Path -LiteralPath $SnapshotInfo.ConfigPath -PathType Leaf) {
-        $components.Add('Config')
-    }
-
-    if (Test-Path -LiteralPath $SnapshotInfo.AgentsPath -PathType Leaf) {
-        $components.Add('AgentFile')
-    }
-
-    if (Test-Path -LiteralPath $SnapshotInfo.AgentDirectoryPath -PathType Container) {
-        $components.Add('AgentFolder')
-    }
-
-    if (Test-Path -LiteralPath $SnapshotInfo.SkillDirectoryPath -PathType Container) {
-        $components.Add('Skill')
-    }
-
-    return @($components)
 }
 
 function Get-BackupVersionDirectory {
@@ -1172,89 +1150,39 @@ function Get-BackupVersionDirectory {
         } | Sort-Object Name -Descending)
 }
 
-function Show-MenuSection {
-    param(
-        [Parameter(Mandatory)]
-        [string[]]$Lines
-    )
-
-    Write-Information '' -InformationAction Continue
-    foreach ($line in $Lines) {
-        Write-Information $line -InformationAction Continue
-    }
-}
-
-function Select-BackupSnapshot {
-    $backupDirectories = @(Get-BackupVersionDirectory)
-    if ($backupDirectories.Count -eq 0) {
-        Write-Warning "No backup versions were found under '$(Get-BackupRootPath)'."
-        return $null
-    }
-
-    Show-MenuSection -Lines @('Available backup versions:')
-    for ($index = 0; $index -lt $backupDirectories.Count; $index++) {
-        $snapshotInfo = Get-SnapshotInfo -RootPath $backupDirectories[$index].FullName -Name $backupDirectories[$index].Name
-        $availableComponents = @(Get-AvailableSnapshotComponent -SnapshotInfo $snapshotInfo)
-        if ($availableComponents.Count -eq 0) {
-            $statusSuffix = ' [invalid: empty backup]'
-        }
-        else {
-            $statusSuffix = " [components: $($availableComponents -join ', ')]"
-        }
-
-        Write-Information ('{0}. {1}{2}' -f ($index + 1), $backupDirectories[$index].Name, $statusSuffix) -InformationAction Continue
-    }
-    Write-Information 'Q. Quit' -InformationAction Continue
-
-    while ($true) {
-        $choice = (Read-Host 'Choose a backup version [1]').Trim()
-        if ($choice -eq '') {
-            $choice = '1'
-        }
-
-        if ($choice -match '^(q|quit|exit)$') {
-            return $null
-        }
-
-        $selectedNumber = 0
-        if (-not [int]::TryParse($choice, [ref]$selectedNumber)) {
-            Write-Warning "Unsupported choice: $choice"
-            continue
-        }
-
-        if ($selectedNumber -lt 1 -or $selectedNumber -gt $backupDirectories.Count) {
-            Write-Warning "Choice must be between 1 and $($backupDirectories.Count)."
-            continue
-        }
-
-        $selectedDirectory = $backupDirectories[$selectedNumber - 1]
-        return Get-SnapshotInfo -RootPath $selectedDirectory.FullName -Name $selectedDirectory.Name
-    }
-}
-
 function Install-Snapshot {
     param(
         [Parameter(Mandatory)]
         [pscustomobject]$SnapshotInfo,
 
         [Parameter()]
-        [string[]]$SelectedComponents = @('Config', 'AgentFile', 'AgentFolder', 'Skill'),
+        [string[]]$SelectedComponents = @('Config', 'AgentFile', 'AgentFolder', 'ModelsLocalFile', 'Skill'),
 
         [switch]$CreateBackup
     )
 
     $null = New-Item -ItemType Directory -Path $TargetCodexPath -Force
-    $componentSelection = Get-ComponentSelection -SelectedComponents $SelectedComponents
+    $effectiveSelectedComponents = @(
+        $SelectedComponents | Where-Object {
+            $_ -ne 'ModelsLocalFile' -or (Test-Path -LiteralPath $SnapshotInfo.ModelsLocalFilePath -PathType Leaf)
+        }
+    )
+    $componentSelection = Get-ComponentSelection -SelectedComponents $effectiveSelectedComponents
 
-    if ($CreateBackup) {
-        Backup-CurrentSnapshot -SelectedComponents $SelectedComponents
+    if ($CreateBackup -and $effectiveSelectedComponents.Count -gt 0) {
+        Backup-CurrentSnapshot -SelectedComponents $effectiveSelectedComponents
     }
 
     foreach ($fileInfo in @(
             @{ Name = 'config.toml'; SourcePath = $SnapshotInfo.ConfigPath; Component = 'Config' },
-            @{ Name = 'AGENTS.md'; SourcePath = $SnapshotInfo.AgentsPath; Component = 'AgentFile' }
+            @{ Name = 'AGENTS.md'; SourcePath = $SnapshotInfo.AgentsPath; Component = 'AgentFile' },
+            @{ Name = 'models.local.json'; SourcePath = $SnapshotInfo.ModelsLocalFilePath; Component = 'ModelsLocalFile' }
         )) {
         if (-not $componentSelection[$fileInfo.Component]) {
+            continue
+        }
+
+        if ($fileInfo.Component -eq 'ModelsLocalFile' -and -not (Test-Path -LiteralPath $fileInfo.SourcePath -PathType Leaf)) {
             continue
         }
 
@@ -1266,6 +1194,9 @@ function Install-Snapshot {
         Write-StageMessage "Installing $($fileInfo.Name)..."
         if ($fileInfo.Component -eq 'Config') {
             Install-ConfigFile -SourcePath $fileInfo.SourcePath -DestinationPath $destinationPath
+        }
+        elseif ($fileInfo.Component -eq 'ModelsLocalFile') {
+            Copy-Item -LiteralPath $fileInfo.SourcePath -Destination $destinationPath -Force
         }
         else {
             Copy-Item -LiteralPath $fileInfo.SourcePath -Destination $destinationPath -Force
@@ -1392,39 +1323,332 @@ function Remove-OldBackupVersion {
     }
 }
 
-function Invoke-UpdateAction {
+function Copy-DryRunDirectoryContents {
     param(
+        [Parameter(Mandatory)]
+        [string]$SourcePath,
+
+        [Parameter(Mandatory)]
+        [string]$DestinationPath
+    )
+
+    $null = New-Item -ItemType Directory -Path $DestinationPath -Force
+    if (-not (Test-Path -LiteralPath $SourcePath -PathType Container)) {
+        return
+    }
+
+    foreach ($sourceItem in @(Get-ChildItem -LiteralPath $SourcePath -Force)) {
+        Copy-Item -LiteralPath $sourceItem.FullName -Destination $DestinationPath -Recurse -Force
+    }
+}
+
+function Get-DryRunRelativePath {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RootPath,
+
+        [Parameter(Mandatory)]
+        [string]$ItemPath
+    )
+
+    $rootFullPath = [System.IO.Path]::GetFullPath($RootPath).TrimEnd([char[]]@('\', '/'))
+    $itemFullPath = [System.IO.Path]::GetFullPath($ItemPath)
+    $relativePath = $itemFullPath.Substring($rootFullPath.Length).TrimStart([char[]]@('\', '/'))
+    return $relativePath.Replace('\', '/')
+}
+
+function Add-DryRunTreeEntries {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RootPath,
+
+        [Parameter(Mandatory)]
+        [hashtable]$Entries
+    )
+
+    if (-not (Test-Path -LiteralPath $RootPath -PathType Container)) {
+        return
+    }
+
+    foreach ($item in @(Get-ChildItem -LiteralPath $RootPath -Force -Recurse)) {
+        $relativePath = Get-DryRunRelativePath -RootPath $RootPath -ItemPath $item.FullName
+        $Entries[$relativePath] = $item
+    }
+}
+
+function Test-DryRunFileContentEqual {
+    param(
+        [Parameter(Mandatory)]
+        [string]$BeforePath,
+
+        [Parameter(Mandatory)]
+        [string]$AfterPath
+    )
+
+    $beforeFile = Get-Item -LiteralPath $BeforePath -Force
+    $afterFile = Get-Item -LiteralPath $AfterPath -Force
+    if ($beforeFile.Length -ne $afterFile.Length) {
+        return $false
+    }
+
+    $beforeBytes = [System.IO.File]::ReadAllBytes($BeforePath)
+    $afterBytes = [System.IO.File]::ReadAllBytes($AfterPath)
+    for ($index = 0; $index -lt $beforeBytes.Length; $index++) {
+        if ($beforeBytes[$index] -ne $afterBytes[$index]) {
+            return $false
+        }
+    }
+
+    return $true
+}
+
+function Get-DryRunTextFileContent {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    $content = [System.IO.File]::ReadAllBytes($Path)
+    if ($content.Contains([byte]0)) {
+        return [pscustomobject]@{
+            IsText = $false
+            Lines  = @()
+        }
+    }
+
+    try {
+        $strictUtf8 = New-Object System.Text.UTF8Encoding -ArgumentList $false, $true
+        $text = $strictUtf8.GetString($content)
+    }
+    catch [System.Text.DecoderFallbackException] {
+        return [pscustomobject]@{
+            IsText = $false
+            Lines  = @()
+        }
+    }
+
+    return [pscustomobject]@{
+        IsText = $true
+        Lines  = @([regex]::Split($text, "`r`n|`n|`r"))
+    }
+}
+
+function Write-DryRunFallbackFileDiff {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RelativePath,
+
+        [string]$BeforePath,
+
+        [string]$AfterPath
+    )
+
+    $beforeText = if ([string]::IsNullOrWhiteSpace($BeforePath)) { $null } else { Get-DryRunTextFileContent -Path $BeforePath }
+    $afterText = if ([string]::IsNullOrWhiteSpace($AfterPath)) { $null } else { Get-DryRunTextFileContent -Path $AfterPath }
+    if (($null -ne $beforeText -and -not $beforeText.IsText) -or ($null -ne $afterText -and -not $afterText.IsText)) {
+        Write-Output "Binary files differ: $RelativePath"
+        return
+    }
+
+    Write-Output "--- target/$RelativePath"
+    Write-Output "+++ would-install/$RelativePath"
+    if ($null -eq $beforeText) {
+        foreach ($line in $afterText.Lines) {
+            Write-Output "+ $line"
+        }
+
+        return
+    }
+
+    if ($null -eq $afterText) {
+        foreach ($line in $beforeText.Lines) {
+            Write-Output "- $line"
+        }
+
+        return
+    }
+
+    foreach ($difference in @(Compare-Object -ReferenceObject $beforeText.Lines -DifferenceObject $afterText.Lines)) {
+        if ($difference.SideIndicator -eq '<=') {
+            Write-Output "- $($difference.InputObject)"
+        }
+        else {
+            Write-Output "+ $($difference.InputObject)"
+        }
+    }
+}
+
+function Write-DryRunFallbackDiff {
+    param(
+        [Parameter(Mandatory)]
+        [string]$BeforePath,
+
+        [Parameter(Mandatory)]
+        [string]$AfterPath
+    )
+
+    $beforeEntries = @{}
+    $afterEntries = @{}
+    Add-DryRunTreeEntries -RootPath $BeforePath -Entries $beforeEntries
+    Add-DryRunTreeEntries -RootPath $AfterPath -Entries $afterEntries
+    $allPaths = @($beforeEntries.Keys + $afterEntries.Keys | Sort-Object -Unique)
+    $hasDifferences = $false
+
+    foreach ($relativePath in $allPaths) {
+        $hasBefore = $beforeEntries.ContainsKey($relativePath)
+        $hasAfter = $afterEntries.ContainsKey($relativePath)
+        if (-not $hasBefore) {
+            $hasDifferences = $true
+            if ($afterEntries[$relativePath].PSIsContainer) {
+                Write-Output "Added directory: $relativePath"
+            }
+            else {
+                Write-DryRunFallbackFileDiff -RelativePath $relativePath -AfterPath $afterEntries[$relativePath].FullName
+            }
+
+            continue
+        }
+
+        if (-not $hasAfter) {
+            $hasDifferences = $true
+            if ($beforeEntries[$relativePath].PSIsContainer) {
+                Write-Output "Removed directory: $relativePath"
+            }
+            else {
+                Write-DryRunFallbackFileDiff -RelativePath $relativePath -BeforePath $beforeEntries[$relativePath].FullName
+            }
+
+            continue
+        }
+
+        if ($beforeEntries[$relativePath].PSIsContainer -ne $afterEntries[$relativePath].PSIsContainer) {
+            $hasDifferences = $true
+            Write-Output "Changed entry type: $relativePath"
+            continue
+        }
+
+        if ($beforeEntries[$relativePath].PSIsContainer -or (Test-DryRunFileContentEqual -BeforePath $beforeEntries[$relativePath].FullName -AfterPath $afterEntries[$relativePath].FullName)) {
+            continue
+        }
+
+        $hasDifferences = $true
+        Write-DryRunFallbackFileDiff -RelativePath $relativePath -BeforePath $beforeEntries[$relativePath].FullName -AfterPath $afterEntries[$relativePath].FullName
+    }
+
+    if (-not $hasDifferences) {
+        Write-Output 'No differences would be applied.'
+    }
+}
+
+function Write-DryRunDiff {
+    param(
+        [Parameter(Mandatory)]
+        [string]$BeforePath,
+
+        [Parameter(Mandatory)]
+        [string]$AfterPath
+    )
+
+    $gitExecutable = Get-GitExecutable
+    if (-not [string]::IsNullOrWhiteSpace($gitExecutable)) {
+        $beforeParentPath = Split-Path -Parent $BeforePath
+        $afterParentPath = Split-Path -Parent $AfterPath
+        if ($beforeParentPath.Equals($afterParentPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $gitDiffArguments = @(
+                '-C',
+                $beforeParentPath,
+                'diff',
+                '--no-index',
+                '--no-ext-diff',
+                '--no-prefix',
+                '--',
+                (Split-Path -Leaf $BeforePath),
+                (Split-Path -Leaf $AfterPath)
+            )
+        }
+        else {
+            $gitDiffArguments = @(
+                'diff',
+                '--no-index',
+                '--no-ext-diff',
+                '--no-prefix',
+                '--',
+                $BeforePath,
+                $AfterPath
+            )
+        }
+
+        $diffOutput = @(& $gitExecutable @gitDiffArguments 2>&1)
+        $diffExitCode = $LASTEXITCODE
+        if ($diffExitCode -eq 0) {
+            Write-Output 'No differences would be applied.'
+            return
+        }
+
+        if ($diffExitCode -eq 1) {
+            Write-Output $diffOutput
+            return
+        }
+
+        Write-Warning "git diff --no-index failed with exit code $diffExitCode. Falling back to a PowerShell diff."
+    }
+    else {
+        Write-StageMessage 'Git is unavailable; using the PowerShell dry-run diff fallback.'
+    }
+
+    Write-DryRunFallbackDiff -BeforePath $BeforePath -AfterPath $AfterPath
+}
+
+function Invoke-DryRunInstallation {
+    param(
+        [Parameter(Mandatory)]
+        [pscustomobject]$SnapshotInfo,
+
         [Parameter(Mandatory)]
         [string[]]$SelectedComponents
     )
 
+    $originalTargetCodexPath = $script:TargetCodexPath
+    $dryRunTempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-home-config-dry-run-" + [guid]::NewGuid().ToString('N'))
+    $beforePath = Join-Path $dryRunTempRoot 'target'
+    $baselinePath = Join-Path $dryRunTempRoot 'would-install'
+
+    try {
+        Copy-DryRunDirectoryContents -SourcePath $originalTargetCodexPath -DestinationPath $beforePath
+        Copy-DryRunDirectoryContents -SourcePath $beforePath -DestinationPath $baselinePath
+        $script:TargetCodexPath = $baselinePath
+        Install-Snapshot -SnapshotInfo $SnapshotInfo -SelectedComponents $SelectedComponents
+        Write-DryRunDiff -BeforePath $beforePath -AfterPath $baselinePath
+    }
+    finally {
+        $script:TargetCodexPath = $originalTargetCodexPath
+        if (Test-Path -LiteralPath $dryRunTempRoot -PathType Container) {
+            Remove-Item -LiteralPath $dryRunTempRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Invoke-UpdateAction {
+    param(
+        [switch]$DryRun
+    )
+
+    $defaultComponents = @('Config', 'AgentFile', 'AgentFolder', 'ModelsLocalFile', 'Skill')
     Show-InstallCommitInfo
     Write-StageMessage 'Preparing repository snapshot...'
     $repositoryPath = Get-RepositorySupportRoot
     $managedPath = Join-Path $repositoryPath 'managed'
     $snapshotInfo = Get-SnapshotInfo -RootPath $managedPath -Name 'repository'
-    Assert-SnapshotInfo -SnapshotInfo $snapshotInfo -SnapshotLabel 'Repository snapshot' -SelectedComponents $SelectedComponents
-    Write-StageMessage 'Installing selected components...'
-    Install-Snapshot -SnapshotInfo $snapshotInfo -SelectedComponents $SelectedComponents -CreateBackup
-    Remove-OldBackupVersion
-}
-
-function Invoke-RestoreAction {
-    Write-StageMessage 'Loading backup list...'
-    $snapshotInfo = Select-BackupSnapshot
-    if ($null -eq $snapshotInfo) {
-        Write-Output 'Restore cancelled.'
+    Assert-SnapshotInfo -SnapshotInfo $snapshotInfo -SnapshotLabel 'Repository snapshot' -SelectedComponents $defaultComponents
+    if ($DryRun) {
+        Write-StageMessage 'Dry run enabled; simulating the default installation in a temporary directory.'
+        Invoke-DryRunInstallation -SnapshotInfo $snapshotInfo -SelectedComponents $defaultComponents
         return
     }
 
-    $availableComponents = @(Get-AvailableSnapshotComponent -SnapshotInfo $snapshotInfo)
-    if ($availableComponents.Count -eq 0) {
-        throw "Backup version '$($snapshotInfo.Name)' is empty."
-    }
-
-    Write-StageMessage "Restoring backup version: $($snapshotInfo.Name)"
-    Install-Snapshot -SnapshotInfo $snapshotInfo -SelectedComponents $availableComponents
-    Write-Output "Restored backup version: $($snapshotInfo.Name)"
+    Write-StageMessage 'Installing default components...'
+    Install-Snapshot -SnapshotInfo $snapshotInfo -SelectedComponents $defaultComponents -CreateBackup
+    Remove-OldBackupVersion
 }
 
 try {
@@ -1433,8 +1657,11 @@ try {
     }
 
     $localRepositoryRoot = Get-LocalRepositoryRoot
-    if (-not $SkipRepositoryPull -and -not [string]::IsNullOrWhiteSpace($localRepositoryRoot)) {
-        Invoke-LocalRepositoryPull -RepositoryPath $localRepositoryRoot
+    if ($DryRun -and -not [string]::IsNullOrWhiteSpace($localRepositoryRoot)) {
+        Write-StageMessage 'Dry run enabled; skipping local repository pull to avoid changing repository state.'
+    }
+    elseif (-not $SkipRepositoryPull -and -not [string]::IsNullOrWhiteSpace($localRepositoryRoot)) {
+        Invoke-LocalRepositoryPull -RepositoryPath $localRepositoryRoot -DryRun:$DryRun
         if ($runtimeState.RelaunchedInstaller) {
             return
         }
@@ -1444,11 +1671,7 @@ try {
     $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
 
     try {
-        switch ($Action) {
-            'Update' { Invoke-UpdateAction -SelectedComponents $Components }
-            'Restore' { Invoke-RestoreAction }
-            default { throw "Unexpected action selection: $Action" }
-        }
+        Invoke-UpdateAction -DryRun:$DryRun
     }
     finally {
         Remove-RepositorySupportTempRoot

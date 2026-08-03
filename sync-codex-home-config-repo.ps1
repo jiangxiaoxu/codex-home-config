@@ -13,8 +13,8 @@ param(
     [string]$CommitMessage = ("Sync Codex home config " + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')),
 
     [Parameter()]
-    [ValidateSet('Config', 'AgentFile', 'AgentFolder', 'Skill')]
-    [string[]]$Components = @('Config', 'AgentFile', 'AgentFolder', 'Skill'),
+    [ValidateSet('Config', 'ModelsLocalFile', 'AgentFile', 'AgentFolder', 'Skill')]
+    [string[]]$Components = @('Config', 'ModelsLocalFile', 'AgentFile', 'AgentFolder', 'Skill'),
 
     [Parameter(DontShow = $true)]
     [switch]$SkipInitialPull
@@ -30,10 +30,11 @@ function Get-ComponentSelection {
     )
 
     $componentSelection = @{
-        Config      = $false
-        AgentFile   = $false
-        AgentFolder = $false
-        Skill       = $false
+        Config          = $false
+        ModelsLocalFile = $false
+        AgentFile       = $false
+        AgentFolder     = $false
+        Skill           = $false
     }
 
     foreach ($component in $SelectedComponents) {
@@ -743,6 +744,7 @@ try {
     }
 
     $sourceConfigPath = Join-Path $SourceCodexPath 'config.toml'
+    $sourceModelsLocalFilePath = Join-Path $SourceCodexPath 'models.local.json'
     $sourceAgentsPath = Join-Path $SourceCodexPath 'AGENTS.md'
     $sourceAgentDirectoryPath = Join-Path $SourceCodexPath 'agents'
     $sourceSkillDirectoryPath = Join-Path $SourceCodexPath 'skills\jiangxiaoxu'
@@ -861,6 +863,11 @@ try {
             output  = $managedConfigPath
         }
         ConvertTo-LfLineEnding -Path $managedConfigPath
+    }
+
+    if ($componentSelection.ModelsLocalFile -and (Test-Path -LiteralPath $sourceModelsLocalFilePath -PathType Leaf)) {
+        $managedModelsLocalFilePath = Join-Path $repoManagedPath 'models.local.json'
+        Copy-ItemIfDifferentPath -SourcePath $sourceModelsLocalFilePath -DestinationPath $managedModelsLocalFilePath
     }
 
     if ($componentSelection.AgentFile) {
