@@ -31,6 +31,8 @@
 * Backups created by `install-codex-home-config.ps1` are stored under `<TargetCodexPath>\sync_codex-home-config_backup\`.
 * The sync script is also allowed to assume `pwsh` 7+ after its bootstrap re-launch check.
 * `models.local.json` is an optional snapshot file and is independent of `config.toml`; sync and installation copy it unchanged without CRLF processing.
+* `config.toml` installation uses a syntax-preserving merge: only actually changed paths from `managed/config.toml` are updated; unmanaged and unchanged top-level entries/table blocks retain their original quotes, comments, layout, and line endings. `node_repl` is not synchronized and retains its target-file source text.
+* Install-generated managed update fragments follow `managed/config.toml` order. Publish-sync output follows local `config.toml` top-level and allowlisted MCP-child order. Unmanaged target top-level entries/table blocks retain their original relative positions.
 * A missing source `models.local.json` skips sync and preserves the managed snapshot; a missing managed snapshot skips installation and preserves the target file.
 * Each installer update backs up existing installable content before overwriting it; `models.local.json` is included only when both the managed snapshot and target file exist.
 * After an installer update, only the latest 5 backup versions should remain under the backup root; older versions should be moved to the Recycle Bin when possible.

@@ -45,6 +45,10 @@ iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/relea
 
 同步脚本不会上传完整的 `config.toml`. 默认只同步 `managed/config.toml` 中已经管理的顶层配置, 并排除下方列出的配置. `apps` 整张 table 都不会上传. `mcp_servers` 按仓库中已经管理的名称过滤, 本地新增的 MCP server 不会自动进入仓库.
 
+安装时, `config.toml` 使用 syntax-preserving merge, 仅更新 `managed/config.toml` 中实际变化的路径. 未管理或未变化的顶层条目/表块会保留原始引号, 注释, 布局和行尾. `node_repl` 不参与同步, 因而保留目标文件中的原文.
+
+安装生成的 managed 更新片段遵循 `managed/config.toml` 的顺序. publish-sync 生成的内容遵循本地 `config.toml` 的顶层条目和 allowlisted MCP child 的顺序. 未管理的目标顶层条目/表块保留原文中的相对位置.
+
 例如, 本机包含 `apps.github`, `apps.local_app`, `mcp_servers.docs` 和 `mcp_servers.local_mcp`, 仓库已管理 `mcp_servers.docs`:
 
 | 操作 | `apps` | `mcp_servers` |

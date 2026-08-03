@@ -281,12 +281,58 @@ test('DryRun prints actual managed file diffs without modifying the target or cr
     assert.match(result.stdout, /\+base instructions/);
     assert.match(result.stdout, /-old agent/);
     assert.match(result.stdout, /\+base agent/);
+    assert.doesNotMatch(result.stdout, /\[codex-home-config\]\s+(?:Checking Node\.js runtime|Using Node\.js runtime|Preparing repository snapshot|Using local repository snapshot|Dry run enabled|Installing |Normalizing temporary config\.toml)/);
+    assert.doesNotMatch(result.stdout, /^(?:Install source commit:|Installed |Removed )/m);
 
     assert.deepEqual(readFileSync(join(targetPath, 'config.toml')), originalFiles.config);
     assert.deepEqual(readFileSync(join(targetPath, 'models.local.json')), originalFiles.modelsLocal);
     assert.deepEqual(readFileSync(join(targetPath, 'AGENTS.md')), originalFiles.agents);
     assert.deepEqual(readFileSync(join(targetPath, 'agents', 'reviewer.toml')), originalFiles.agent);
     assert.ok(!existsSync(join(targetPath, 'sync_codex-home-config_backup')));
+  });
+});
+
+test('DryRun ignores large unrelated target files outside the managed installation scope', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const targetPath = join(tempDir, 'target');
+    const sessionsPath = join(targetPath, 'sessions');
+    const unrelatedPath = join(sessionsPath, 'unrelated.bin');
+    const originalConfig = Buffer.from('model = "old"\n', 'utf8');
+    const originalUnrelatedFile = Buffer.alloc(1024 * 1024, 0xA5);
+    mkdirSync(sessionsPath, { recursive: true });
+    writeFileSync(join(targetPath, 'config.toml'), originalConfig);
+    writeFileSync(unrelatedPath, originalUnrelatedFile);
+
+    const result = runInstaller(localPath, targetPath, ['-DryRun']);
+    assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
+    assert.match(result.stdout, /config\.toml/);
+    assert.doesNotMatch(result.stdout, /sessions[\\/]unrelated\.bin|unrelated\.bin/i);
+    assert.deepEqual(readFileSync(join(targetPath, 'config.toml')), originalConfig);
+    assert.deepEqual(readFileSync(unrelatedPath), originalUnrelatedFile);
+    assert.ok(!existsSync(join(targetPath, 'sync_codex-home-config_backup')));
+  });
+});
+
+test('DryRun hides TOML serializer-only node_repl changes while showing managed config changes', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const targetPath = join(tempDir, 'target');
+    mkdirSync(join(targetPath, 'agents'), { recursive: true });
+    writeFileSync(join(targetPath, 'config.toml'), [
+      'model = "old"',
+      "node_repl='node'",
+      ''
+    ].join('\n'), 'utf8');
+    writeFileSync(join(targetPath, 'models.local.json'), modelsLocalFixture);
+    writeFileSync(join(targetPath, 'AGENTS.md'), 'base instructions\n', 'utf8');
+    writeFileSync(join(targetPath, 'agents', 'reviewer.toml'), 'base agent\n', 'utf8');
+
+    const result = runInstaller(localPath, targetPath, ['-DryRun']);
+    assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
+    assert.match(result.stdout, /-model = "old"/);
+    assert.match(result.stdout, /\+model = "base"/);
+    assert.doesNotMatch(result.stdout, /^[+-]\s*node_repl\s*=/m);
   });
 });
 

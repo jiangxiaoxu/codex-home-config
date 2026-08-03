@@ -588,6 +588,587 @@ test('merge-install CLI round-trips an agents profile with config_file', () => {
   });
 });
 
+test('merge-install CLI preserves the original unmanaged node_repl MCP text while updating managed configuration', () => {
+  withTempDir((tempDir) => {
+    const sourcePath = join(tempDir, 'source.toml');
+    const targetPath = join(tempDir, 'target.toml');
+    const outputPath = join(tempDir, 'output.toml');
+    const nodeReplBlock = [
+      '# Keep this locally generated MCP server exactly as written.',
+      '[mcp_servers.node_repl]',
+      'args = [] # Preserve this inline comment.',
+      "command = 'E:\\Codex-win32-x64\\resources\\cua_node\\bin\\node_repl.exe' # Keep literal quotes.",
+      'startup_timeout_sec = 120',
+      '',
+      '  # Preserve the local environment table and its formatting.',
+      '  [mcp_servers.node_repl.env]',
+      "  NODE_REPL_NODE_MODULE_DIRS = 'E:\\Codex-win32-x64\\resources\\cua_node\\bin\\node_modules' # Keep literal quotes.",
+      '  NODE_REPL_NODE_PATH = "E:\\\\Codex-win32-x64\\\\resources\\\\cua_node\\\\bin\\\\node.exe"',
+      "  CODEX_HOME = 'C:\\Users\\local-user\\.codex'",
+      ''
+    ].join('\r\n');
+
+    writeFileSync(
+      sourcePath,
+      [
+        'model = "gpt-5.6-terra"',
+        'approval_policy = "on-request"',
+        '',
+        '[features]',
+        'runtime_metrics = true',
+        '',
+        '[mcp_servers.managed_bridge]',
+        'command = "powershell.exe"',
+        'args = ["-NoProfile", "-Command", "managed"]',
+        'tool_timeout_sec = 120',
+        ''
+      ].join('\n'),
+      'utf8'
+    );
+
+    writeFileSync(
+      targetPath,
+      [
+        'model = "gpt-5.4"',
+        'approval_policy = "never"',
+        '',
+        nodeReplBlock,
+        '[mcp_servers.managed_bridge]',
+        'command = "pwsh.exe"',
+        'args = ["--stale"]',
+        'tool_timeout_sec = 30',
+        ''
+      ].join('\r\n'),
+      'utf8'
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        'tools/config-toml-ops.cjs',
+        'merge-install',
+        '--source',
+        sourcePath,
+        '--target',
+        targetPath,
+        '--output',
+        outputPath
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: 'utf8'
+      }
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+
+    const outputText = readFileSync(outputPath, 'utf8');
+    const nodeReplBlockStart = outputText.indexOf(nodeReplBlock);
+    assert.notEqual(nodeReplBlockStart, -1, 'node_repl block must retain its original CRLF text');
+    assert.equal(
+      outputText.slice(nodeReplBlockStart, nodeReplBlockStart + nodeReplBlock.length),
+      nodeReplBlock,
+      'node_repl block must retain literal quotes, comments, CRLF, and multiline env formatting'
+    );
+
+    const outputConfig = TOML.parse(outputText);
+    assert.equal(outputConfig.model, 'gpt-5.6-terra');
+    assert.equal(outputConfig.approval_policy, 'on-request');
+    assert.deepStrictEqual(outputConfig.features, { runtime_metrics: true });
+    assert.deepStrictEqual(outputConfig.mcp_servers.managed_bridge, {
+      command: 'powershell.exe',
+      args: [
+        '-NoProfile',
+        '-Command',
+        'managed'
+      ],
+      tool_timeout_sec: 120
+    });
+    assert.equal(
+      outputConfig.mcp_servers.node_repl.command,
+      'E:\\Codex-win32-x64\\resources\\cua_node\\bin\\node_repl.exe'
+    );
+    assert.equal(
+      outputConfig.mcp_servers.node_repl.env.NODE_REPL_NODE_MODULE_DIRS,
+      'E:\\Codex-win32-x64\\resources\\cua_node\\bin\\node_modules'
+    );
+  });
+});
+
+test('merge-install CLI keeps preserved service_tier at the TOML root after a features table', () => {
+  withTempDir((tempDir) => {
+    const sourcePath = join(tempDir, 'source.toml');
+    const targetPath = join(tempDir, 'target.toml');
+    const outputPath = join(tempDir, 'output.toml');
+
+    writeFileSync(
+      sourcePath,
+      [
+        'model = "gpt-5.6-terra"',
+        'service_tier = "default"',
+        '',
+        '[features]',
+        'runtime_metrics = true',
+        ''
+      ].join('\n'),
+      'utf8'
+    );
+    writeFileSync(
+      targetPath,
+      [
+        'model = "gpt-5.4"',
+        'service_tier = "fast"',
+        '',
+        '[features]',
+        'runtime_metrics = false',
+        ''
+      ].join('\r\n'),
+      'utf8'
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        'tools/config-toml-ops.cjs',
+        'merge-install',
+        '--source',
+        sourcePath,
+        '--target',
+        targetPath,
+        '--output',
+        outputPath
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: 'utf8'
+      }
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    const outputConfig = TOML.parse(readFileSync(outputPath, 'utf8'));
+    assert.equal(outputConfig.service_tier, 'fast');
+    assert.equal(Object.hasOwn(outputConfig.features, 'service_tier'), false);
+    assert.equal(outputConfig.features.runtime_metrics, true);
+  });
+});
+
+test('merge-install CLI removes target notice.model_migrations when source has no notice table', () => {
+  withTempDir((tempDir) => {
+    const sourcePath = join(tempDir, 'source.toml');
+    const targetPath = join(tempDir, 'target.toml');
+    const outputPath = join(tempDir, 'output.toml');
+
+    writeFileSync(
+      sourcePath,
+      [
+        'model = "gpt-5.6-terra"',
+        '',
+        '[features]',
+        'runtime_metrics = true',
+        ''
+      ].join('\n'),
+      'utf8'
+    );
+    writeFileSync(
+      targetPath,
+      [
+        'model = "gpt-5.4"',
+        '',
+        '[notice]',
+        'hide_full_access_warning = true',
+        '',
+        '[notice.model_migrations]',
+        '"gpt-5.1-codex-max" = "gpt-5.3-codex"',
+        ''
+      ].join('\r\n'),
+      'utf8'
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        'tools/config-toml-ops.cjs',
+        'merge-install',
+        '--source',
+        sourcePath,
+        '--target',
+        targetPath,
+        '--output',
+        outputPath
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: 'utf8'
+      }
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    const outputText = readFileSync(outputPath, 'utf8');
+    const outputConfig = TOML.parse(outputText);
+    assert.deepStrictEqual(outputConfig.notice, { hide_full_access_warning: true });
+    assert.equal(Object.hasOwn(outputConfig.notice, 'model_migrations'), false);
+    assert.doesNotMatch(outputText, /\[notice\.model_migrations\]/);
+  });
+});
+
+test('merge-install CLI preserves a target-only inline mcp_servers table', () => {
+  withTempDir((tempDir) => {
+    const sourcePath = join(tempDir, 'source.toml');
+    const targetPath = join(tempDir, 'target.toml');
+    const outputPath = join(tempDir, 'output.toml');
+    const inlineMcpServers = "mcp_servers = { node_repl = { command = 'node.exe', args = [] } } # Keep this inline table.";
+
+    writeFileSync(sourcePath, 'model = "gpt-5.6-terra"\n', 'utf8');
+    writeFileSync(
+      targetPath,
+      [
+        'model = "gpt-5.4"',
+        inlineMcpServers,
+        ''
+      ].join('\r\n'),
+      'utf8'
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        'tools/config-toml-ops.cjs',
+        'merge-install',
+        '--source',
+        sourcePath,
+        '--target',
+        targetPath,
+        '--output',
+        outputPath
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: 'utf8'
+      }
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    const outputText = readFileSync(outputPath, 'utf8');
+    assert.match(outputText, new RegExp(`^${inlineMcpServers.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
+    assert.deepStrictEqual(TOML.parse(outputText).mcp_servers, {
+      node_repl: {
+        command: 'node.exe',
+        args: []
+      }
+    });
+  });
+});
+
+test('merge-install CLI preserves target-only mcp_servers parent and node_repl child tables', () => {
+  withTempDir((tempDir) => {
+    const sourcePath = join(tempDir, 'source.toml');
+    const targetPath = join(tempDir, 'target.toml');
+    const outputPath = join(tempDir, 'output.toml');
+    const mcpBlock = [
+      '[mcp_servers]',
+      'enabled = true # Preserve the parent table.',
+      '',
+      '[mcp_servers.node_repl]',
+      "command = 'node.exe' # Preserve the child table.",
+      'args = []',
+      ''
+    ].join('\r\n');
+
+    writeFileSync(sourcePath, 'model = "gpt-5.6-terra"\n', 'utf8');
+    writeFileSync(
+      targetPath,
+      [
+        'model = "gpt-5.4"',
+        '',
+        mcpBlock
+      ].join('\r\n'),
+      'utf8'
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        'tools/config-toml-ops.cjs',
+        'merge-install',
+        '--source',
+        sourcePath,
+        '--target',
+        targetPath,
+        '--output',
+        outputPath
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: 'utf8'
+      }
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    const outputText = readFileSync(outputPath, 'utf8');
+    assert.ok(outputText.includes(mcpBlock), 'target-only mcp_servers table hierarchy must remain byte-for-byte intact');
+    assert.deepStrictEqual(TOML.parse(outputText).mcp_servers, {
+      enabled: true,
+      node_repl: {
+        command: 'node.exe',
+        args: []
+      }
+    });
+  });
+});
+
+test('merge-install CLI preserves adjacent unchanged managed root assignments and their inline comments', () => {
+  withTempDir((tempDir) => {
+    const sourcePath = join(tempDir, 'source.toml');
+    const targetPath = join(tempDir, 'target.toml');
+    const outputPath = join(tempDir, 'output.toml');
+    const modelLine = "model = 'gpt-5.6-terra' # Preserve this model comment.";
+    const approvalPolicyLine = "approval_policy = 'never' # Preserve this approval comment.";
+
+    writeFileSync(
+      sourcePath,
+      [
+        "model = 'gpt-5.6-terra' # Managed source model comment.",
+        "approval_policy = 'never' # Managed source approval comment.",
+        ''
+      ].join('\n'),
+      'utf8'
+    );
+    writeFileSync(
+      targetPath,
+      [
+        modelLine,
+        approvalPolicyLine,
+        ''
+      ].join('\r\n'),
+      'utf8'
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        'tools/config-toml-ops.cjs',
+        'merge-install',
+        '--source',
+        sourcePath,
+        '--target',
+        targetPath,
+        '--output',
+        outputPath
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: 'utf8'
+      }
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    const outputText = readFileSync(outputPath, 'utf8');
+    assert.ok(outputText.includes(`${modelLine}\r\n${approvalPolicyLine}`));
+    assert.equal((outputText.match(/# Preserve this model comment\./g) ?? []).length, 1);
+    assert.equal((outputText.match(/# Preserve this approval comment\./g) ?? []).length, 1);
+    assert.deepStrictEqual(TOML.parse(outputText), {
+      model: 'gpt-5.6-terra',
+      approval_policy: 'never'
+    });
+  });
+});
+
+test('publish-sync orders managed tables and MCP server children according to local configuration order', () => {
+  const localConfig = {
+    mcp_servers: {
+      zulu: {
+        command: 'node-zulu.exe'
+      },
+      alpha: {
+        command: 'node-alpha.exe'
+      }
+    },
+    notice: {
+      hide_full_access_warning: true
+    },
+    features: {
+      runtime_metrics: true
+    }
+  };
+  const managedConfig = {
+    features: {
+      runtime_metrics: false
+    },
+    notice: {
+      hide_full_access_warning: false
+    },
+    mcp_servers: {
+      alpha: {
+        command: 'node-alpha.exe'
+      },
+      zulu: {
+        command: 'node-zulu.exe'
+      }
+    }
+  };
+
+  const publishedConfig = buildPublishedSyncConfig(localConfig, managedConfig);
+  assert.deepStrictEqual(Object.keys(publishedConfig), [
+    'mcp_servers',
+    'notice',
+    'features'
+  ]);
+  assert.deepStrictEqual(Object.keys(publishedConfig.mcp_servers), [
+    'zulu',
+    'alpha'
+  ]);
+});
+
+test('publish-sync CLI writes managed tables and MCP server children in local configuration order', () => {
+  withTempDir((tempDir) => {
+    const localPath = join(tempDir, 'local.toml');
+    const managedPath = join(tempDir, 'managed.toml');
+    const outputPath = join(tempDir, 'output.toml');
+
+    writeFileSync(
+      localPath,
+      [
+        '[mcp_servers.zulu]',
+        'command = "node-zulu.exe"',
+        '',
+        '[mcp_servers.alpha]',
+        'command = "node-alpha.exe"',
+        '',
+        '[notice]',
+        'hide_full_access_warning = true',
+        '',
+        '[features]',
+        'runtime_metrics = true',
+        ''
+      ].join('\r\n'),
+      'utf8'
+    );
+    writeFileSync(
+      managedPath,
+      [
+        '[features]',
+        'runtime_metrics = false',
+        '',
+        '[notice]',
+        'hide_full_access_warning = false',
+        '',
+        '[mcp_servers.alpha]',
+        'command = "managed-alpha.exe"',
+        '',
+        '[mcp_servers.zulu]',
+        'command = "managed-zulu.exe"',
+        ''
+      ].join('\n'),
+      'utf8'
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        'tools/config-toml-ops.cjs',
+        'publish-sync',
+        '--local',
+        localPath,
+        '--managed',
+        managedPath,
+        '--output',
+        outputPath
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: 'utf8'
+      }
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    const outputText = readFileSync(outputPath, 'utf8');
+    assert.ok(
+      outputText.indexOf('[mcp_servers.zulu]') < outputText.indexOf('[mcp_servers.alpha]') &&
+      outputText.indexOf('[mcp_servers.alpha]') < outputText.indexOf('[notice]') &&
+      outputText.indexOf('[notice]') < outputText.indexOf('[features]'),
+      'publish output must follow local table and MCP child order'
+    );
+  });
+});
+
+test('merge-install CLI writes changed managed sections in source order while retaining raw unmanaged node_repl text', () => {
+  withTempDir((tempDir) => {
+    const sourcePath = join(tempDir, 'source.toml');
+    const targetPath = join(tempDir, 'target.toml');
+    const outputPath = join(tempDir, 'output.toml');
+    const nodeReplBlock = [
+      '# Keep this target-only MCP block raw.',
+      '[mcp_servers.node_repl]',
+      "command = 'node-repl.exe' # Keep literal quotes and comment.",
+      'args = []',
+      ''
+    ].join('\r\n');
+
+    writeFileSync(
+      sourcePath,
+      [
+        'model = "gpt-5.6-terra"',
+        '',
+        '[features]',
+        'runtime_metrics = true',
+        '',
+        '[mcp_servers.alpha]',
+        'command = "managed-alpha.exe"',
+        '',
+        '[mcp_servers.zulu]',
+        'command = "managed-zulu.exe"',
+        ''
+      ].join('\n'),
+      'utf8'
+    );
+    writeFileSync(
+      targetPath,
+      [
+        'model = "gpt-5.4"',
+        '',
+        nodeReplBlock,
+        '[mcp_servers.zulu]',
+        'command = "stale-zulu.exe"',
+        '',
+        '[features]',
+        'runtime_metrics = false',
+        '',
+        '[mcp_servers.alpha]',
+        'command = "stale-alpha.exe"',
+        ''
+      ].join('\r\n'),
+      'utf8'
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        'tools/config-toml-ops.cjs',
+        'merge-install',
+        '--source',
+        sourcePath,
+        '--target',
+        targetPath,
+        '--output',
+        outputPath
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: 'utf8'
+      }
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    const outputText = readFileSync(outputPath, 'utf8');
+    assert.ok(outputText.includes(nodeReplBlock), 'unmanaged node_repl text must remain raw');
+    assert.ok(
+      outputText.indexOf('[features]') < outputText.indexOf('[mcp_servers.alpha]') &&
+      outputText.indexOf('[mcp_servers.alpha]') < outputText.indexOf('[mcp_servers.zulu]'),
+      'changed managed sections must follow source order'
+    );
+  });
+});
+
 test('merge-install CLI normalizes CRLF developer_instructions before writing TOML output', () => {
   withTempDir((tempDir) => {
     const sourcePath = join(tempDir, 'source.toml');

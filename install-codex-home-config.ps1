@@ -39,7 +39,9 @@ function Write-StageMessage {
         [string]$Message
     )
 
-    Write-Information "[codex-home-config] $Message" -InformationAction Continue
+    if (-not $DryRun) {
+        Write-Information "[codex-home-config] $Message" -InformationAction Continue
+    }
 }
 
 function Test-InteractivePauseAvailable {
@@ -1203,7 +1205,9 @@ function Install-Snapshot {
             ConvertTo-LfLineEnding -Path $destinationPath
         }
 
-        Write-Output "Installed $($fileInfo.Name) to $destinationPath"
+        if (-not $DryRun) {
+            Write-Output "Installed $($fileInfo.Name) to $destinationPath"
+        }
     }
 
     if ($componentSelection.AgentFolder) {
@@ -1219,7 +1223,9 @@ function Install-Snapshot {
         Write-StageMessage 'Installing agents...'
         Copy-Item -LiteralPath $SnapshotInfo.AgentDirectoryPath -Destination $TargetCodexPath -Recurse -Force
         ConvertTo-LfLineEnding -Path $targetAgentDirectoryPath
-        Write-Output "Installed agents to $targetAgentDirectoryPath"
+        if (-not $DryRun) {
+            Write-Output "Installed agents to $targetAgentDirectoryPath"
+        }
     }
 
     if ($componentSelection.Skill) {
@@ -1258,7 +1264,9 @@ function Sync-SkillDirectory {
         $destinationParentPath = Split-Path -Path $DestinationPath -Parent
         $null = New-Item -ItemType Directory -Path $destinationParentPath -Force
         Copy-Item -LiteralPath $SourcePath -Destination $destinationParentPath -Recurse -Force
-        Write-Output "Installed skill to $DestinationPath"
+        if (-not $DryRun) {
+            Write-Output "Installed skill to $DestinationPath"
+        }
         return
     }
 
@@ -1269,7 +1277,9 @@ function Sync-SkillDirectory {
         }
 
         Remove-Item -LiteralPath $DestinationPath -Recurse -Force
-        Write-Output "Removed skill at $DestinationPath"
+        if (-not $DryRun) {
+            Write-Output "Removed skill at $DestinationPath"
+        }
 
         $destinationParentPath = Split-Path -Path $DestinationPath -Parent
         if (-not (Test-Path -LiteralPath $destinationParentPath -PathType Container)) {
@@ -1279,7 +1289,9 @@ function Sync-SkillDirectory {
         $remainingEntries = @(Get-ChildItem -LiteralPath $destinationParentPath -Force)
         if (($remainingEntries.Count -eq 0) -and $PSCmdlet.ShouldProcess($destinationParentPath, 'Remove empty skills directory')) {
             Remove-Item -LiteralPath $destinationParentPath -Force
-            Write-Output "Removed empty skills directory at $destinationParentPath"
+            if (-not $DryRun) {
+                Write-Output "Removed empty skills directory at $destinationParentPath"
+            }
         }
     }
 }
@@ -1323,7 +1335,7 @@ function Remove-OldBackupVersion {
     }
 }
 
-function Copy-DryRunDirectoryContents {
+function Copy-DryRunManagedTargetContents {
     param(
         [Parameter(Mandatory)]
         [string]$SourcePath,
@@ -1337,8 +1349,22 @@ function Copy-DryRunDirectoryContents {
         return
     }
 
-    foreach ($sourceItem in @(Get-ChildItem -LiteralPath $SourcePath -Force)) {
-        Copy-Item -LiteralPath $sourceItem.FullName -Destination $DestinationPath -Recurse -Force
+    foreach ($relativePath in @(
+            'config.toml',
+            'AGENTS.md',
+            'models.local.json',
+            'agents',
+            'skills\jiangxiaoxu'
+        )) {
+        $sourceItemPath = Join-Path $SourcePath $relativePath
+        if (-not (Test-Path -LiteralPath $sourceItemPath)) {
+            continue
+        }
+
+        $destinationItemPath = Join-Path $DestinationPath $relativePath
+        $destinationParentPath = Split-Path -Path $destinationItemPath -Parent
+        $null = New-Item -ItemType Directory -Path $destinationParentPath -Force
+        Copy-Item -LiteralPath $sourceItemPath -Destination $destinationItemPath -Recurse -Force
     }
 }
 
@@ -1561,6 +1587,7 @@ function Write-DryRunDiff {
                 '--no-index',
                 '--no-ext-diff',
                 '--no-prefix',
+                '--unified=0',
                 '--',
                 (Split-Path -Leaf $BeforePath),
                 (Split-Path -Leaf $AfterPath)
@@ -1572,6 +1599,7 @@ function Write-DryRunDiff {
                 '--no-index',
                 '--no-ext-diff',
                 '--no-prefix',
+                '--unified=0',
                 '--',
                 $BeforePath,
                 $AfterPath
@@ -1599,6 +1627,27 @@ function Write-DryRunDiff {
     Write-DryRunFallbackDiff -BeforePath $BeforePath -AfterPath $AfterPath
 }
 
+function Normalize-DryRunConfigFile {
+    param(
+        [Parameter(Mandatory)]
+        [string]$ConfigPath,
+
+        [Parameter(Mandatory)]
+        [string]$NormalizedPath
+    )
+
+    if (-not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) {
+        return
+    }
+
+    Invoke-ConfigTomlTool -Command 'merge-install' -Arguments @{
+        source = $ConfigPath
+        target = $ConfigPath
+        output = $NormalizedPath
+    }
+    Copy-Item -LiteralPath $NormalizedPath -Destination $ConfigPath -Force
+}
+
 function Invoke-DryRunInstallation {
     param(
         [Parameter(Mandatory)]
@@ -1612,12 +1661,17 @@ function Invoke-DryRunInstallation {
     $dryRunTempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-home-config-dry-run-" + [guid]::NewGuid().ToString('N'))
     $beforePath = Join-Path $dryRunTempRoot 'target'
     $baselinePath = Join-Path $dryRunTempRoot 'would-install'
+    $normalizedBeforeConfigPath = Join-Path $dryRunTempRoot 'normalized-target-config.toml'
+    $normalizedBaselineConfigPath = Join-Path $dryRunTempRoot 'normalized-would-install-config.toml'
 
     try {
-        Copy-DryRunDirectoryContents -SourcePath $originalTargetCodexPath -DestinationPath $beforePath
-        Copy-DryRunDirectoryContents -SourcePath $beforePath -DestinationPath $baselinePath
+        Copy-DryRunManagedTargetContents -SourcePath $originalTargetCodexPath -DestinationPath $beforePath
+        Copy-DryRunManagedTargetContents -SourcePath $beforePath -DestinationPath $baselinePath
         $script:TargetCodexPath = $baselinePath
         Install-Snapshot -SnapshotInfo $SnapshotInfo -SelectedComponents $SelectedComponents
+        Write-StageMessage 'Normalizing temporary config.toml files before comparing the dry-run result.'
+        Normalize-DryRunConfigFile -ConfigPath (Join-Path $beforePath 'config.toml') -NormalizedPath $normalizedBeforeConfigPath
+        Normalize-DryRunConfigFile -ConfigPath (Join-Path $baselinePath 'config.toml') -NormalizedPath $normalizedBaselineConfigPath
         Write-DryRunDiff -BeforePath $beforePath -AfterPath $baselinePath
     }
     finally {
@@ -1634,7 +1688,9 @@ function Invoke-UpdateAction {
     )
 
     $defaultComponents = @('Config', 'AgentFile', 'AgentFolder', 'ModelsLocalFile', 'Skill')
-    Show-InstallCommitInfo
+    if (-not $DryRun) {
+        Show-InstallCommitInfo
+    }
     Write-StageMessage 'Preparing repository snapshot...'
     $repositoryPath = Get-RepositorySupportRoot
     $managedPath = Join-Path $repositoryPath 'managed'
