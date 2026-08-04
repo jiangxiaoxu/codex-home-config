@@ -270,13 +270,13 @@ test('DryRun prints actual managed file diffs without modifying the target or cr
     assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
     assert.match(result.stdout, /^(?:diff --git|--- |@@ )/m);
     assert.match(result.stdout, /config\.toml/);
-    assert.match(result.stdout, /models\.local\.json/);
+    assert.match(result.stdout, /^models\.local\.json: differs$/m);
     assert.match(result.stdout, /AGENTS\.md/);
     assert.match(result.stdout, /agents[\\/]reviewer\.toml/);
     assert.match(result.stdout, /-model = "old"/);
     assert.match(result.stdout, /\+model = "base"/);
-    assert.match(result.stdout, /-  "models": \["old"\]/);
-    assert.match(result.stdout, /\+  "models": \[\]/);
+    assert.doesNotMatch(result.stdout, /^(?:diff --git .*models\.local\.json|--- .*models\.local\.json|\+\+\+ .*models\.local\.json)$/m);
+    assert.doesNotMatch(result.stdout, /^[+-]\s+"models":/m);
     assert.match(result.stdout, /-old instructions/);
     assert.match(result.stdout, /\+base instructions/);
     assert.match(result.stdout, /-old agent/);
@@ -288,6 +288,24 @@ test('DryRun prints actual managed file diffs without modifying the target or cr
     assert.deepEqual(readFileSync(join(targetPath, 'models.local.json')), originalFiles.modelsLocal);
     assert.deepEqual(readFileSync(join(targetPath, 'AGENTS.md')), originalFiles.agents);
     assert.deepEqual(readFileSync(join(targetPath, 'agents', 'reviewer.toml')), originalFiles.agent);
+    assert.ok(!existsSync(join(targetPath, 'sync_codex-home-config_backup')));
+  });
+});
+
+test('DryRun reports only whether models.local.json differs', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const targetPath = join(tempDir, 'target');
+    mkdirSync(join(targetPath, 'agents'), { recursive: true });
+    writeFileSync(join(targetPath, 'config.toml'), 'model = "base"\n', 'utf8');
+    writeFileSync(join(targetPath, 'models.local.json'), '{\n  "models": ["private-model"]\n}\n', 'utf8');
+    writeFileSync(join(targetPath, 'AGENTS.md'), 'base instructions\n', 'utf8');
+    writeFileSync(join(targetPath, 'agents', 'reviewer.toml'), 'base agent\n', 'utf8');
+
+    const result = runInstaller(localPath, targetPath, ['-DryRun']);
+    assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
+    assert.match(result.stdout, /^models\.local\.json: differs$/m);
+    assert.doesNotMatch(result.stdout, /private-model|^diff --git |^--- |^\+\+\+ |No differences would be applied\./m);
     assert.ok(!existsSync(join(targetPath, 'sync_codex-home-config_backup')));
   });
 });

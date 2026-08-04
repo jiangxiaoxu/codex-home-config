@@ -1510,7 +1510,9 @@ function Write-DryRunFallbackDiff {
         [string]$BeforePath,
 
         [Parameter(Mandatory)]
-        [string]$AfterPath
+        [string]$AfterPath,
+
+        [switch]$HasSummarizedDifferences
     )
 
     $beforeEntries = @{}
@@ -1518,7 +1520,7 @@ function Write-DryRunFallbackDiff {
     Add-DryRunTreeEntries -RootPath $BeforePath -Entries $beforeEntries
     Add-DryRunTreeEntries -RootPath $AfterPath -Entries $afterEntries
     $allPaths = @($beforeEntries.Keys + $afterEntries.Keys | Sort-Object -Unique)
-    $hasDifferences = $false
+    $hasDifferences = $HasSummarizedDifferences
 
     foreach ($relativePath in $allPaths) {
         $hasBefore = $beforeEntries.ContainsKey($relativePath)
@@ -1572,8 +1574,13 @@ function Write-DryRunDiff {
         [string]$BeforePath,
 
         [Parameter(Mandatory)]
-        [string]$AfterPath
+        [string]$AfterPath,
+
+        [string[]]$SummarizedDifferences = @()
     )
+
+    Write-Output $SummarizedDifferences
+    $summarizedDifferenceCount = if ($null -eq $SummarizedDifferences) { 0 } else { @($SummarizedDifferences).Count }
 
     $gitExecutable = Get-GitExecutable
     if (-not [string]::IsNullOrWhiteSpace($gitExecutable)) {
@@ -1609,7 +1616,9 @@ function Write-DryRunDiff {
         $diffOutput = @(& $gitExecutable @gitDiffArguments 2>&1)
         $diffExitCode = $LASTEXITCODE
         if ($diffExitCode -eq 0) {
-            Write-Output 'No differences would be applied.'
+            if ($summarizedDifferenceCount -eq 0) {
+                Write-Output 'No differences would be applied.'
+            }
             return
         }
 
@@ -1624,7 +1633,7 @@ function Write-DryRunDiff {
         Write-StageMessage 'Git is unavailable; using the PowerShell dry-run diff fallback.'
     }
 
-    Write-DryRunFallbackDiff -BeforePath $BeforePath -AfterPath $AfterPath
+    Write-DryRunFallbackDiff -BeforePath $BeforePath -AfterPath $AfterPath -HasSummarizedDifferences:($summarizedDifferenceCount -gt 0)
 }
 
 function Normalize-DryRunConfigFile {
@@ -1672,7 +1681,30 @@ function Invoke-DryRunInstallation {
         Write-StageMessage 'Normalizing temporary config.toml files before comparing the dry-run result.'
         Normalize-DryRunConfigFile -ConfigPath (Join-Path $beforePath 'config.toml') -NormalizedPath $normalizedBeforeConfigPath
         Normalize-DryRunConfigFile -ConfigPath (Join-Path $baselinePath 'config.toml') -NormalizedPath $normalizedBaselineConfigPath
-        Write-DryRunDiff -BeforePath $beforePath -AfterPath $baselinePath
+
+        $beforeModelsLocalPath = Join-Path $beforePath 'models.local.json'
+        $baselineModelsLocalPath = Join-Path $baselinePath 'models.local.json'
+        $beforeModelsLocalExists = Test-Path -LiteralPath $beforeModelsLocalPath -PathType Leaf
+        $baselineModelsLocalExists = Test-Path -LiteralPath $baselineModelsLocalPath -PathType Leaf
+        $modelsLocalDiffers = $beforeModelsLocalExists -ne $baselineModelsLocalExists
+        if ($beforeModelsLocalExists -and $baselineModelsLocalExists) {
+            $beforeModelsLocalHash = (Get-FileHash -LiteralPath $beforeModelsLocalPath -Algorithm SHA256).Hash
+            $baselineModelsLocalHash = (Get-FileHash -LiteralPath $baselineModelsLocalPath -Algorithm SHA256).Hash
+            $modelsLocalDiffers = -not $beforeModelsLocalHash.Equals($baselineModelsLocalHash, [System.StringComparison]::OrdinalIgnoreCase)
+        }
+
+        if ($beforeModelsLocalExists) {
+            [System.IO.File]::Delete($beforeModelsLocalPath)
+        }
+        if ($baselineModelsLocalExists) {
+            [System.IO.File]::Delete($baselineModelsLocalPath)
+        }
+
+        [string[]]$summarizedDifferences = @()
+        if ($modelsLocalDiffers) {
+            $summarizedDifferences = @('models.local.json: differs')
+        }
+        Write-DryRunDiff -BeforePath $beforePath -AfterPath $baselinePath -SummarizedDifferences $summarizedDifferences
     }
     finally {
         $script:TargetCodexPath = $originalTargetCodexPath

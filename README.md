@@ -31,7 +31,7 @@ iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/relea
 .\install-codex-home-config.ps1 -TargetCodexPath '<path>' -DryRun
 ```
 
-`-DryRun` 只读取 managed snapshot 和目标配置, 跳过本地仓库 `git pull`, 不创建备份且不修改目标. 它会输出按实际安装规则计算的目标文件 diff, 包括 `config.toml` 合并后的结果和将原样复制的 `models.local.json`.
+`-DryRun` 只读取 managed snapshot 和目标配置, 跳过本地仓库 `git pull`, 不创建备份且不修改目标. 它会输出按实际安装规则计算的目标文件 diff; 对 `models.local.json` 只报告文件是否存在差异, 不显示文件内容.
 
 ## 备份
 
