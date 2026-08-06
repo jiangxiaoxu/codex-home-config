@@ -317,6 +317,9 @@ function Invoke-LatestInstaller {
         [Parameter(Mandatory)]
         [string]$RepositoryPath,
 
+        [Parameter(Mandatory)]
+        [string]$TargetCodexPath,
+
         [switch]$DryRun
     )
 
@@ -357,6 +360,9 @@ function Invoke-LocalRepositoryPull {
         [Parameter(Mandatory)]
         [string]$RepositoryPath,
 
+        [Parameter(Mandatory)]
+        [string]$TargetCodexPath,
+
         [switch]$DryRun
     )
 
@@ -384,7 +390,7 @@ function Invoke-LocalRepositoryPull {
 
     $postPullHead = Get-GitHeadCommit -RepositoryPath $RepositoryPath
     if ($prePullHead -ne $postPullHead) {
-        Invoke-LatestInstaller -RepositoryPath $RepositoryPath -DryRun:$DryRun
+        Invoke-LatestInstaller -RepositoryPath $RepositoryPath -TargetCodexPath $TargetCodexPath -DryRun:$DryRun
         return
     }
 
@@ -719,12 +725,22 @@ function Invoke-ArchiveDownload {
 }
 
 function Get-BackupRootPath {
+    param(
+        [Parameter(Mandatory)]
+        [string]$TargetCodexPath
+    )
+
     return Join-Path $TargetCodexPath 'sync_codex-home-config_backup'
 }
 
 function Get-BackupSessionPath {
+    param(
+        [Parameter(Mandatory)]
+        [string]$TargetCodexPath
+    )
+
     if ([string]::IsNullOrWhiteSpace($backupState.SessionPath)) {
-        $backupRootPath = Get-BackupRootPath
+        $backupRootPath = Get-BackupRootPath -TargetCodexPath $TargetCodexPath
         $backupState.SessionPath = Join-Path $backupRootPath $timestamp
         $null = New-Item -ItemType Directory -Path $backupState.SessionPath -Force
     }
@@ -740,10 +756,13 @@ function Backup-ExistingPath {
         [Parameter(Mandatory)]
         [string]$RelativeBackupPath,
 
+        [Parameter(Mandatory)]
+        [string]$TargetCodexPath,
+
         [switch]$Recurse
     )
 
-    $backupPath = Join-Path (Get-BackupSessionPath) $RelativeBackupPath
+    $backupPath = Join-Path (Get-BackupSessionPath -TargetCodexPath $TargetCodexPath) $RelativeBackupPath
     $backupParentPath = Split-Path -Parent $backupPath
     if (-not [string]::IsNullOrWhiteSpace($backupParentPath)) {
         $null = New-Item -ItemType Directory -Path $backupParentPath -Force
@@ -762,7 +781,10 @@ function Backup-ExistingPath {
 function Backup-CurrentSnapshot {
     param(
         [Parameter(Mandatory)]
-        [string[]]$SelectedComponents
+        [string[]]$SelectedComponents,
+
+        [Parameter(Mandatory)]
+        [string]$TargetCodexPath
     )
 
     $currentSnapshot = Get-SnapshotInfo -RootPath $TargetCodexPath -Name 'current'
@@ -778,18 +800,18 @@ function Backup-CurrentSnapshot {
         }
 
         if (Test-Path -LiteralPath $fileInfo.SourcePath -PathType Leaf) {
-            $backupPath = Backup-ExistingPath -SourcePath $fileInfo.SourcePath -RelativeBackupPath $fileInfo.RelativeBackupPath
+            $backupPath = Backup-ExistingPath -SourcePath $fileInfo.SourcePath -RelativeBackupPath $fileInfo.RelativeBackupPath -TargetCodexPath $TargetCodexPath
             Write-Output "Backed up $(Join-Path $TargetCodexPath $fileInfo.Name) to $backupPath"
         }
     }
 
     if ($componentSelection.AgentFolder -and (Test-Path -LiteralPath $currentSnapshot.AgentDirectoryPath -PathType Container)) {
-        $backupAgentDirectoryPath = Backup-ExistingPath -SourcePath $currentSnapshot.AgentDirectoryPath -RelativeBackupPath 'agents' -Recurse
+        $backupAgentDirectoryPath = Backup-ExistingPath -SourcePath $currentSnapshot.AgentDirectoryPath -RelativeBackupPath 'agents' -TargetCodexPath $TargetCodexPath -Recurse
         Write-Output "Backed up $($currentSnapshot.AgentDirectoryPath) to $backupAgentDirectoryPath"
     }
 
     if ($componentSelection.Skill -and (Test-Path -LiteralPath $currentSnapshot.SkillDirectoryPath -PathType Container)) {
-        $backupSkillDirectoryPath = Backup-ExistingPath -SourcePath $currentSnapshot.SkillDirectoryPath -RelativeBackupPath 'skills\jiangxiaoxu' -Recurse
+        $backupSkillDirectoryPath = Backup-ExistingPath -SourcePath $currentSnapshot.SkillDirectoryPath -RelativeBackupPath 'skills\jiangxiaoxu' -TargetCodexPath $TargetCodexPath -Recurse
         Write-Output "Backed up $($currentSnapshot.SkillDirectoryPath) to $backupSkillDirectoryPath"
     }
 }
@@ -1142,7 +1164,12 @@ function Assert-SnapshotInfo {
 }
 
 function Get-BackupVersionDirectory {
-    $backupRootPath = Get-BackupRootPath
+    param(
+        [Parameter(Mandatory)]
+        [string]$TargetCodexPath
+    )
+
+    $backupRootPath = Get-BackupRootPath -TargetCodexPath $TargetCodexPath
     if (-not (Test-Path -LiteralPath $backupRootPath -PathType Container)) {
         return @()
     }
@@ -1156,6 +1183,9 @@ function Install-Snapshot {
     param(
         [Parameter(Mandatory)]
         [pscustomobject]$SnapshotInfo,
+
+        [Parameter(Mandatory)]
+        [string]$TargetCodexPath,
 
         [Parameter()]
         [string[]]$SelectedComponents = @('Config', 'AgentFile', 'AgentFolder', 'ModelsLocalFile', 'Skill'),
@@ -1172,7 +1202,7 @@ function Install-Snapshot {
     $componentSelection = Get-ComponentSelection -SelectedComponents $effectiveSelectedComponents
 
     if ($CreateBackup -and $effectiveSelectedComponents.Count -gt 0) {
-        Backup-CurrentSnapshot -SelectedComponents $effectiveSelectedComponents
+        Backup-CurrentSnapshot -SelectedComponents $effectiveSelectedComponents -TargetCodexPath $TargetCodexPath
     }
 
     foreach ($fileInfo in @(
@@ -1312,9 +1342,12 @@ function Move-DirectoryToRecycleBin {
 
 function Remove-OldBackupVersion {
     [CmdletBinding(SupportsShouldProcess)]
-    param()
+    param(
+        [Parameter(Mandatory)]
+        [string]$TargetCodexPath
+    )
 
-    $backupDirectories = @(Get-BackupVersionDirectory)
+    $backupDirectories = @(Get-BackupVersionDirectory -TargetCodexPath $TargetCodexPath)
     if ($backupDirectories.Count -le $maxBackupVersions) {
         return
     }
@@ -1663,10 +1696,12 @@ function Invoke-DryRunInstallation {
         [pscustomobject]$SnapshotInfo,
 
         [Parameter(Mandatory)]
-        [string[]]$SelectedComponents
+        [string[]]$SelectedComponents,
+
+        [Parameter(Mandatory)]
+        [string]$TargetCodexPath
     )
 
-    $originalTargetCodexPath = $script:TargetCodexPath
     $dryRunTempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-home-config-dry-run-" + [guid]::NewGuid().ToString('N'))
     $beforePath = Join-Path $dryRunTempRoot 'target'
     $baselinePath = Join-Path $dryRunTempRoot 'would-install'
@@ -1674,10 +1709,9 @@ function Invoke-DryRunInstallation {
     $normalizedBaselineConfigPath = Join-Path $dryRunTempRoot 'normalized-would-install-config.toml'
 
     try {
-        Copy-DryRunManagedTargetContents -SourcePath $originalTargetCodexPath -DestinationPath $beforePath
+        Copy-DryRunManagedTargetContents -SourcePath $TargetCodexPath -DestinationPath $beforePath
         Copy-DryRunManagedTargetContents -SourcePath $beforePath -DestinationPath $baselinePath
-        $script:TargetCodexPath = $baselinePath
-        Install-Snapshot -SnapshotInfo $SnapshotInfo -SelectedComponents $SelectedComponents
+        Install-Snapshot -SnapshotInfo $SnapshotInfo -TargetCodexPath $baselinePath -SelectedComponents $SelectedComponents
         Write-StageMessage 'Normalizing temporary config.toml files before comparing the dry-run result.'
         Normalize-DryRunConfigFile -ConfigPath (Join-Path $beforePath 'config.toml') -NormalizedPath $normalizedBeforeConfigPath
         Normalize-DryRunConfigFile -ConfigPath (Join-Path $baselinePath 'config.toml') -NormalizedPath $normalizedBaselineConfigPath
@@ -1707,7 +1741,6 @@ function Invoke-DryRunInstallation {
         Write-DryRunDiff -BeforePath $beforePath -AfterPath $baselinePath -SummarizedDifferences $summarizedDifferences
     }
     finally {
-        $script:TargetCodexPath = $originalTargetCodexPath
         if (Test-Path -LiteralPath $dryRunTempRoot -PathType Container) {
             Remove-Item -LiteralPath $dryRunTempRoot -Recurse -Force -ErrorAction SilentlyContinue
         }
@@ -1716,7 +1749,10 @@ function Invoke-DryRunInstallation {
 
 function Invoke-UpdateAction {
     param(
-        [switch]$DryRun
+        [switch]$DryRun,
+
+        [Parameter(Mandatory)]
+        [string]$TargetCodexPath
     )
 
     $defaultComponents = @('Config', 'AgentFile', 'AgentFolder', 'ModelsLocalFile', 'Skill')
@@ -1730,13 +1766,13 @@ function Invoke-UpdateAction {
     Assert-SnapshotInfo -SnapshotInfo $snapshotInfo -SnapshotLabel 'Repository snapshot' -SelectedComponents $defaultComponents
     if ($DryRun) {
         Write-StageMessage 'Dry run enabled; simulating the default installation in a temporary directory.'
-        Invoke-DryRunInstallation -SnapshotInfo $snapshotInfo -SelectedComponents $defaultComponents
+        Invoke-DryRunInstallation -SnapshotInfo $snapshotInfo -SelectedComponents $defaultComponents -TargetCodexPath $TargetCodexPath
         return
     }
 
     Write-StageMessage 'Installing default components...'
-    Install-Snapshot -SnapshotInfo $snapshotInfo -SelectedComponents $defaultComponents -CreateBackup
-    Remove-OldBackupVersion
+    Install-Snapshot -SnapshotInfo $snapshotInfo -TargetCodexPath $TargetCodexPath -SelectedComponents $defaultComponents -CreateBackup
+    Remove-OldBackupVersion -TargetCodexPath $TargetCodexPath
 }
 
 try {
@@ -1749,7 +1785,7 @@ try {
         Write-StageMessage 'Dry run enabled; skipping local repository pull to avoid changing repository state.'
     }
     elseif (-not $SkipRepositoryPull -and -not [string]::IsNullOrWhiteSpace($localRepositoryRoot)) {
-        Invoke-LocalRepositoryPull -RepositoryPath $localRepositoryRoot -DryRun:$DryRun
+        Invoke-LocalRepositoryPull -RepositoryPath $localRepositoryRoot -TargetCodexPath $TargetCodexPath -DryRun:$DryRun
         if ($runtimeState.RelaunchedInstaller) {
             return
         }
@@ -1759,7 +1795,7 @@ try {
     $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
 
     try {
-        Invoke-UpdateAction -DryRun:$DryRun
+        Invoke-UpdateAction -DryRun:$DryRun -TargetCodexPath $TargetCodexPath
     }
     finally {
         Remove-RepositorySupportTempRoot

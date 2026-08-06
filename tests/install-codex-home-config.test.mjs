@@ -111,6 +111,41 @@ function runInstaller(repositoryPath, targetPath, args = []) {
   );
 }
 
+function runInstallerFromDynamicScriptBlock(repositoryPath, targetPath, args = []) {
+  const quotePowerShell = (value) => `'${value.replaceAll("'", "''")}'`;
+  const commandArguments = args.map((argument) => argument.startsWith('-') ? argument : quotePowerShell(argument));
+  const installerSourceMarker = 'Set-StrictMode -Version Latest';
+  const installerSourceReplacement = `$PSScriptRoot = ${quotePowerShell(repositoryPath)}\n${installerSourceMarker}`;
+  const command = [
+    `$installerContent = Get-Content -LiteralPath ${quotePowerShell(join(repositoryPath, 'install-codex-home-config.ps1'))} -Raw`,
+    `$installerContent = $installerContent.Replace(${quotePowerShell(installerSourceMarker)}, ${quotePowerShell(installerSourceReplacement)})`,
+    [
+      '&([scriptblock]::Create($installerContent))',
+      '-TargetCodexPath',
+      quotePowerShell(targetPath),
+      ...commandArguments
+    ].join(' ')
+  ].join('; ');
+
+  return spawnSync(
+    pwshPath,
+    [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      command
+    ],
+    {
+      cwd: repositoryPath,
+      encoding: 'utf8',
+      timeout: 30000
+    }
+  );
+}
+
 function runSync(repositoryPath, sourcePath, args = []) {
   const quotePowerShell = (value) => `'${value.replaceAll("'", "''")}'`;
   const componentsIndex = args.indexOf('-Components');
@@ -288,6 +323,23 @@ test('DryRun prints actual managed file diffs without modifying the target or cr
     assert.deepEqual(readFileSync(join(targetPath, 'models.local.json')), originalFiles.modelsLocal);
     assert.deepEqual(readFileSync(join(targetPath, 'AGENTS.md')), originalFiles.agents);
     assert.deepEqual(readFileSync(join(targetPath, 'agents', 'reviewer.toml')), originalFiles.agent);
+    assert.ok(!existsSync(join(targetPath, 'sync_codex-home-config_backup')));
+  });
+});
+
+test('DryRun supports the GUI dynamic ScriptBlock invocation without script-scoped target state', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const targetPath = join(tempDir, 'target');
+    const originalConfig = Buffer.from('model = "old"\n', 'utf8');
+    mkdirSync(targetPath, { recursive: true });
+    writeFileSync(join(targetPath, 'config.toml'), originalConfig);
+
+    const result = runInstallerFromDynamicScriptBlock(localPath, targetPath, ['-DryRun']);
+
+    assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
+    assert.match(result.stdout, /config\.toml/);
+    assert.deepEqual(readFileSync(join(targetPath, 'config.toml')), originalConfig);
     assert.ok(!existsSync(join(targetPath, 'sync_codex-home-config_backup')));
   });
 });
