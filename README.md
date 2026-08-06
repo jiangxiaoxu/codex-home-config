@@ -17,6 +17,16 @@ iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/relea
 
 安装器始终执行默认 `Update`, 不提供 `-Action`, `-Components` 或 Restore 选择.
 
+## 本地仓库强制使用已发布版本
+
+即使从本地 checkout 运行, 也可忽略本地分支和 `git pull`, 改为从 GitHub 下载已发布的 `release` snapshot:
+
+```powershell
+.\install-codex-home-config.ps1 -UsePublishedRelease
+```
+
+该参数可与 `-DryRun` 组合.
+
 ## 本地仓库 DryRun
 
 在本地仓库中, 可先预览实际安装结果:

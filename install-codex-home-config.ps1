@@ -6,6 +6,9 @@ param(
     [Parameter()]
     [switch]$DryRun,
 
+    [Parameter()]
+    [switch]$UsePublishedRelease,
+
     [Parameter(DontShow = $true)]
     [switch]$SkipRepositoryPull
 )
@@ -264,6 +267,10 @@ function Get-GitBranchName {
 }
 
 function Get-LocalRepositoryRoot {
+    if ($UsePublishedRelease) {
+        return $null
+    }
+
     $candidateRoots = [System.Collections.Generic.List[string]]::new()
     foreach ($candidateRoot in @($PSScriptRoot, $(if (-not [string]::IsNullOrWhiteSpace($PSCommandPath)) { Split-Path -Parent $PSCommandPath }))) {
         if ([string]::IsNullOrWhiteSpace($candidateRoot)) {
@@ -563,6 +570,10 @@ function Show-InstallCommitInfo {
         $commitInfo = Get-InstallCommitInfo
     }
     catch {
+        if ($UsePublishedRelease) {
+            throw
+        }
+
         Write-Warning "Failed to load install source commit info. Install will continue without commit metadata."
         return
     }

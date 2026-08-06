@@ -81,6 +81,37 @@ function createLocalRepository(tempDir) {
   return { localPath, seedPath };
 }
 
+function createPublishedReleaseArchive(tempDir) {
+  const publishedReleaseRoot = join(tempDir, 'published-release');
+  const publishedReleaseSnapshotPath = join(publishedReleaseRoot, 'codex-home-config-release');
+  const archivePath = join(tempDir, 'published-release.zip');
+  const quotePowerShell = (value) => `'${value.replaceAll("'", "''")}'`;
+  writeSnapshot(publishedReleaseSnapshotPath, {
+    config: 'model = "published-release"\n',
+    agents: 'published release instructions\n',
+    agent: 'published release agent\n'
+  });
+
+  const result = spawnSync(
+    pwshPath,
+    [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      `Compress-Archive -LiteralPath ${quotePowerShell(publishedReleaseSnapshotPath)} -DestinationPath ${quotePowerShell(archivePath)} -Force`
+    ],
+    {
+      cwd: tempDir,
+      encoding: 'utf8',
+      timeout: 30000
+    }
+  );
+  assert.equal(result.error, undefined, result.error?.message);
+  assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
+  return archivePath;
+}
+
 function runInstaller(repositoryPath, targetPath, args = []) {
   const quotePowerShell = (value) => `'${value.replaceAll("'", "''")}'`;
   const commandArguments = args.map((argument) => argument.startsWith('-') ? argument : quotePowerShell(argument));
@@ -91,6 +122,52 @@ function runInstaller(repositoryPath, targetPath, args = []) {
     quotePowerShell(targetPath),
     ...commandArguments
   ].join(' ');
+
+  return spawnSync(
+    pwshPath,
+    [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      command
+    ],
+    {
+      cwd: repositoryPath,
+      encoding: 'utf8',
+      timeout: 30000
+    }
+  );
+}
+
+function runInstallerWithPublishedReleaseMock(repositoryPath, targetPath, archivePath, args = [], {
+  apiFailure = false,
+  archiveFailure = false
+} = {}) {
+  const quotePowerShell = (value) => `'${value.replaceAll("'", "''")}'`;
+  const commandArguments = args.map((argument) => argument.startsWith('-') ? argument : quotePowerShell(argument));
+  const mockCommit = "[pscustomobject]@{ sha = '0123456789abcdef0123456789abcdef01234567'; html_url = 'https://example.invalid/commit/0123456789abcdef0123456789abcdef01234567'; commit = [pscustomobject]@{ message = 'Published release snapshot'; committer = [pscustomobject]@{ name = 'Release Bot'; date = '2026-01-02T03:04:05Z' }; author = [pscustomobject]@{ name = 'Release Bot'; date = '2026-01-02T03:04:05Z' } } }";
+  const restMethodMock = apiFailure
+    ? "function Invoke-RestMethod { param($Uri, $Headers) throw 'Mocked published release commit API failure' }"
+    : `function Invoke-RestMethod { param($Uri, $Headers) return ${mockCommit} }`;
+  const webRequestMock = archiveFailure
+    ? "function Invoke-WebRequest { param($Uri, $Headers, $OutFile) throw 'Mocked published release archive download failure' }"
+    : `function Invoke-WebRequest { param($Uri, $Headers, $OutFile) Copy-Item -LiteralPath ${quotePowerShell(archivePath)} -Destination $OutFile -Force }`;
+  const command = [
+    restMethodMock,
+    webRequestMock,
+    ...(apiFailure || archiveFailure ? ['function Start-Sleep { param($Seconds) }'] : []),
+    [
+      '&',
+      quotePowerShell(join(repositoryPath, 'install-codex-home-config.ps1')),
+      '-TargetCodexPath',
+      quotePowerShell(targetPath),
+      '-UsePublishedRelease',
+      ...commandArguments
+    ].join(' ')
+  ].join('; ');
 
   return spawnSync(
     pwshPath,
@@ -253,6 +330,97 @@ test('a failed local git pull stops before touching the install target', { skip:
     assert.notEqual(result.status, 0, 'git pull conflict must fail the installer');
     assert.match([result.stdout, result.stderr].filter(Boolean).join('\n'), /git pull|rebase|conflict/i);
     assert.equal(readFileSync(join(targetPath, 'config.toml'), 'utf8'), 'model = "must-not-change"\n');
+  });
+});
+
+test('UsePublishedRelease ignores a dirty local checkout and installs the mocked published release', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const archivePath = createPublishedReleaseArchive(tempDir);
+    const targetPath = join(tempDir, 'target');
+    writeFileSync(join(localPath, 'managed', 'config.toml'), 'model = "local-checkout"\n', 'utf8');
+
+    const result = runInstallerWithPublishedReleaseMock(localPath, targetPath, archivePath);
+
+    assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
+    assert.match(readFileSync(join(targetPath, 'config.toml'), 'utf8'), /published-release/);
+    assert.equal(readFileSync(join(targetPath, 'AGENTS.md'), 'utf8'), 'published release instructions\n');
+    assert.match(result.stdout, /Branch: release/);
+    assert.match(result.stdout, /Subject: Published release snapshot/);
+    assert.match(result.stdout, /Source: remote published release branch/);
+    assert.doesNotMatch(result.stdout, /Pulling latest changes for local branch|Using local repository snapshot/);
+  });
+});
+
+test('UsePublishedRelease DryRun uses the mocked published release without modifying a dirty local checkout target', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const archivePath = createPublishedReleaseArchive(tempDir);
+    const targetPath = join(tempDir, 'target');
+    const originalConfig = Buffer.from('model = "target-before"\n', 'utf8');
+    writeFileSync(join(localPath, 'managed', 'config.toml'), 'model = "local-checkout"\n', 'utf8');
+    mkdirSync(targetPath, { recursive: true });
+    writeFileSync(join(targetPath, 'config.toml'), originalConfig);
+
+    const result = runInstallerWithPublishedReleaseMock(localPath, targetPath, archivePath, ['-DryRun']);
+
+    assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
+    assert.match(result.stdout, /\+model = "published-release"/);
+    assert.doesNotMatch(result.stdout, /local-checkout|Pulling latest changes for local branch|Using local repository snapshot/);
+    assert.deepEqual(readFileSync(join(targetPath, 'config.toml')), originalConfig);
+    assert.ok(!existsSync(join(targetPath, 'sync_codex-home-config_backup')));
+  });
+});
+
+test('UsePublishedRelease fails on a published release commit API error without falling back to a dirty local checkout', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const targetPath = join(tempDir, 'target');
+    const originalConfig = Buffer.from('model = "target-before"\n', 'utf8');
+    writeFileSync(join(localPath, 'managed', 'config.toml'), 'model = "local-checkout"\n', 'utf8');
+    mkdirSync(targetPath, { recursive: true });
+    writeFileSync(join(targetPath, 'config.toml'), originalConfig);
+
+    const result = runInstallerWithPublishedReleaseMock(
+      localPath,
+      targetPath,
+      join(tempDir, 'unused-release.zip'),
+      [],
+      { apiFailure: true }
+    );
+    const output = [result.stdout, result.stderr].filter(Boolean).join('\n');
+
+    assert.notEqual(result.status, 0, 'a published release commit API failure must fail the installer');
+    assert.match(output, /GitHub API request failed.*Mocked published release commit API failure/i);
+    assert.doesNotMatch(output, /uncommitted changes|Using local repository snapshot|local-checkout/i);
+    assert.deepEqual(readFileSync(join(targetPath, 'config.toml')), originalConfig);
+    assert.ok(!existsSync(join(targetPath, 'sync_codex-home-config_backup')));
+  });
+});
+
+test('UsePublishedRelease DryRun fails on an archive download error without falling back to a dirty local checkout', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const targetPath = join(tempDir, 'target');
+    const originalConfig = Buffer.from('model = "target-before"\n', 'utf8');
+    writeFileSync(join(localPath, 'managed', 'config.toml'), 'model = "local-checkout"\n', 'utf8');
+    mkdirSync(targetPath, { recursive: true });
+    writeFileSync(join(targetPath, 'config.toml'), originalConfig);
+
+    const result = runInstallerWithPublishedReleaseMock(
+      localPath,
+      targetPath,
+      join(tempDir, 'unused-release.zip'),
+      ['-DryRun'],
+      { archiveFailure: true }
+    );
+    const output = [result.stdout, result.stderr].filter(Boolean).join('\n');
+
+    assert.notEqual(result.status, 0, 'a published release archive download failure must fail the installer');
+    assert.match(output, /Download request failed.*Mocked published release archive download failure/i);
+    assert.doesNotMatch(output, /uncommitted changes|Using local repository snapshot|local-checkout/i);
+    assert.deepEqual(readFileSync(join(targetPath, 'config.toml')), originalConfig);
+    assert.ok(!existsSync(join(targetPath, 'sync_codex-home-config_backup')));
   });
 });
 
