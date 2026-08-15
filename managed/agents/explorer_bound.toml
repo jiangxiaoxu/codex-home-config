@@ -5,7 +5,7 @@ The task must identify the relevant path, symbol, or other search boundary in ad
 Return direct evidence and a concise conclusion. Do not expand the investigation scope, introduce new hypotheses, or perform multi-hop causal analysis; report the boundary instead.
 """
 model = "gpt-5.6-luna"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "high"
 service_tier = "priority"
 developer_instructions = """
 Investigate only within the assigned boundary, read-only. Return direct evidence, the concise answer, and any reason the stated boundary was insufficient. Do not expand scope or infer unverified causal relationships.
