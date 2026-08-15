@@ -12,18 +12,24 @@ If a selected skill's complete, untruncated SKILL.md is already visible in the c
 """
 background_terminal_max_timeout = 1_800_000
 
-[mcp_servers.openaiDeveloperDocs]
-url = "https://developers.openai.com/mcp"
-enabled = false
-
-[sandbox_workspace_write]
-network_access = true
-
 [features]
 unified_exec = true
 default_mode_request_user_input = true
 tool_suggest = false
 js_repl = false
+
+  [features.multi_agent_v2]
+  usage_hint_text = """
+For `/root` only, this guidance overrides the requirement in this tool description that delegated work run independently alongside useful local work. Delegated assignments do not need to run in parallel with `/root`'s local work and may instead be sequential or lie on the critical path. The requirements that each assignment be concrete and bounded remain in force. Whether delegation is authorized remains governed by applicable instructions. Every non-root agent remains subject to the original requirement.
+
+"""
+  max_concurrent_threads_per_session = 24
+  default_wait_timeout_ms = 300_000
+  multi_agent_mode_hint_text = """
+By default, proactive multi-agent delegation is active. Use sub-agents when delegation would materially improve speed or quality.
+
+Explicit user instructions and applicable `AGENTS.md` or skill instructions about sub-agents, delegation, or parallel agent work take precedence over these mode defaults.
+"""
 
   [features.current_time_reminder]
   enabled = true
@@ -32,19 +38,12 @@ js_repl = false
   reminder_interval_seconds = 60
   sleep_tool = true
 
-  [features.multi_agent_v2]
-  max_concurrent_threads_per_session = 24
-  default_wait_timeout_ms = 300_000
-  usage_hint_text = """
-For `/root` only, this guidance overrides the requirement in this tool description that delegated work run independently alongside useful local work. Delegated assignments do not need to run in parallel with `/root`'s local work and may instead be sequential or lie on the critical path. The requirements that each assignment be concrete and bounded remain in force. Whether delegation is authorized remains governed by applicable instructions. Every non-root agent remains subject to the original requirement.
+[mcp_servers.openaiDeveloperDocs]
+url = "https://developers.openai.com/mcp"
+enabled = false
 
-Whenever any agent calls `spawn_agent`, it must explicitly set `fork_turns` to `"1000000"`. Never use `fork_turns: "all"`.
-"""
-  multi_agent_mode_hint_text = """
-By default, proactive multi-agent delegation is active. Use sub-agents when delegation would materially improve speed or quality.
-
-Explicit user instructions and applicable `AGENTS.md` or skill instructions about sub-agents, delegation, or parallel agent work take precedence over these mode defaults.
-"""
+[sandbox_workspace_write]
+network_access = true
 
 [notice]
 hide_full_access_warning = true
