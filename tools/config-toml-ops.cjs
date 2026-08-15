@@ -4902,7 +4902,8 @@ var require_lib = __commonJS({
 });
 
 // tools/config-toml-ops.source.cjs
-var { mkdirSync, readFileSync, writeFileSync, existsSync } = require("node:fs");
+var { mkdirSync, readFileSync, writeFileSync, existsSync, renameSync, unlinkSync } = require("node:fs");
+var { createHash, randomUUID } = require("node:crypto");
 var { dirname, resolve } = require("node:path");
 var process = require("node:process");
 var TOML = require_toml();
@@ -5007,16 +5008,32 @@ function parseArguments(argv) {
   return { command, options };
 }
 function readTomlFile(filePath, { allowMissing = false } = {}) {
+  return readTomlSnapshot(filePath, { allowMissing }).config;
+}
+function readTomlSnapshot(filePath, { allowMissing = false } = {}) {
   const resolvedPath = resolve(filePath);
   if (!existsSync(resolvedPath)) {
     if (allowMissing) {
-      return {};
+      return {
+        config: {},
+        exists: false,
+        fingerprint: null,
+        resolvedPath,
+        text: null
+      };
     }
     throw new Error(`TOML file was not found: ${resolvedPath}`);
   }
-  const content = readFileSync(resolvedPath, "utf8");
+  const contentBytes = readFileSync(resolvedPath);
+  const content = contentBytes.toString("utf8");
   try {
-    return normalizeDeveloperInstructionNewlines(TOML.parse(content));
+    return {
+      config: normalizeDeveloperInstructionNewlines(TOML.parse(content)),
+      exists: true,
+      fingerprint: getTomlContentFingerprint(contentBytes),
+      resolvedPath,
+      text: content
+    };
   } catch (error) {
     throw new Error(`Failed to parse TOML from ${resolvedPath}: ${error.message}`);
   }
@@ -5040,23 +5057,16 @@ function normalizeDeveloperInstructionNewlines(value) {
   }
   return value;
 }
-function writeTomlFile(filePath, value) {
-  const resolvedPath = resolve(filePath);
-  mkdirSync(dirname(resolvedPath), { recursive: true });
+function writeTomlFile(filePath, value, { expectedSnapshot = null } = {}) {
   const content = TOML.stringify(orderTopLevelKeys(value));
-  writeFileSync(resolvedPath, content, "utf8");
-}
-function readTomlSourceText(filePath, { allowMissing = false } = {}) {
-  const resolvedPath = resolve(filePath);
-  if (!existsSync(resolvedPath)) {
-    if (allowMissing) {
-      return null;
-    }
-    throw new Error(`TOML file was not found: ${resolvedPath}`);
+  const generatedConfig = parseGeneratedTomlContent(filePath, content);
+  if (!tomlValuesEqual(generatedConfig, value)) {
+    throw new Error(`Refusing to write generated TOML with unexpected semantics to ${resolve(filePath)}.`);
   }
-  return readFileSync(resolvedPath, "utf8");
+  writeValidatedTomlContent(filePath, content, { expectedSnapshot, generatedConfig });
 }
-function writeMergeInstallTomlFile({ outputPath, sourceConfig, targetConfig, targetText }) {
+function writeMergeInstallTomlFile({ outputPath, sourceConfig, targetSnapshot }) {
+  const { config: targetConfig, text: targetText } = targetSnapshot;
   const mergedConfig = buildMergeInstallConfig(sourceConfig, targetConfig);
   const content = buildMergeInstallTomlContent({
     sourceConfig,
@@ -5064,33 +5074,88 @@ function writeMergeInstallTomlFile({ outputPath, sourceConfig, targetConfig, tar
     targetConfig,
     targetText
   });
-  const resolvedPath = resolve(outputPath);
+  const generatedConfig = parseGeneratedTomlContent(outputPath, content);
+  if (!tomlValuesEqual(generatedConfig, mergedConfig)) {
+    throw new Error(`Refusing to write generated TOML with unexpected semantics to ${resolve(outputPath)}.`);
+  }
+  const expectedSnapshot = resolve(outputPath) === targetSnapshot.resolvedPath ? targetSnapshot : null;
+  writeValidatedTomlContent(outputPath, content, { expectedSnapshot, generatedConfig });
+}
+function parseGeneratedTomlContent(filePath, content) {
+  const resolvedPath = resolve(filePath);
+  try {
+    return normalizeDeveloperInstructionNewlines(TOML.parse(content));
+  } catch (error) {
+    throw new Error(`Refusing to write invalid generated TOML to ${resolvedPath}: ${error.message}`);
+  }
+}
+function writeValidatedTomlContent(filePath, content, { expectedSnapshot = null, generatedConfig = null } = {}) {
+  const resolvedPath = resolve(filePath);
+  if (generatedConfig === null) {
+    parseGeneratedTomlContent(resolvedPath, content);
+  }
   mkdirSync(dirname(resolvedPath), { recursive: true });
-  writeFileSync(resolvedPath, content, "utf8");
+  const temporaryPath = `${resolvedPath}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temporaryPath, content, "utf8");
+    if (expectedSnapshot !== null) {
+      assertTomlSnapshotUnchanged(resolvedPath, expectedSnapshot);
+    }
+    renameSync(temporaryPath, resolvedPath);
+  } finally {
+    if (existsSync(temporaryPath)) {
+      unlinkSync(temporaryPath);
+    }
+  }
+}
+function getTomlContentFingerprint(contentBytes) {
+  return createHash("sha256").update(contentBytes).digest("hex");
+}
+function assertTomlSnapshotUnchanged(filePath, expectedSnapshot) {
+  const resolvedPath = resolve(filePath);
+  const currentSnapshot = readTomlSnapshot(resolvedPath, { allowMissing: true });
+  if (currentSnapshot.exists !== expectedSnapshot.exists || currentSnapshot.fingerprint !== expectedSnapshot.fingerprint) {
+    throw new Error(`Refusing to replace ${resolvedPath} because it changed while TOML output was being generated.`);
+  }
 }
 function buildMergeInstallTomlContent({ sourceConfig, mergedConfig, targetConfig = {}, targetText }) {
-  const sourceContribution = buildMergeInstallSourceContribution(sourceConfig, mergedConfig, targetConfig);
-  const managedContent = TOML.stringify(orderTopLevelKeys(sourceContribution));
+  const preservedTargetSections = targetText === null || targetText.length === 0 ? { nestedKeyValueContent: /* @__PURE__ */ new Map(), preferredRoot: "", preservedNodePaths: /* @__PURE__ */ new Set(), root: "", tables: "" } : collectPreservedTargetTomlSections(targetText, sourceConfig, targetConfig, mergedConfig);
+  const sourceContribution = buildMergeInstallSourceContribution(sourceConfig, mergedConfig, targetConfig, preservedTargetSections.preservedNodePaths);
+  const managedContent = insertPreservedNestedKeyValueContent(
+    TOML.stringify(orderTopLevelKeys(sourceContribution)),
+    preservedTargetSections.nestedKeyValueContent
+  );
   if (targetText === null || targetText.length === 0) {
     return managedContent;
   }
-  const preservedTargetSections = collectPreservedTargetTomlSections(targetText, sourceConfig, targetConfig, mergedConfig);
   if (preservedTargetSections.preferredRoot.length === 0 && preservedTargetSections.root.length === 0 && preservedTargetSections.tables.length === 0) {
     return managedContent;
   }
   const managedSections = splitTomlRootAndTableContent(managedContent);
   const preservedRootContent = `${preservedTargetSections.preferredRoot}${preservedTargetSections.root}`;
   const rootContent = preservedRootContent.length === 0 ? managedSections.root : `${preservedTargetSections.preferredRoot}${removeTrailingBlankLines(managedSections.root)}${preservedTargetSections.root}`;
-  const tableContent = `${managedSections.tables}${preservedTargetSections.tables}`;
+  const tableContent = joinTomlFragments(managedSections.tables, preservedTargetSections.tables);
   if (rootContent.length === 0) {
     return tableContent;
   }
   if (tableContent.length === 0) {
     return rootContent;
   }
-  return `${rootContent}${rootContent.endsWith("\n") ? "\n" : "\n\n"}${tableContent}`;
+  return joinTomlFragments(rootContent, tableContent);
 }
-function buildMergeInstallSourceContribution(sourceConfig, mergedConfig, targetConfig = {}) {
+function joinTomlFragments(leftContent, rightContent) {
+  if (leftContent.length === 0) {
+    return rightContent;
+  }
+  if (rightContent.length === 0) {
+    return leftContent;
+  }
+  const normalizedLeft = leftContent.replace(/(?:\r?\n)+$/, "\n");
+  const normalizedRight = rightContent.replace(/^(?:\r?\n)+/, "");
+  return `${normalizedLeft}
+${normalizedRight}`;
+}
+function buildMergeInstallSourceContribution(sourceConfig, mergedConfig, targetConfig = {}, preservedNodePaths = /* @__PURE__ */ new Set()) {
   const contribution = {};
   for (const key of Object.keys(sourceConfig)) {
     if (canPreserveTomlValue(targetConfig, mergedConfig, key)) {
@@ -5105,21 +5170,43 @@ function buildMergeInstallSourceContribution(sourceConfig, mergedConfig, targetC
         if (!isTomlObject(mergedConfig[key]) || !hasOwn(mergedConfig[key], childKey)) {
           continue;
         }
-        managedChildren[childKey] = mergedConfig[key][childKey];
+        managedChildren[childKey] = cloneTomlValue(mergedConfig[key][childKey]);
       }
       contribution[key] = managedChildren;
       continue;
     }
     if (hasOwn(mergedConfig, key)) {
-      contribution[key] = mergedConfig[key];
+      contribution[key] = cloneTomlValue(mergedConfig[key]);
     }
   }
   for (const key of preferredTopLevelKeyOrder) {
     if (!hasOwn(contribution, key) && hasOwn(mergedConfig, key) && !canPreserveTomlValue(targetConfig, mergedConfig, key)) {
-      contribution[key] = mergedConfig[key];
+      contribution[key] = cloneTomlValue(mergedConfig[key]);
     }
   }
+  removePreservedTargetPaths(contribution, preservedNodePaths);
   return contribution;
+}
+function cloneTomlValue(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => cloneTomlValue(item));
+  }
+  if (!isTomlObject(value) || value instanceof Date) {
+    return value;
+  }
+  const clone = {};
+  for (const key of Object.keys(value)) {
+    clone[key] = cloneTomlValue(value[key]);
+  }
+  return clone;
+}
+function removePreservedTargetPaths(contribution, preservedNodePaths) {
+  for (const pathKey of preservedNodePaths) {
+    removeNestedPath(contribution, JSON.parse(pathKey));
+  }
+}
+function getTomlPathKey(pathSegments) {
+  return JSON.stringify(pathSegments);
 }
 function canPreserveTomlValue(targetConfig, mergedConfig, pathSegment) {
   return hasOwn(targetConfig, pathSegment) && hasOwn(mergedConfig, pathSegment) && tomlValuesEqual(targetConfig[pathSegment], mergedConfig[pathSegment]);
@@ -5137,11 +5224,38 @@ function collectPreservedTargetTomlSections(targetText, sourceConfig, targetConf
   }
   const nodes = targetAst.body[0].body;
   const preservedNodes = nodes.map((node) => shouldPreserveTargetTomlNode(node, sourceConfig, targetConfig, mergedConfig));
+  const nestedKeyValueContent = /* @__PURE__ */ new Map();
+  const preservedNodePaths = /* @__PURE__ */ new Set();
   let rootContent = "";
   let preferredRootContent = "";
   let tableContent = "";
   for (let index = 0; index < nodes.length; index += 1) {
     const node = nodes[index];
+    if (preservedNodes[index] && node.type === "TOMLTable") {
+      preservedNodePaths.add(getTomlPathKey(getTomlNodePath(node)));
+    }
+    if (node.type === "TOMLKeyValue" && preservedNodes[index]) {
+      preservedNodePaths.add(getTomlPathKey(getTomlNodePath(node)));
+    }
+    if (node.type === "TOMLTable" && !preservedNodes[index]) {
+      const tablePath = getTomlNodePath(node);
+      for (let childIndex = 0; childIndex < node.body.length; childIndex += 1) {
+        const childNode = node.body[childIndex];
+        const childPath = [...tablePath, ...getTomlNodePath(childNode)];
+        if (!shouldPreserveTargetTomlPath(childPath, sourceConfig, targetConfig, mergedConfig)) {
+          continue;
+        }
+        preservedNodePaths.add(getTomlPathKey(childPath));
+        const childContent = `${getTomlNodeLeadingComment(targetText, node.body[childIndex - 1], childNode, findTomlLineEnd(targetText, node.range[1]))}${targetText.slice(childNode.range[0], findTomlLineEnd(targetText, childNode.range[1]))}`;
+        const tablePathKey = getTomlPathKey(tablePath);
+        const existingEntry = nestedKeyValueContent.get(tablePathKey);
+        nestedKeyValueContent.set(tablePathKey, {
+          content: `${existingEntry?.content ?? ""}${childContent}`,
+          headerContent: existingEntry?.headerContent ?? targetText.slice(node.range[0], findTomlLineEnd(targetText, node.key.range[1])),
+          pathSegments: existingEntry?.pathSegments ?? tablePath
+        });
+      }
+    }
     if (!preservedNodes[index] || node.type !== "TOMLKeyValue") {
       continue;
     }
@@ -5163,11 +5277,11 @@ function collectPreservedTargetTomlSections(targetText, sourceConfig, targetConf
     }
     const previousNode = nodes[index - 1];
     const nextNode = nodes[lastPreservedIndex + 1];
-    const start = previousNode ? previousNode.range[1] : 0;
+    const start = previousNode ? findTomlLineEnd(targetText, previousNode.range[1]) : 0;
     const end = nextNode ? nextNode.range[0] : targetText.length;
     tableContent += targetText.slice(start, end);
   }
-  return { preferredRoot: preferredRootContent, root: rootContent, tables: tableContent };
+  return { nestedKeyValueContent, preferredRoot: preferredRootContent, preservedNodePaths, root: rootContent, tables: tableContent };
 }
 function splitTomlRootAndTableContent(content) {
   if (content.length === 0) {
@@ -5183,6 +5297,43 @@ function splitTomlRootAndTableContent(content) {
     tables: content.slice(firstTable.range[0])
   };
 }
+function insertPreservedNestedKeyValueContent(managedContent, nestedKeyValueContent) {
+  if (managedContent.length === 0 || nestedKeyValueContent.size === 0) {
+    return managedContent;
+  }
+  const managedAst = parseTOML(managedContent);
+  const managedTableNodes = managedAst.body[0].body.filter((node) => node.type === "TOMLTable");
+  const insertions = [];
+  const matchedTablePaths = /* @__PURE__ */ new Set();
+  for (const node of managedTableNodes) {
+    const tablePathKey = getTomlPathKey(getTomlNodePath(node));
+    const preservedEntry = nestedKeyValueContent.get(tablePathKey);
+    if (typeof preservedEntry === "undefined") {
+      continue;
+    }
+    matchedTablePaths.add(tablePathKey);
+    insertions.push({ content: preservedEntry.content, offset: findTomlLineEnd(managedContent, node.range[1]) });
+  }
+  for (const [tablePathKey, preservedEntry] of nestedKeyValueContent) {
+    if (matchedTablePaths.has(tablePathKey)) {
+      continue;
+    }
+    const firstDescendantTable = managedTableNodes.find((node) => isTomlPathPrefix(preservedEntry.pathSegments, getTomlNodePath(node)) && preservedEntry.pathSegments.length < getTomlNodePath(node).length);
+    const offset = firstDescendantTable ? firstDescendantTable.range[0] : managedContent.length;
+    insertions.push({
+      content: `${offset === managedContent.length && managedContent.length > 0 && !managedContent.endsWith("\n") ? "\n" : ""}${preservedEntry.headerContent}${preservedEntry.content}${preservedEntry.content.endsWith("\n\n") ? "" : "\n"}`,
+      offset
+    });
+  }
+  let content = managedContent;
+  for (const insertion of insertions.sort((left, right) => right.offset - left.offset)) {
+    content = `${content.slice(0, insertion.offset)}${insertion.content}${content.slice(insertion.offset)}`;
+  }
+  return content;
+}
+function isTomlPathPrefix(prefix, candidate) {
+  return prefix.length <= candidate.length && prefix.every((segment, index) => segment === candidate[index]);
+}
 function removeTrailingBlankLines(content) {
   return content.replace(/(?:\r?\n){2,}$/, "\n");
 }
@@ -5190,13 +5341,16 @@ function findTomlLineEnd(content, offset) {
   const lineBreak = /\r?\n/.exec(content.slice(offset));
   return lineBreak ? offset + lineBreak.index + lineBreak[0].length : content.length;
 }
-function getTomlNodeLeadingComment(content, previousNode, node) {
-  const start = previousNode ? findTomlLineEnd(content, previousNode.range[1]) : 0;
+function getTomlNodeLeadingComment(content, previousNode, node, fallbackStart = 0) {
+  const start = previousNode ? findTomlLineEnd(content, previousNode.range[1]) : fallbackStart;
   const trivia = content.slice(start, node.range[0]);
   return /#[^\r\n]*/.test(trivia) ? trivia : "";
 }
 function shouldPreserveTargetTomlNode(node, sourceConfig, targetConfig, mergedConfig) {
   const pathSegments = getTomlNodePath(node);
+  return shouldPreserveTargetTomlPath(pathSegments, sourceConfig, targetConfig, mergedConfig);
+}
+function shouldPreserveTargetTomlPath(pathSegments, sourceConfig, targetConfig, mergedConfig) {
   if (pathSegments.length === 0) {
     return false;
   }
@@ -5455,20 +5609,20 @@ function writeNestedPath(config, pathSegments, value) {
 }
 function mergeInstallConfig({ sourcePath, targetPath, outputPath }) {
   const sourceConfig = readTomlFile(sourcePath);
-  const targetConfig = readTomlFile(targetPath, { allowMissing: true });
-  const targetText = readTomlSourceText(targetPath, { allowMissing: true });
+  const targetSnapshot = readTomlSnapshot(targetPath, { allowMissing: true });
   writeMergeInstallTomlFile({
     outputPath,
     sourceConfig,
-    targetConfig,
-    targetText
+    targetSnapshot
   });
 }
 function publishSyncConfig({ localPath, managedPath, outputPath }) {
   const localConfig = readTomlFile(localPath);
-  const managedConfig = readTomlFile(managedPath);
+  const managedSnapshot = readTomlSnapshot(managedPath);
+  const managedConfig = managedSnapshot.config;
   const publishedConfig = buildPublishedSyncConfig(localConfig, managedConfig);
-  writeTomlFile(outputPath, publishedConfig);
+  const expectedSnapshot = resolve(outputPath) === managedSnapshot.resolvedPath ? managedSnapshot : null;
+  writeTomlFile(outputPath, publishedConfig, { expectedSnapshot });
 }
 function runCli() {
   ensureSupportedNodeVersion();
@@ -5509,6 +5663,8 @@ module.exports = {
   orderTopLevelKeys,
   parseArguments,
   publishSyncConfig,
+  readTomlSnapshot,
+  writeValidatedTomlContent,
   installRemovedTopLevelKeys,
   installRemovedNestedPaths,
   syncExcludedNestedPaths,

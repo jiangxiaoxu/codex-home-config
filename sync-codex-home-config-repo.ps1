@@ -422,9 +422,33 @@ function Invoke-ConfigTomlTool {
         $argumentList += [string]$Arguments[$argumentName]
     }
 
-    & $nodeExecutable @argumentList
-    if ($LASTEXITCODE -ne 0) {
-        throw "Config TOML helper command failed: $Command"
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $toolOutput = @(& $nodeExecutable @argumentList 2>&1)
+        $toolExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($toolExitCode -ne 0) {
+        $toolDetails = @($toolOutput | ForEach-Object {
+                if ($_ -is [System.Management.Automation.ErrorRecord] -and $null -ne $_.Exception) {
+                    $_.Exception.Message.TrimEnd()
+                }
+                else {
+                    $_.ToString().TrimEnd()
+                }
+            } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join [Environment]::NewLine
+        if ([string]::IsNullOrWhiteSpace($toolDetails)) {
+            throw "Config TOML helper command failed: $Command"
+        }
+
+        throw "Config TOML helper command failed: $Command`n$toolDetails"
+    }
+
+    if ($toolOutput.Count -gt 0) {
+        $toolOutput | Write-Output
     }
 }
 

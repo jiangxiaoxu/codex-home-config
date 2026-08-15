@@ -11,7 +11,9 @@ const {
   buildMergeInstallConfig,
   buildPublishedSyncConfig,
   configTomlPolicy,
-  orderTopLevelKeys
+  orderTopLevelKeys,
+  readTomlSnapshot,
+  writeValidatedTomlContent
 } = require('../tools/config-toml-ops.cjs');
 const TOML = require('@iarna/toml');
 
@@ -692,6 +694,99 @@ test('merge-install CLI preserves the original unmanaged node_repl MCP text whil
       outputConfig.mcp_servers.node_repl.env.NODE_REPL_NODE_MODULE_DIRS,
       'E:\\Codex-win32-x64\\resources\\cua_node\\bin\\node_modules'
     );
+  });
+});
+
+test('merge-install CLI remains valid when the installed output becomes the next target', () => {
+  withTempDir((tempDir) => {
+    const sourcePath = join(tempDir, 'source.toml');
+    const targetPath = join(tempDir, 'target.toml');
+    const sourceText = [
+      'model = "gpt-5.6-terra"',
+      '',
+      '[features]',
+      'unified_exec = true',
+      'apps = false',
+      'inline_settings = { enabled = true, clock_source = "system" }',
+      '',
+      '[features.current_time_reminder]',
+      'enabled = true',
+      'clock_source = "system"',
+      ''
+    ].join('\n');
+    const targetChildBlock = [
+      '  # Preserve this target child table exactly.',
+      '  [features.current_time_reminder]',
+      '  enabled = true # Preserve this comment.',
+      "  clock_source = 'system' # Preserve literal quotes.",
+      ''
+    ].join('\r\n');
+    const targetInlineSetting = "inline_settings = { enabled = true, clock_source = 'system' } # Preserve this inline target comment.";
+
+    writeFileSync(sourcePath, sourceText, 'utf8');
+    writeFileSync(
+      targetPath,
+      [
+        '# Keep this root prefix out of nested preserved assignments.',
+        'model = "gpt-5.4"',
+        '',
+        '[features]',
+        'apps = false # Preserve this target comment.',
+        targetInlineSetting,
+        'unified_exec = false',
+        '',
+        targetChildBlock
+      ].join('\r\n'),
+      'utf8'
+    );
+
+    const mergeArguments = [
+      'tools/config-toml-ops.cjs',
+      'merge-install',
+      '--source',
+      sourcePath,
+      '--target',
+      targetPath,
+      '--output',
+      targetPath
+    ];
+    const firstResult = spawnSync(process.execPath, mergeArguments, {
+      cwd: process.cwd(),
+      encoding: 'utf8'
+    });
+    assert.equal(firstResult.status, 0, firstResult.stderr);
+
+    const firstOutput = readFileSync(targetPath, 'utf8');
+    assert.doesNotMatch(firstOutput, /\[features\.current_time_reminder\][\s\S]*\[features\.current_time_reminder\]/);
+    assert.equal(TOML.parse(firstOutput).model, 'gpt-5.6-terra');
+    assert.match(firstOutput, /apps = false # Preserve this target comment\./);
+    assert.equal((firstOutput.match(/apps = false # Preserve this target comment\./g) ?? []).length, 1);
+    assert.match(firstOutput, new RegExp(targetInlineSetting.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.ok(firstOutput.includes(targetChildBlock), 'unchanged child table must retain its target quotes, comments, and CRLF text');
+    assert.deepStrictEqual(TOML.parse(firstOutput).features, {
+      unified_exec: true,
+      apps: false,
+      inline_settings: {
+        enabled: true,
+        clock_source: 'system'
+      },
+      current_time_reminder: {
+        enabled: true,
+        clock_source: 'system'
+      }
+    });
+
+    const secondResult = spawnSync(process.execPath, mergeArguments, {
+      cwd: process.cwd(),
+      encoding: 'utf8'
+    });
+    assert.equal(secondResult.status, 0, secondResult.stderr);
+    const secondOutput = readFileSync(targetPath, 'utf8');
+    assert.match(secondOutput, /apps = false # Preserve this target comment\./);
+    assert.match(secondOutput, new RegExp(targetInlineSetting.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.ok(secondOutput.includes(targetChildBlock), 'unchanged child table must remain raw after a second merge');
+    assert.equal(secondOutput, firstOutput, 'a second merge must not accumulate separators or duplicate raw fragments');
+    assert.deepStrictEqual(TOML.parse(secondOutput), TOML.parse(firstOutput));
   });
 });
 
@@ -1826,5 +1921,70 @@ test('CLI returns a non-zero exit code for invalid TOML input', () => {
 
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /Failed to parse TOML/);
+  });
+});
+
+test('validated TOML writes leave the existing output bytes unchanged when generated content is invalid', () => {
+  withTempDir((tempDir) => {
+    const outputPath = join(tempDir, 'output.toml');
+    const originalContent = Buffer.from('model = "gpt-5.4"\r\n', 'utf8');
+    writeFileSync(outputPath, originalContent);
+
+    assert.throws(
+      () => writeValidatedTomlContent(outputPath, 'model = \n'),
+      /Refusing to write invalid generated TOML.*output\.toml.*Unexpected/
+    );
+    assert.deepStrictEqual(readFileSync(outputPath), originalContent);
+  });
+});
+
+test('validated TOML writes reject a changed in-place target without replacing it', () => {
+  withTempDir((tempDir) => {
+    const outputPath = join(tempDir, 'output.toml');
+    writeFileSync(outputPath, 'model = "gpt-5.4"\n', 'utf8');
+    const expectedSnapshot = readTomlSnapshot(outputPath);
+    const concurrentContent = Buffer.from('model = "gpt-5.6-terra"\r\n', 'utf8');
+    writeFileSync(outputPath, concurrentContent);
+
+    assert.throws(
+      () => writeValidatedTomlContent(outputPath, 'model = "gpt-5.6-sol"\n', { expectedSnapshot }),
+      /Refusing to replace .*output\.toml because it changed while TOML output was being generated/
+    );
+    assert.deepStrictEqual(readFileSync(outputPath), concurrentContent);
+  });
+});
+
+test('merge-install preserves an inline MCP target when the semantic guard rejects an unsupported mixed merge', () => {
+  withTempDir((tempDir) => {
+    const sourcePath = join(tempDir, 'source.toml');
+    const targetPath = join(tempDir, 'target.toml');
+    const targetContent = Buffer.from(
+      "mcp_servers = { managed = { command = 'stale.exe' }, node_repl = { command = 'node-repl.exe' } }\r\n",
+      'utf8'
+    );
+    writeFileSync(sourcePath, '[mcp_servers.managed]\ncommand = "managed.exe"\n', 'utf8');
+    writeFileSync(targetPath, targetContent);
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        'tools/config-toml-ops.cjs',
+        'merge-install',
+        '--source',
+        sourcePath,
+        '--target',
+        targetPath,
+        '--output',
+        targetPath
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: 'utf8'
+      }
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /unexpected semantics/);
+    assert.deepStrictEqual(readFileSync(targetPath), targetContent);
   });
 });

@@ -11,11 +11,14 @@ import {
   writeFileSync
 } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+const require = createRequire(import.meta.url);
+const TOML = require('@iarna/toml');
 const installerPath = join(repositoryRoot, 'install-codex-home-config.ps1');
 const syncScriptPath = join(repositoryRoot, 'sync-codex-home-config-repo.ps1');
 const configToolPath = join(repositoryRoot, 'tools', 'config-toml-ops.cjs');
@@ -643,6 +646,80 @@ test('default installation preserves local apps and protected feature values whi
     assert.equal(backupVersions.length, 1);
     const backupConfig = readFileSync(join(backupRoot, backupVersions[0], 'config.toml'), 'utf8');
     assert.equal(backupConfig, originalConfig);
+  });
+});
+
+test('default installation can update a config.toml with an unchanged managed nested table twice', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const targetPath = join(tempDir, 'target');
+    const managedConfig = [
+      '[features]',
+      'unified_exec = true',
+      '',
+      '[features.current_time_reminder]',
+      'enabled = true',
+      'clock_source = "system"',
+      ''
+    ].join('\n');
+    const targetConfig = [
+      '[features]',
+      'unified_exec = false',
+      'apps = false',
+      '',
+      '[features.current_time_reminder]',
+      'enabled = true',
+      'clock_source = "system"',
+      ''
+    ].join('\n');
+
+    mkdirSync(targetPath, { recursive: true });
+    writeFileSync(join(localPath, 'managed', 'config.toml'), managedConfig, 'utf8');
+    commitAll(localPath, 'Use repeatable managed config test fixture');
+    writeFileSync(join(targetPath, 'config.toml'), targetConfig, 'utf8');
+
+    const firstResult = runInstaller(localPath, targetPath);
+    assert.equal(firstResult.status, 0, [firstResult.stdout, firstResult.stderr].filter(Boolean).join('\n'));
+    const firstInstalledConfig = TOML.parse(readFileSync(join(targetPath, 'config.toml'), 'utf8'));
+    assert.deepStrictEqual(firstInstalledConfig.features, {
+      unified_exec: true,
+      apps: false,
+      current_time_reminder: {
+        enabled: true,
+        clock_source: 'system'
+      }
+    });
+
+    const secondResult = runInstaller(localPath, targetPath);
+    assert.equal(secondResult.status, 0, [secondResult.stdout, secondResult.stderr].filter(Boolean).join('\n'));
+    assert.deepStrictEqual(
+      TOML.parse(readFileSync(join(targetPath, 'config.toml'), 'utf8')),
+      firstInstalledConfig
+    );
+  });
+});
+
+test('default installation leaves config.toml untouched when the TOML semantic guard rejects a mixed inline MCP merge', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const targetPath = join(tempDir, 'target');
+    const targetConfigPath = join(targetPath, 'config.toml');
+    const targetConfig = Buffer.from(
+      "mcp_servers = { managed = { command = 'stale.exe' }, node_repl = { command = 'node-repl.exe' } }\r\n",
+      'utf8'
+    );
+
+    mkdirSync(targetPath, { recursive: true });
+    writeFileSync(join(localPath, 'managed', 'config.toml'), '[mcp_servers.managed]\ncommand = "managed.exe"\n', 'utf8');
+    commitAll(localPath, 'Use mixed inline MCP semantic guard fixture');
+    writeFileSync(targetConfigPath, targetConfig);
+
+    const result = runInstaller(localPath, targetPath);
+    const output = [result.stdout, result.stderr].filter(Boolean).join('\n');
+    assert.notEqual(result.status, 0);
+    assert.match(output, /Config TOML helper command failed: merge-install/);
+    assert.match(output, /unexpected semantics/);
+    assert.deepStrictEqual(readFileSync(targetConfigPath), targetConfig);
   });
 });
 
