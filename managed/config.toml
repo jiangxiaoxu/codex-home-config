@@ -20,10 +20,10 @@ js_repl = false
 
   [features.multi_agent_v2]
   usage_hint_text = """
-For `/root` only, this guidance overrides the requirement in this tool description that delegated work run independently alongside useful local work. Delegated assignments do not need to run in parallel with `/root`'s local work and may instead be sequential or lie on the critical path. The requirements that each assignment be concrete and bounded remain in force. Whether delegation is authorized remains governed by applicable instructions. Every non-root agent remains subject to the original requirement.
+For `/root` only, this guidance overrides the requirement in this tool description that delegated work run independently alongside useful local work. Delegated assignments do not need to run in parallel with `/root`'s local work and may instead be sequential or lie on the critical path.
 
 """
-  max_concurrent_threads_per_session = 24
+  max_concurrent_threads_per_session = 48
   default_wait_timeout_ms = 300_000
   multi_agent_mode_hint_text = """
 By default, proactive multi-agent delegation is active. Use sub-agents when delegation would materially improve speed or quality.
