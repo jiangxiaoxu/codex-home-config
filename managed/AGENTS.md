@@ -55,7 +55,9 @@
 
 ### `derived sub-agents`
 
-- 派发路径形如 `/root/<a>/<b>`: `<a>` 是 `/root` 直接派发的 `explorer` 或 `worker`; `<b>` 是 `<a>` 派发的叶子 agent, regardless of role, 不得继续派发.
-- `<a>` 仅在 `<b>` 能独立于自己的有用本地工作并行执行时派发; 不设置局部 fanout 上限, 仅受 session 全局并发限制.
-- `explorer` `<a>` 只能为获取信息派发 `explorer`, `explorer_bound`, 或执行不修改 source-of-truth 的诊断, 构建或测试的 `awaiter`; `worker` `<a>` 可派发任意 agent type. `<b>` 的 objective 必须能由单个 leaf agent 完成.
-- `<a>` 仍对原 objective 和最终汇总结果负责.
+- 本节仅定义默认调度规则, 可被适用的运行时指令明确覆盖.
+- `/root` 直接派发 `level-1 agent`; `level-1 agent` 派发 `level-2 agent`, 路径形如 `/root/<level-1-agent>/<level-2-agent>`.
+- 默认只有 agent type 为 `explorer` 或 `worker` 的 `level-1 agent` 可以派发 `level-2 agent`; `level-2 agent` 默认视为 leaf agent, 不继续派发子代理.
+- `level-1 agent` 仅在 `level-2 agent` 的任务能独立完成, 且可与自己正在进行的有用本地工作并行时派发.
+- agent type 为 `explorer` 的 `level-1 agent` 只能为获取信息派发 `explorer`, `explorer_bound`, 或执行不修改 source-of-truth 的诊断, 构建或测试的 `awaiter`; agent type 为 `worker` 的 `level-1 agent` 可派发任意 agent type. `level-2 agent` 的 objective 必须能由单个 leaf agent 完成.
+- `level-1 agent` 仍对原 objective 和最终汇总结果负责.
