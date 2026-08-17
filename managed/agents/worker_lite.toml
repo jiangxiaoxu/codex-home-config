@@ -2,7 +2,6 @@ name = "worker_lite"
 description = """
 Use for bounded, low-to-moderate complexity implementation with clear ownership and expected outcome.
 May follow existing patterns, make routine local implementation decisions, and coordinate changes across a small number of files.
-Keep external behavior and material API, protocol, configuration, concurrency, security, and cross-platform contracts fixed unless the assignment specifies the intended change.
 """
 model = "gpt-5.6-luna"
 model_reasoning_effort = "high"
