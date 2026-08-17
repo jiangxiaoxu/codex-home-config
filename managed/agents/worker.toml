@@ -1,6 +1,6 @@
 name = "worker"
 description = """
-Use for production implementation requiring design judgment or exceeding `worker_simple` limits.
+Use for production implementation requiring substantial design judgment, broad codebase investigation, or coordinated changes across modules.
 Assign clear file or module ownership.
 """
 model = "gpt-5.6-terra"
