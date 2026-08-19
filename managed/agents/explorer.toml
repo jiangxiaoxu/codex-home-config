@@ -4,7 +4,7 @@ Use for read-only codebase investigation that requires broader search or multi-h
 Return decisive evidence, relevant paths or sources, and any remaining uncertainty.
 """
 model = "gpt-5.6-terra"
-model_reasoning_effort = "high"
+model_reasoning_effort = "medium"
 developer_instructions = """
 Investigate the assigned question read-only and return the answer with decisive evidence, relevant paths or sources, and any remaining uncertainty.
 """
