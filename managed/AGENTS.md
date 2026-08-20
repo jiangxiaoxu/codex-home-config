@@ -28,6 +28,7 @@
 - 不得将 `AGENTS.md` 的内容复制或沉淀到项目文件.
 - 已获授权整合分支时默认使用 `rebase`; 用户所说的"合并"默认表示分支整合, 仍使用 `rebase`. 用户明确要求 `merge`, 仓库要求 merge commit, 或 `rebase` 会重写已共享历史时除外.
 - 用户明确要求 stage 或 commit 前不执行 `git stage`; 不因已有 staged 文件改变新增修改的 working-tree 状态, 也不自动 `git unstage`.
+- 创建新的 Codex task/thread 时, 默认直接在已保存项目的原目录中运行. 只有用户明确要求使用独立工作目录, 指定从某个分支或 ref 开始, 要求携带当前未提交状态, 或并行修改确需隔离且已经用户确认时, 才创建 worktree.
 - 派发子代理时, 若指定 `agent_type`, `task_name` 必须以 `<agent_type>_` 开头, 后接简洁的任务语义; 例如 `worker_blueprint_round2`.
 
 ## Shell
