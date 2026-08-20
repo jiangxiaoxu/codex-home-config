@@ -13,10 +13,10 @@ If a selected skill's complete, untruncated SKILL.md is already visible in the c
 background_terminal_max_timeout = 1_800_000
 
 [features]
+js_repl = false
 unified_exec = true
 default_mode_request_user_input = true
 tool_suggest = false
-js_repl = false
 
   [features.multi_agent_v2]
   usage_hint_text = """
