@@ -41,14 +41,13 @@
 - 生成或编辑图片后使用 `view_image` 检查结果.
 - 获取日志, 搜索结果, 执行结果及其他 artifact 时, 为降低 model-context cost, 默认分层获取并按需展开.
 - 处理 JSON / JSONL 时优先使用 `jq`命令.
+- Windows native debugging 需要 CDB 时可直接使用 `cdbX64.exe`; 将其视为 CDB executable, 不要求文件名必须是 `cdb.exe`.
 
 ## 子代理调度
 
 ### `/root`
 
 - 角色路由:
-  - `explorer_bound` 用于搜索边界预先明确的只读事实调查. 派发时指定相关 path, symbol 或其他搜索边界; 仅在该边界内返回直接证据和简洁结论.
-  - `explorer` 用于需要跨边界搜索, 建立新假设或进行多跳分析的只读调查. 返回结论所需的证据链, 相关 path 或 source, 以及剩余不确定性.
   - `worker_lite` 用于 ownership, 预期结果和行为边界明确的中低复杂度实现. 可依据现有代码和测试处理常规实现细节, 并完成范围内必要的配套修改.
   - `worker` 用于需要实质设计判断, 跨子系统追踪依赖, 或协调多个相互影响模块变更的实现任务.
 - 当派发能实质提升质量或降低 `/root` 的 model-context cost 时, 即使任务串行或位于 critical path 也应优先考虑派发. 对独立任务可优先并行派发并明确范围; `/root` 负责最终整合和验证.
@@ -63,5 +62,5 @@
 - 默认只有 agent type 为 `explorer` 或 `worker` 的 `level-1 agent` 可以派发 `level-2 agent`; `level-2 agent` 默认视为 leaf agent, 不继续派发子代理.
 - `level-2 agent` 完成后必须将执行结果及必要的上下文回传给直接派发它的 `level-1 agent`; 不得直接向 `/root` 汇报或投递最终答案.
 - `level-1 agent` 仅在 `level-2 agent` 的 objective 能由单个 leaf agent 独立完成, 且可与自身正在进行的有用本地工作并行时派发.
-- agent type 为 `explorer` 的 `level-1 agent` 只能为获取信息派发 `explorer`, `explorer_bound`, 或执行不修改 source-of-truth 的诊断, 构建或测试的 `awaiter`; agent type 为 `worker` 的 `level-1 agent` 可派发任意 agent type.
+- agent type 为 `explorer` 的 `level-1 agent` 只能为获取信息派发 `explorer`, 或执行不修改 source-of-truth 的诊断, 构建或测试的 `awaiter`; agent type 为 `worker` 的 `level-1 agent` 可派发任意 agent type.
 - `level-1 agent` 仍对原 objective 和最终汇总结果负责.
