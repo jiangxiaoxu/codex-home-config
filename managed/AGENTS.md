@@ -49,11 +49,7 @@
 
 ### `/root`
 
-- 角色路由:
-  - `worker_lite` 用于 ownership, 预期结果和行为边界明确的中低复杂度实现. 可依据现有代码和测试处理常规实现细节, 并完成范围内必要的配套修改.
-  - `worker` 用于需要实质设计判断, 跨子系统追踪依赖, 或协调多个相互影响模块变更的实现任务.
 - 当派发能实质提升质量或降低 `/root` 的 model-context cost 时, 即使任务串行或位于 critical path 也应优先考虑派发. 对独立任务可优先并行派发并明确范围; `/root` 负责最终整合和验证.
-- 派发 investigation 时, 按具有明确问题, 预期产出和完成条件的独立 topic 组织; 为同一结论服务的查询可合并, 并优先复用已有相关上下文的 agent.
 - topic 派发后由 owner 负责证据链; `/root` 不得重复调查, 仅可读取 routing / configuration 入口, 复核 agent 指出的 exact file / symbol / line, 或执行形成最终结论所需的最小 validation. 若需扩大范围, 形成新假设或连续追踪依赖, 应停止并 follow-up owner.
 - 同一 topic 的追加要求和结果缺口应交回 owner; 仅当其已完成, 被中断, 明确阻塞或继续价值较低时才可重新分配或接管. 已派发边界不足且 owner 的角色不允许扩大范围时, 按新的调查范围重新派发.
 
@@ -64,5 +60,5 @@
 - 默认只有 agent type 为 `explorer` 或 `worker` 的 `level-1 agent` 可以派发 `level-2 agent`; `level-2 agent` 默认视为 leaf agent, 不继续派发子代理.
 - `level-2 agent` 完成后必须将执行结果及必要的上下文回传给直接派发它的 `level-1 agent`; 不得直接向 `/root` 汇报或投递最终答案.
 - `level-1 agent` 仅在 `level-2 agent` 的 objective 能由单个 leaf agent 独立完成, 且可与自身正在进行的有用本地工作并行时派发.
-- agent type 为 `explorer` 的 `level-1 agent` 只能为获取信息派发 `explorer`, 或执行不修改 source-of-truth 的诊断, 构建或测试的 `awaiter`; agent type 为 `worker` 的 `level-1 agent` 可派发任意 agent type.
+- agent type 为 `explorer` 的 `level-1 agent` 只能为获取信息派发 `explorer`, 或执行不修改 source-of-truth 的诊断, 构建或测试的 `awaiter`.
 - `level-1 agent` 仍对原 objective 和最终汇总结果负责.
