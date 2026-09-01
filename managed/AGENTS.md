@@ -48,7 +48,3 @@
 - 当派发能实质降低 `/root` 的 model-context cost 时优先派发; `/root` 仍负责最终整合和验证.
 - topic 由 owner 负责证据链; `/root` 不得重复调查, 仅可读取 routing / configuration 入口, 复核 owner 指出的 exact file / symbol / line, 或执行形成最终结论所需的最小 validation. 同一 topic 的追加要求, 结果缺口和范围内新假设应交回 owner; 仅当 owner 已完成, 被中断, 明确阻塞或继续价值较低时才可重新分配或接管. 超出 owner 边界的工作按新 topic 派发.
 
-### `derived sub-agents`
-
-- `/root` 直接派发 `level-1 agent`; `level-1 agent` 派发 `level-2 agent`, 路径形如 `/root/<level-1-agent>/<level-2-agent>`.
-- level-2 agent 为 leaf, 不继续派发子代理.
