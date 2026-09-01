@@ -1,37 +1,33 @@
 ## 沟通
 
 - 使用中文沟通; 技术术语, 代码标识符, 产品和框架名称保留英文.
-- 编写或修改文档, 代码注释, commit message 等持久化文本时使用半角符号; 聊天正文不受此限.
-- 编写面向 AI 的指令和文档时, 以 模型具有比较高 的理解能力为基准保持简洁; 省略常识, 重复解释和可从上下文推导的内容, 仅保留必要约束, 例外和风险.
+- 持久化文本使用半角符号; 聊天正文不受此限.
+- 面向 AI 的指令和文档仅保留必要约束, 例外和风险.
 
 ## 澄清
 
-- 当无法通过上下文, 代码, 文档, 测试或运行结果消除的不确定性或 tradeoff 可能实质影响实现方向, 外部行为, 接口契约, 兼容性, 风险边界, 验收标准或用户预期时, 使用 `request_user_input` 说明差异并确认; 若出现此前确认未覆盖的新关键不确定性, 再次确认.
-- `request_user_input` 不可用时, 仅在方案低风险, 可逆且低侵入时继续, 并在最终答复标注 assumption; 否则停止并说明 blocker.
+- 对无法通过现有证据消除, 且可能实质影响实现方向, 外部行为, 接口契约, 兼容性, 风险边界, 验收标准或用户预期的不确定性或 tradeoff, 使用 `request_user_input` 说明差异并确认; 出现未覆盖的新关键不确定性时再次确认. `request_user_input` 不可用时, 仅在方案低风险, 可逆且低侵入时基于 assumption 继续并在 final 标注; 否则停止并说明 blocker.
 
 ## 范围与实现
 
-- 功能实现时,不进行过度工程化的行为.实施中若需扩大行为或责任边界, 在扩展前重新确认. Review 和子代理以已确认边界为准, 不得自行扩大 objective.
-- 目标和既有契约未覆盖的状态应明确失败并提供诊断, 不主动恢复; 数据完整性, 安全边界或既有不变量所必需的最小回滚或清理除外. 以性能或成本为由改变 production 行为或新增机制, 须有当前缺陷或测量基线, 否则只诊断或测量.
+- 不得自行扩大已确认的 objective, 行为或责任边界; 需要扩大时先确认.
+- 目标和既有契约未覆盖的状态应明确失败并诊断, 不主动恢复; 仅允许数据完整性, 安全边界或既有不变量所需的最小回滚或清理.
+- 以性能或成本为由改变 production 行为或新增机制前, 必须有当前缺陷或测量基线; 否则仅诊断或测量.
 - 优先采用 breaking change, 不保留旧接口兼容层.
 - 不新增仅用于命名, 转发或打包参数的薄包装; 仅在维护稳定语义, 不变量或明确边界时引入.
-
-## Steer 输入
-
-- 执行过程中收到的追加用户消息视为 steer, 可用于询问, 引导或调整执行; 工具等待被其中断仅表示消息到达. 处理 steer 后继续执行经该 steer 更新后的工作; 不得仅因收到或回应 steer 而停止或发送 final, 除非 steer 明确要求停止当前执行.
 
 ## 测试
 
 - 不为实现细节, 私有步骤, 日志文案, 框架默认行为, 薄转发或等价路径新增或保留测试.
-- 对同一风险, 选择能可靠观察它的最低成本层; 仅当另一层能发现独立失效时重复覆盖. 不在昂贵环境重复验证低成本层已确定的行为, 不为没有独立风险的新场景增加测试.
+- 同一风险仅保留能可靠观察它的最低成本测试; 另一层仅在能发现独立失效时覆盖.
 
 ## 操作
 
 - 不得将 `AGENTS.md` 的内容复制或沉淀到项目文件.
-- 已获授权整合分支时默认使用 `rebase`; 用户所说的"合并"默认表示分支整合, 仍使用 `rebase`. 用户明确要求 `merge`, 仓库要求 merge commit, 或 `rebase` 会重写已共享历史时除外.
-- 用户明确要求 stage 或 commit 前不执行 `git stage`; 不因已有 staged 文件改变新增修改的 working-tree 状态, 也不自动 `git unstage`.
-- 创建新的 Codex task/thread 时, 默认直接在已保存项目的原目录中运行. 只有用户明确要求使用独立工作目录, 指定从某个分支或 ref 开始, 要求携带当前未提交状态, 或并行修改确需隔离且已经用户确认时, 才创建 worktree.
-- 派发子代理时, 若指定 `agent_type`, `task_name` 必须以 `<agent_type>_` 开头, 后接简洁的任务语义; 例如 `worker_blueprint_round2`.
+- 已获授权整合分支时默认使用 `rebase`; 仅当用户明确要求 `merge`, 仓库要求 merge commit, 或 `rebase` 会重写共享历史时使用 merge.
+- 用户明确要求 stage 或 commit 前不执行 `git stage`; 不因已有 staged 文件而自动 stage 新修改, 也不自动 `git unstage`.
+- 创建 Codex task/thread 时默认使用已保存项目的原目录; 仅在用户要求独立目录, 指定起始 branch/ref, 要求携带未提交状态, 或并行修改需隔离且已确认时使用 worktree.
+- 指定 `agent_type` 时, `task_name` 必须以 `<agent_type>_` 开头并后接简洁语义.
 
 ## Shell
 
@@ -41,24 +37,18 @@
 ## 工具
 
 - 生成或编辑图片后使用 `view_image` 检查结果.
-- 获取日志, 搜索结果, 执行结果及其他 artifact 时, 为降低 model-context cost, 默认分层获取并按需展开.
-- 处理 JSON / JSONL 时优先使用 `jq`命令.
-- Windows native debugging 需要 CDB 时可直接使用 `cdbX64.exe`; 将其视为 CDB executable, 不要求文件名必须是 `cdb.exe`.
+- 获取日志, 搜索结果, 执行结果及其他 artifact 时, 默认分层获取并按需展开.
+- 处理 JSON / JSONL 时优先使用 `jq`.
+- Windows native debugging 可直接使用 `cdbX64.exe`; 将其视为 CDB executable.
 
 ## 子代理调度
 
 ### `/root`
 
-- 当派发能实质提升质量或降低 `/root` 的 model-context cost 时, 即使任务串行或位于 critical path 也应优先考虑派发. 对独立任务可优先并行派发并明确范围; `/root` 负责最终整合和验证.
-- topic 派发后由 owner 负责证据链; `/root` 不得重复调查, 仅可读取 routing / configuration 入口, 复核 agent 指出的 exact file / symbol / line, 或执行形成最终结论所需的最小 validation. 若需扩大范围, 形成新假设或连续追踪依赖, 应停止并 follow-up owner.
-- 同一 topic 的追加要求和结果缺口应交回 owner; 仅当其已完成, 被中断, 明确阻塞或继续价值较低时才可重新分配或接管. 已派发边界不足且 owner 的角色不允许扩大范围时, 按新的调查范围重新派发.
+- 当派发能实质降低 `/root` 的 model-context cost 时优先派发; `/root` 仍负责最终整合和验证.
+- topic 由 owner 负责证据链; `/root` 不得重复调查, 仅可读取 routing / configuration 入口, 复核 owner 指出的 exact file / symbol / line, 或执行形成最终结论所需的最小 validation. 同一 topic 的追加要求, 结果缺口和范围内新假设应交回 owner; 仅当 owner 已完成, 被中断, 明确阻塞或继续价值较低时才可重新分配或接管. 超出 owner 边界的工作按新 topic 派发.
 
 ### `derived sub-agents`
 
-- 本节仅定义默认调度规则, 可被适用的运行时指令明确覆盖.
 - `/root` 直接派发 `level-1 agent`; `level-1 agent` 派发 `level-2 agent`, 路径形如 `/root/<level-1-agent>/<level-2-agent>`.
-- 默认只有 agent type 为 `explorer` 或 `worker` 的 `level-1 agent` 可以派发 `level-2 agent`; `level-2 agent` 默认视为 leaf agent, 不继续派发子代理.
-- `level-2 agent` 完成后必须将执行结果及必要的上下文回传给直接派发它的 `level-1 agent`; 不得直接向 `/root` 汇报或投递最终答案.
-- `level-1 agent` 仅在 `level-2 agent` 的 objective 能由单个 leaf agent 独立完成, 且可与自身正在进行的有用本地工作并行时派发.
-- agent type 为 `explorer` 的 `level-1 agent` 只能为获取信息派发 `explorer`, 或执行不修改 source-of-truth 的诊断, 构建或测试的 `awaiter`.
-- `level-1 agent` 仍对原 objective 和最终汇总结果负责.
+- level-2 agent 为 leaf, 不继续派发子代理.
