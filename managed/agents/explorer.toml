@@ -1,7 +1,6 @@
 name = "explorer"
 description = """
-Use for read-only codebase investigation, including focused fact-finding, broader search, and multi-hop analysis.
-Return decisive evidence, relevant paths or sources, and any remaining uncertainty.
+Use when a read-only investigation requires substantial reasoning over competing hypotheses or causal relationships; broad or multi-hop search whose relevant scope and dependency reach cannot be bounded up front; or synthesis across subsystems or sources to reach a conclusion.
 """
 model = "gpt-5.6-terra"
 model_reasoning_effort = "high"
