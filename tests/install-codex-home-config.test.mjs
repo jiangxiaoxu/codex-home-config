@@ -26,6 +26,14 @@ const pwshPath = process.platform === 'win32' ? 'pwsh.exe' : 'pwsh';
 const hasPwsh = spawnSync(pwshPath, ['-NoLogo', '-NoProfile', '-Command', '$PSVersionTable.PSVersion.Major'], {
   encoding: 'utf8'
 }).status === 0;
+const windowsPowerShellPath = process.platform === 'win32' ? 'powershell.exe' : null;
+const hasWindowsPowerShell = windowsPowerShellPath !== null && spawnSync(windowsPowerShellPath, [
+  '-NoLogo',
+  '-NoProfile',
+  '-NonInteractive',
+  '-Command',
+  '$PSVersionTable.PSVersion.Major'
+], { encoding: 'utf8' }).status === 0;
 const modelsLocalFixture = Buffer.from('\uFEFF{\r\n  "models": []\r\n}\r\n', 'utf8');
 
 function withTempDir(callback) {
@@ -226,7 +234,7 @@ function runInstallerFromDynamicScriptBlock(repositoryPath, targetPath, args = [
   );
 }
 
-function runSync(repositoryPath, sourcePath, args = []) {
+function runSync(repositoryPath, sourcePath, args = [], { skipInitialPull = true } = {}) {
   const quotePowerShell = (value) => `'${value.replaceAll("'", "''")}'`;
   const componentsIndex = args.indexOf('-Components');
   const commandArguments = componentsIndex === -1
@@ -243,7 +251,7 @@ function runSync(repositoryPath, sourcePath, args = []) {
     quotePowerShell(sourcePath),
     '-RepoPath',
     quotePowerShell(repositoryPath),
-    '-SkipInitialPull',
+    ...(skipInitialPull ? ['-SkipInitialPull'] : []),
     ...commandArguments
   ].join(' ');
 
@@ -260,6 +268,39 @@ function runSync(repositoryPath, sourcePath, args = []) {
     ],
     {
       cwd: repositoryPath,
+      encoding: 'utf8',
+      timeout: 30000
+    }
+  );
+}
+
+function runSyncFromWindowsPowerShell(repositoryPath, sourcePath, components, { skipInitialPull = false } = {}) {
+  const quotePowerShell = (value) => `'${value.replaceAll("'", "''")}'`;
+  const command = [
+    '&',
+    quotePowerShell(syncScriptPath),
+    '-SourceCodexPath',
+    quotePowerShell(sourcePath),
+    '-RepoPath',
+    quotePowerShell(repositoryPath),
+    '-Components',
+    components.join(','),
+    ...(skipInitialPull ? ['-SkipInitialPull'] : [])
+  ].join(' ');
+
+  return spawnSync(
+    windowsPowerShellPath,
+    [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      command
+    ],
+    {
+      cwd: repositoryRoot,
       encoding: 'utf8',
       timeout: 30000
     }
@@ -605,6 +646,78 @@ test('ModelsLocalFile sync preserves the source JSON bytes', { skip: !hasPwsh },
 
     const result = runSync(localPath, sourcePath, ['-Components', 'ModelsLocalFile']);
     assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
+    assert.deepEqual(readFileSync(join(localPath, 'managed', 'models.local.json')), sourceModelsLocal);
+  });
+});
+
+test('sync relaunch preserves source, repository, and component parameters after a pull', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath, seedPath } = createLocalRepository(tempDir);
+    const sourcePath = join(tempDir, 'source');
+    const capturePath = join(tempDir, 'relaunch-parameters.json');
+    mkdirSync(sourcePath, { recursive: true });
+    writeFileSync(join(sourcePath, 'models.local.json'), modelsLocalFixture);
+
+    writeFileSync(
+      join(seedPath, 'sync-codex-home-config-repo.ps1'),
+      readFileSync(syncScriptPath),
+      'utf8'
+    );
+    commitAll(seedPath, 'Add sync script to repository snapshot');
+    run('git', ['push'], seedPath);
+
+    const quotePowerShell = (value) => `'${value.replaceAll("'", "''")}'`;
+    writeFileSync(join(seedPath, 'sync-codex-home-config-repo.ps1'), [
+      '[CmdletBinding()]',
+      'param(',
+      '  [string]$SourceCodexPath = "",',
+      '  [string]$RepoPath = "",',
+      '  [string]$RepoUrl = "",',
+      '  [string]$CommitMessage = "",',
+      '  [ValidateSet("Config", "ModelsLocalFile", "AgentFile", "AgentFolder", "Skill")]',
+      '  [string[]]$Components = @("Config", "ModelsLocalFile", "AgentFile", "AgentFolder", "Skill"),',
+      '  [switch]$SkipInitialPull',
+      ')',
+      "[ordered]@{ SourceCodexPath = \$SourceCodexPath; RepoPath = \$RepoPath; Components = @(\$Components); SkipInitialPull = [bool]\$SkipInitialPull } | ConvertTo-Json -Compress | Set-Content -LiteralPath " + quotePowerShell(capturePath) + " -Encoding utf8"
+    ].join('\n'), 'utf8');
+    commitAll(seedPath, 'Update sync script relaunch probe');
+    run('git', ['push'], seedPath);
+
+    const result = runSync(localPath, sourcePath, ['-Components', 'ModelsLocalFile'], { skipInitialPull: false });
+    assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
+    assert.match(result.stdout, /relaunching latest sync script/i);
+
+    const relaunchParameters = JSON.parse(readFileSync(capturePath, 'utf8'));
+    assert.equal(relaunchParameters.SourceCodexPath, sourcePath);
+    assert.equal(relaunchParameters.RepoPath, localPath);
+    assert.deepEqual(relaunchParameters.Components, ['ModelsLocalFile']);
+    assert.equal(relaunchParameters.SkipInitialPull, true);
+  });
+});
+
+test('Windows PowerShell bootstrap preserves multi-value relaunch parameters', { skip: !hasWindowsPowerShell || !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const remotePath = join(tempDir, 'remote.git');
+    run('git', ['remote', 'set-url', 'origin', join(tempDir, 'missing-remote.git')], localPath);
+    run('git', ['remote', 'set-url', '--push', 'origin', remotePath], localPath);
+    writeFileSync(join(localPath, 'managed', 'config.toml'), '[features]\nunified_exec = false\n', 'utf8');
+    commitAll(localPath, 'Prepare bootstrap parameter probe');
+
+    const sourcePath = join(tempDir, 'source');
+    const sourceModelsLocal = Buffer.from('\uFEFF{\r\n  "models": ["bootstrap"]\r\n}\r\n', 'utf8');
+    mkdirSync(sourcePath, { recursive: true });
+    writeFileSync(join(sourcePath, 'config.toml'), '[features]\nunified_exec = true\n', 'utf8');
+    writeFileSync(join(sourcePath, 'models.local.json'), sourceModelsLocal);
+
+    const result = runSyncFromWindowsPowerShell(
+      localPath,
+      sourcePath,
+      ['Config', 'ModelsLocalFile'],
+      { skipInitialPull: true }
+    );
+    assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
+    assert.match(readFileSync(join(localPath, 'managed', 'config.toml'), 'utf8'), /unified_exec = true/);
     assert.deepEqual(readFileSync(join(localPath, 'managed', 'models.local.json')), sourceModelsLocal);
   });
 });

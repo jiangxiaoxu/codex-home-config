@@ -174,7 +174,35 @@ function Sync-ManagedSkillDirectory {
     }
 }
 
-function Get-RelaunchArgumentList {
+function Get-RelaunchParameterHashtable {
+    param(
+        [Parameter()]
+        [switch]$IncludeSkipInitialPull
+    )
+
+    $parameters = @{}
+    foreach ($parameterName in @('SourceCodexPath', 'RepoPath', 'RepoUrl', 'CommitMessage', 'Components', 'SkipInitialPull')) {
+        if ($script:PSBoundParameters.ContainsKey($parameterName)) {
+            $parameterValue = $script:PSBoundParameters[$parameterName]
+            if ($parameterValue -is [System.Management.Automation.SwitchParameter] -or $parameterValue -is [bool]) {
+                if ([bool]$parameterValue) {
+                    $parameters[$parameterName] = $true
+                }
+            }
+            else {
+                $parameters[$parameterName] = $parameterValue
+            }
+        }
+    }
+
+    if ($IncludeSkipInitialPull -and -not $script:PSBoundParameters.ContainsKey('SkipInitialPull')) {
+        $parameters.SkipInitialPull = $true
+    }
+
+    return $parameters
+}
+
+function Get-PowerShellRelaunchArgumentList {
     param(
         [Parameter()]
         [switch]$IncludeSkipInitialPull
@@ -185,30 +213,26 @@ function Get-RelaunchArgumentList {
         $arguments += @('-ExecutionPolicy', 'Bypass')
     }
 
-    $arguments += @('-File', $PSCommandPath)
+    $relaunchParameters = Get-RelaunchParameterHashtable -IncludeSkipInitialPull:$IncludeSkipInitialPull
 
-    foreach ($parameterName in @('SourceCodexPath', 'RepoPath', 'RepoUrl', 'CommitMessage', 'Components', 'SkipInitialPull')) {
-        if ($script:PSBoundParameters.ContainsKey($parameterName)) {
-            $parameterValue = $script:PSBoundParameters[$parameterName]
-            if ($parameterValue -is [System.Management.Automation.SwitchParameter] -or $parameterValue -is [bool]) {
-                if ([bool]$parameterValue) {
-                    $arguments += "-$parameterName"
-                }
-            }
-            elseif ($parameterValue -is [System.Array]) {
-                $arguments += "-$parameterName"
-                $arguments += @($parameterValue | ForEach-Object { [string]$_ })
-            }
-            else {
-                $arguments += "-$parameterName"
-                $arguments += [string]$parameterValue
-            }
-        }
-    }
-
-    if ($IncludeSkipInitialPull -and -not $script:PSBoundParameters.ContainsKey('SkipInitialPull')) {
-        $arguments += '-SkipInitialPull'
-    }
+    $relaunchPayload = [ordered]@{
+        ScriptPath = [string]$PSCommandPath
+        Parameters = $relaunchParameters
+    } | ConvertTo-Json -Compress -Depth 4
+    $relaunchPayloadBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($relaunchPayload))
+    $relaunchCommand = @'
+$payload = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__CODEX_RELAUNCH_PAYLOAD__')) | ConvertFrom-Json
+$parameters = @{}
+foreach ($property in $payload.Parameters.PSObject.Properties) {
+    $parameters[$property.Name] = $property.Value
+}
+& $payload.ScriptPath @parameters
+if ($null -ne $LASTEXITCODE) {
+    exit $LASTEXITCODE
+}
+'@.Replace('__CODEX_RELAUNCH_PAYLOAD__', $relaunchPayloadBase64)
+    $relaunchCommandBase64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($relaunchCommand))
+    $arguments += @('-EncodedCommand', $relaunchCommandBase64)
 
     return $arguments
 }
@@ -746,7 +770,8 @@ try {
             throw 'PowerShell 7 or later is required. pwsh.exe was not found.'
         }
 
-        & $pwshExecutable @(Get-RelaunchArgumentList)
+        $relaunchArguments = Get-PowerShellRelaunchArgumentList
+        & $pwshExecutable @relaunchArguments
         if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
         }
@@ -850,7 +875,8 @@ try {
 
                 Write-Output "Repository updated after pull; relaunching latest sync script from $repoSyncScriptPath"
 
-                & $repoSyncScriptPath @(Get-RelaunchArgumentList -IncludeSkipInitialPull)
+                $relaunchParameters = Get-RelaunchParameterHashtable -IncludeSkipInitialPull
+                & $repoSyncScriptPath @relaunchParameters
                 if ($LASTEXITCODE -ne 0) {
                     exit $LASTEXITCODE
                 }
