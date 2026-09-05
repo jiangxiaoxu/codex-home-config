@@ -6,7 +6,9 @@
 
 ## 澄清
 
-- 对无法通过现有证据消除, 且可能实质影响实现方向, 外部行为, 接口契约, 兼容性, 风险边界, 验收标准或用户预期的不确定性或 tradeoff, 使用 `request_user_input` 说明差异并确认; 出现未覆盖的新关键不确定性时再次确认. `request_user_input` 不可用时, 仅在方案低风险, 可逆且低侵入时基于 assumption 继续并在 final 标注; 否则停止并说明 blocker.
+- 对无法通过现有证据消除, 且可能实质影响实现方向, 外部行为, 接口契约, 兼容性, 风险边界, 验收标准或用户预期的不确定性或 tradeoff, 使用 `request_user_input` 说明差异并确认.
+- 出现未覆盖的新关键不确定性时再次确认.
+- `request_user_input` 不可用时, 仅在方案低风险, 可逆且低侵入时基于 assumption 继续并在 final 标注; 否则停止并说明 blocker.
 
 ## 范围与实现
 
@@ -32,19 +34,44 @@
 ## Shell
 
 - 在 Windows 上通过 shell 删除文件或目录时, 使用 PowerShell 直接调用适用的 .NET 文件系统 API.
-- 在 Windows PowerShell 中执行 native executable 或 command shim 后, 立即保存 `$LASTEXITCODE`, 并在命令段结束时 `exit` 该值.
 
 ## 工具
 
+- 解释复杂关系, 过程, 对比, 变化或可交互探索时, 若可视化能实质提升理解, 主动使用 `[@Visualize](plugin://visualize@openai-bundled)`, 无需等待用户明确要求. 不为简单事实或普通表格强行创建可视化.
 - 生成或编辑图片后使用 `view_image` 检查结果.
 - 获取日志, 搜索结果, 执行结果及其他 artifact 时, 默认分层获取并按需展开.
 - 处理 JSON / JSONL 时优先使用 `jq`.
 - Windows native debugging 可直接使用 `cdbX64.exe`; 将其视为 CDB executable.
+- `new_context` 和 `request_user_input` 只能作为平台直接工具调用. 不得在 `exec` JavaScript 中调用 `tools.new_context()` 或 `tools.request_user_input()`, 这些对象不在 exec runtime 中可用.
+
+## 上下文管理
+
+### Checkpoint 路径补充
+
+- 相对路径已经以当前 agent 的 notes 目录为基准; 例如 agent `/root/example` 使用相对路径 `checkpoint.md` 等价于使用绝对路径 `/root/example/notes/checkpoint.md`.
+- 路径不确定时先列出当前 agent 的文件, 再使用返回路径; 列举目录时省略 prefix 或使用 null, 不使用空字符串.
+
+### [Context window usage hook] 触发的自主提前 rollover
+
+- 本小节仅约束所有 agent 的自主提前 rollover, 不影响 Codex 内置的 context window nearly exhausted / exhausted 处理, auto-compaction 或 rollover 机制.
+- 自主提前 rollover 的判断仅由新收到的以 `[Context window usage hook]` 开头的 developer 提示触发, 每条提示执行一次以下判断.
+
+1. 遵循 hook 指令调用 `get_context_remaining` 后, 若调用已返回 `tokens_left`, 直接使用该值.
+2. 确认 `tokens_left` 有效且小于 `500000`, 并且 `new_context` 可用. 若此前已经换窗, 还须在最近一次恢复后新增影响后续工作的证据, 决策, 用户纠正或执行进展; 仅恢复既有信息, 重复读取或确认状态不满足此条件. 全部条件满足才进入第 3 步; 否则保留当前窗口并继续工作, 无需说明.
+3. 评估能否在换窗前将必要信息保存到 checkpoint, 并在换窗后结合有界 history 查询, 可靠恢复后续工作所需的信息. 若无法可靠恢复, 或有具体依据表明恢复成本明显高于继续使用当前窗口的成本, 则保留当前窗口并继续工作; 否则进入第 4 步. 同一总体目标, 旧上下文可能有用或余量充足均不能单独作为保留理由.
+4. 使用 notes 创建或更新当前 agent 的 checkpoint, 保存恢复和继续工作所需的信息. 记录本次 hook 提示对应的判断结果, 并明确恢复后尚需完成的工作及必要的先后顺序. 保存后换窗; 不因恢复时重现的历史 hook 提示重复判断或换窗.
 
 ## 子代理调度
 
+- 在授权目标内依据角色 description 自主选择角色, 拆分, 并行和同级协作, 无需固定调用链; 不得把原任务原样转交形成派发链.
+- 原 owner 保留整合和验收责任; 并行写入的 ownership 不得重叠. 不得因派发或接受子代理建议而扩大授权范围.
+
 ### `/root`
 
+- 关键技术路线的选择或重判, 在相关实现前调用 `planner`.
+- 阶段验收时调用 `reviewer`; 整合已有审查结果时, 只补未覆盖内容或新证据影响的部分.
+- 未确认的产品行为或风险取舍仍由 `/root` 向用户确认.
 - 当派发能实质降低 `/root` 的 model-context cost 时优先派发; `/root` 仍负责最终整合和验证.
-- topic 由 owner 负责证据链; `/root` 不得重复调查, 仅可读取 routing / configuration 入口, 复核 owner 指出的 exact file / symbol / line, 或执行形成最终结论所需的最小 validation. 同一 topic 的追加要求, 结果缺口和范围内新假设应交回 owner; 仅当 owner 已完成, 被中断, 明确阻塞或继续价值较低时才可重新分配或接管. 超出 owner 边界的工作按新 topic 派发.
-
+- topic 的证据链由 owner 负责. `/root` 不得重复调查; 仅可读取 routing / configuration 入口, 复核 owner 指出的 exact file / symbol / line, 或执行形成最终结论所需的最小 validation.
+- 同一 topic 的追加要求, 结果缺口和范围内新假设应交回 owner. 仅当 owner 已完成, 被中断, 明确阻塞或继续价值较低时, 才可重新分配或接管.
+- 超出 owner 边界的工作按新 topic 派发.

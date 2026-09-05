@@ -71,8 +71,8 @@ iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/relea
 | 类型 | 配置 |
 | --- | --- |
 | 顶层配置 | `projects`, `model`, `model_context_window`, `model_reasoning_effort`, `model_catalog_json`, `service_tier`, `plan_mode_reasoning_effort`, `apps` |
-| 嵌套配置 | `notice.model_migrations`, `sandbox_workspace_write.writable_roots`, `tui.model_availability_nux` |
-| 本地专属配置 | `features.workspace_dependencies`, `features.apps` |
+| 嵌套配置 | `notice.model_migrations`, `sandbox_workspace_write.writable_roots` |
+| 本地专属配置 | `features.workspace_dependencies`, `features.apps`, `tui.model_availability_nux` |
 
 例如, 以下配置均不会同步:
 
@@ -104,6 +104,6 @@ workspace_dependencies = false
 apps = false
 ```
 
-备份会原样保留上述配置. 安装更新时, `features.workspace_dependencies` 和 `features.apps` 不会覆盖当前机器上的值. `projects`, `service_tier`, `plan_mode_reasoning_effort` 和 `sandbox_workspace_write.writable_roots` 同样保留本机值; `model_context_window` 和 `notice.model_migrations` 会被移除; 其余配置按普通安装规则处理.
+备份会原样保留上述配置. 安装更新时, `features.workspace_dependencies`, `features.apps` 和 `tui.model_availability_nux` 不会覆盖当前机器上的值. `projects`, `service_tier`, `plan_mode_reasoning_effort` 和 `sandbox_workspace_write.writable_roots` 同样保留本机值; `model_context_window` 和 `notice.model_migrations` 会被移除; 其余配置按普通安装规则处理.
 
 请勿在此仓库中存储 secret.

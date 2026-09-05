@@ -15,7 +15,8 @@ const preferredTopLevelKeyOrder = [
 const configTomlPolicy = {
   syncExcludedInstallPreservedNestedPaths: [
     ['features', 'workspace_dependencies'],
-    ['features', 'apps']
+    ['features', 'apps'],
+    ['tui', 'model_availability_nux']
   ],
   sync: {
     topLevelAllowlistSource: 'managed/config.toml',
@@ -471,7 +472,7 @@ function splitTomlRootAndTableContent (content) {
 }
 
 function insertPreservedNestedKeyValueContent (managedContent, nestedKeyValueContent) {
-  if (managedContent.length === 0 || nestedKeyValueContent.size === 0) {
+  if (nestedKeyValueContent.size === 0) {
     return managedContent
   }
 

@@ -75,6 +75,31 @@ test('merge-install replaces managed tables, preserves unmanaged keys, and keeps
   );
 });
 
+test('merge-install does not import tui.model_availability_nux when it is missing locally', () => {
+  assert.deepStrictEqual(
+    buildMergeInstallConfig(
+      {
+        tui: {
+          status_line: ['model-with-reasoning'],
+          model_availability_nux: {
+            'gpt-6-astra': 4
+          }
+        }
+      },
+      {
+        tui: {
+          status_line: ['current-dir']
+        }
+      }
+    ),
+    {
+      tui: {
+        status_line: ['model-with-reasoning']
+      }
+    }
+  );
+});
+
 test('merge-install always removes notice.model_migrations from the installed result', () => {
   const sourceConfig = {
     features: {
@@ -903,6 +928,70 @@ test('merge-install CLI removes target notice.model_migrations when source has n
     assert.deepStrictEqual(outputConfig.notice, { hide_full_access_warning: true });
     assert.equal(Object.hasOwn(outputConfig.notice, 'model_migrations'), false);
     assert.doesNotMatch(outputText, /\[notice\.model_migrations\]/);
+  });
+});
+
+test('merge-install CLI preserves local tui.model_availability_nux', () => {
+  withTempDir((tempDir) => {
+    const sourcePath = join(tempDir, 'source.toml');
+    const targetPath = join(tempDir, 'target.toml');
+    const outputPath = join(tempDir, 'output.toml');
+
+    writeFileSync(
+      sourcePath,
+      [
+        '[tui]',
+        'status_line = ["model-with-reasoning"]',
+        'resume_cwd = "session"',
+        ''
+      ].join('\n'),
+      'utf8'
+    );
+    writeFileSync(
+      targetPath,
+      [
+        '[tui]',
+        'status_line = ["model-with-reasoning"] # Keep this comment.',
+        'resume_cwd = "session"',
+        'obsolete_setting = "remove-me"',
+        '',
+        '[tui.model_availability_nux]',
+        '"gpt-6-astra" = 4',
+        ''
+      ].join('\r\n'),
+      'utf8'
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        'tools/config-toml-ops.cjs',
+        'merge-install',
+        '--source',
+        sourcePath,
+        '--target',
+        targetPath,
+        '--output',
+        outputPath
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: 'utf8'
+      }
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    const outputText = readFileSync(outputPath, 'utf8');
+    assert.match(outputText, /status_line = \["model-with-reasoning"\] # Keep this comment\./);
+    assert.deepStrictEqual(TOML.parse(outputText), {
+      tui: {
+        status_line: ['model-with-reasoning'],
+        resume_cwd: 'session',
+        model_availability_nux: {
+          'gpt-6-astra': 4
+        }
+      }
+    });
   });
 });
 
