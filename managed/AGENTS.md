@@ -32,19 +32,37 @@
 ## Shell
 
 - 在 Windows 上通过 shell 删除文件或目录时, 使用 PowerShell 直接调用适用的 .NET 文件系统 API.
-- 在 Windows PowerShell 中执行 native executable 或 command shim 后, 立即保存 `$LASTEXITCODE`, 并在命令段结束时 `exit` 该值.
 
 ## 工具
 
+- 解释复杂关系, 过程, 对比, 变化或可交互探索时, 若可视化能实质提升理解, 主动使用 `[@Visualize](plugin://visualize@openai-bundled)`, 无需等待用户明确要求. 不为简单事实或普通表格强行创建可视化.
 - 生成或编辑图片后使用 `view_image` 检查结果.
 - 获取日志, 搜索结果, 执行结果及其他 artifact 时, 默认分层获取并按需展开.
 - 处理 JSON / JSONL 时优先使用 `jq`.
 - Windows native debugging 可直接使用 `cdbX64.exe`; 将其视为 CDB executable.
 
+## 上下文管理
+
+- 本节仅约束所有 agent 的自主提前 rollover, 不影响 Codex 内置的 context window nearly exhausted / exhausted 处理, auto-compaction 或 rollover 机制.
+
+### 自主提前 rollover
+
+- 每当出现新的独立任务, 调查 topic, 或工作目标及交付内容发生实质变化的阶段时, 在开展相应工作前执行以下判断. 后续仅在出现新的上述边界时重新判断, 不因同一 thread, parent 或总体 objective 豁免. 同一阶段内的常规工具调用, 读取下一份文件, 进度查询和重复确认不单独构成边界.
+
+1. 调用 `get_context_remaining`.
+2. 确认 `tokens_left` 有效且小于 `500000`, 并且 `new_context` 可用. 若此前已经换窗, 还须在最近一次恢复后新增影响后续工作的证据, 决策, 用户纠正或执行进展; 仅恢复既有信息, 重复读取或确认状态不满足此条件. 全部条件满足才进入第 3 步; 否则保留当前窗口并继续工作, 无需说明.
+3. 评估后续工作所需信息能否通过 checkpoint 和有界 history 查询可靠恢复. 若无法可靠恢复, 或有具体依据表明恢复成本明显高于继续使用当前窗口的成本, 则在当前回复中用一句话说明具体依据, 保留当前窗口并继续工作; 否则进入第 4 步. 同一总体目标, 旧上下文可能有用或余量充足均不能单独作为保留理由.
+4. 使用 notes 创建或更新当前 agent 的 `checkpoint`, 保存恢复工作所需的目标, 验收标准, 约束与用户纠正, 当前进展, 活跃子代理或操作的状态, 外部变更, 以及续接或防止重复执行所需的标识. 记录本次已完成换窗判断的任务, topic 或阶段; 下一步只写换窗恢复后要继续的工作. 需要精确保留的内容保存原文. 保存后换窗; 恢复后不因同一历史请求仍然可见而重复换窗.
+
 ## 子代理调度
+
+- 在授权目标内依据角色 description 自主选择角色, 拆分, 并行和同级协作, 无需固定调用链; 不得把原任务原样转交形成派发链.
+- 原 owner 保留整合和验收责任; 并行写入的 ownership 不得重叠. 不得因派发或接受子代理建议而扩大授权范围.
 
 ### `/root`
 
+- 遇到有实质差异的技术路线时, 在实现前调用 `planner`; 已选路线被新证据推翻时也交由 planner 重新判断, 不自行替换路线.
+- 自身阶段或跨 worker 集成达到验收点时调用 `reviewer`; 复用已有审查证据, 补未覆盖的跨 worker 接口, 集成, 整体验收和新修改风险, 不无依据重复完整审查. 核实发现, 修正并验证确认的缺陷.
+- 未确认的产品行为或风险取舍仍由 `/root` 向用户确认.
 - 当派发能实质降低 `/root` 的 model-context cost 时优先派发; `/root` 仍负责最终整合和验证.
 - topic 由 owner 负责证据链; `/root` 不得重复调查, 仅可读取 routing / configuration 入口, 复核 owner 指出的 exact file / symbol / line, 或执行形成最终结论所需的最小 validation. 同一 topic 的追加要求, 结果缺口和范围内新假设应交回 owner; 仅当 owner 已完成, 被中断, 明确阻塞或继续价值较低时才可重新分配或接管. 超出 owner 边界的工作按新 topic 派发.
-

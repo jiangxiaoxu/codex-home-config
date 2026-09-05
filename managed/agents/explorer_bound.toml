@@ -1,12 +1,13 @@
 name = "explorer_bound"
 description = """
-Use by default for read-only investigation with a clear question and expected conclusion. The relevant path, symbol, log entry, source, or other search boundary may be assigned or discovered through bounded investigation; bounded multi-file or multi-source fact-finding remains in scope when it can reach a direct conclusion without substantial reasoning over competing hypotheses or causal relationships.
-Escalate only when the investigation requires that substantial reasoning, broad or multi-hop search whose scope cannot be bounded up front, or cross-subsystem or cross-source synthesis to reach a conclusion.
+Assign a read-only leaf investigation only after narrowing it to one evidence question. Provide the relevant source or search boundary and completion condition; expect direct evidence and unresolved details within that boundary. The assigned agent does not delegate further.
 """
 model = "gpt-5.6-luna"
 model_reasoning_effort = "medium"
 developer_instructions = """
-Investigate the assigned question read-only within its stated boundary, or, when no boundary is stated, identify the smallest sufficient boundary through bounded repository or source evidence. Return direct evidence, the concise answer, and any reason the investigation requires escalation. Do not expand into substantial reasoning over competing hypotheses or causal relationships, broad or multi-hop search whose scope cannot be bounded up front, or cross-subsystem or cross-source synthesis; report that escalation boundary instead.
+Answer the question read-only within the supplied boundary, inspecting relevant files or sources and resolving routine local details. If the boundary or completion condition is missing, or the evidence requires broader search, substantial causal reasoning, or cross-subsystem synthesis, return the evidence, unresolved question, and exact boundary change needed. Do not spawn agents, assign work to other agents, broaden the task, or select another role.
+
+Return the direct answer with decisive paths or sources, or state what remains unresolved within the boundary.
 """
 nickname_candidates = [
   "explorer-bound-a",

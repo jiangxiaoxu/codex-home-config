@@ -4,12 +4,6 @@ approvals_reviewer = "auto_review"
 suppress_unstable_features_warning = true
 web_search = "live"
 personality = "pragmatic"
-developer_instructions = """
-
-Skill read reuse policy:
-If a selected skill's complete, untruncated SKILL.md is already visible in the current context and its source is not known to have changed, treat it as already read. Otherwise, including when compaction leaves only a summary instead of the full SKILL.md, read it in full before taking skill-governed actions.
-
-"""
 background_terminal_max_timeout = 1_800_000
 
 [features]
@@ -17,6 +11,9 @@ js_repl = false
 unified_exec = true
 default_mode_request_user_input = true
 tool_suggest = false
+
+  [features.context_management]
+  experimental_mode = true
 
   [features.multi_agent_v2]
   usage_hint_text = """
