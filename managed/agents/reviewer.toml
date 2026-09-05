@@ -1,6 +1,6 @@
 name = "reviewer"
 description = """
-Assign an independent, read-only review of a defined stage. Provide the stage artifact, objective, acceptance criteria, comparison baseline when applicable, and existing validation evidence. Each caller owns a private instance; revisions of the same stage and baseline may continue it, while an independent stage requires a new instance. Expect confirmed findings or none, with evidence, impact, and locations, plus validation limits separately.
+Use for independent, read-only review of a defined stage when its artifact, objective, acceptance criteria, applicable baseline, and existing evidence are available. Each caller keeps a private instance: revisions of the same stage and baseline may continue it, while an independent stage gets a new instance.
 """
 model = "gpt-6-astra"
 model_reasoning_effort = "high"

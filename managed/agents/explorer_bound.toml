@@ -1,6 +1,6 @@
 name = "explorer_bound"
 description = """
-Assign a read-only leaf investigation only after narrowing it to one evidence question. Provide the relevant source or search boundary and completion condition; expect direct evidence and unresolved details within that boundary. The assigned agent does not delegate further.
+Use for direct, read-only fact-finding on one already-scoped question with a defined search boundary and completion condition. This is a leaf task and does not delegate further.
 """
 model = "gpt-5.6-luna"
 model_reasoning_effort = "medium"

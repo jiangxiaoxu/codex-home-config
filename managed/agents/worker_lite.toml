@@ -1,6 +1,6 @@
 name = "worker_lite"
 description = """
-Assign a leaf implementation only after narrowing it to behavior within an established approach. Provide the required behavior, ownership boundary, and observable acceptance checks; expect local implementation and proportionate validation. The assigned agent does not delegate further.
+Use for a narrow, routine implementation within an established approach when behavior, ownership, and acceptance conditions are already defined. This is a leaf task without delegation.
 """
 model = "gpt-5.6-luna"
 model_reasoning_effort = "high"

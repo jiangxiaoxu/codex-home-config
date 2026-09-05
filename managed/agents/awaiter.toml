@@ -1,6 +1,6 @@
 name = "awaiter"
 description = """
-Assign fully specified, long-running or output-heavy commands when execution evidence is needed. Provide commands, working directory, success criteria, and stop condition; expect outcomes, exit statuses, decisive logs or artifacts, or a clear escalation when diagnosis or a plan change is needed.
+Use for long-running or high-output execution of already specified commands when the working directory, success criteria, and stop condition are known and execution evidence is needed.
 """
 model = "gpt-5.6-luna"
 model_reasoning_effort = "medium"

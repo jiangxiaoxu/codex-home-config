@@ -1,6 +1,6 @@
 name = "explorer"
 description = """
-Assign a read-only investigation when the question needs scope discovery, substantial causal reasoning, or synthesis across subsystems or sources. Provide the question, known constraints, and relevant evidence; expect an evidence-backed conclusion with sources and material uncertainty, while exact search scope may be discovered within those bounds.
+Use when a read-only investigation needs scope discovery, substantial causal reasoning, or synthesis across subsystems or sources. The question, known constraints, and relevant evidence should be available, while the exact search scope can be discovered within those bounds.
 """
 model = "gpt-5.6-terra"
 model_reasoning_effort = "high"

@@ -6,7 +6,9 @@
 
 ## 澄清
 
-- 对无法通过现有证据消除, 且可能实质影响实现方向, 外部行为, 接口契约, 兼容性, 风险边界, 验收标准或用户预期的不确定性或 tradeoff, 使用 `request_user_input` 说明差异并确认; 出现未覆盖的新关键不确定性时再次确认. `request_user_input` 不可用时, 仅在方案低风险, 可逆且低侵入时基于 assumption 继续并在 final 标注; 否则停止并说明 blocker.
+- 对无法通过现有证据消除, 且可能实质影响实现方向, 外部行为, 接口契约, 兼容性, 风险边界, 验收标准或用户预期的不确定性或 tradeoff, 使用 `request_user_input` 说明差异并确认.
+- 出现未覆盖的新关键不确定性时再次确认.
+- `request_user_input` 不可用时, 仅在方案低风险, 可逆且低侵入时基于 assumption 继续并在 final 标注; 否则停止并说明 blocker.
 
 ## 范围与实现
 
@@ -61,8 +63,10 @@
 
 ### `/root`
 
-- 遇到有实质差异的技术路线时, 在实现前调用 `planner`; 已选路线被新证据推翻时也交由 planner 重新判断, 不自行替换路线.
-- 自身阶段或跨 worker 集成达到验收点时调用 `reviewer`; 复用已有审查证据, 补未覆盖的跨 worker 接口, 集成, 整体验收和新修改风险, 不无依据重复完整审查. 核实发现, 修正并验证确认的缺陷.
+- 关键技术路线的选择或重判, 在相关实现前调用 `planner`.
+- 阶段验收时调用 `reviewer`; 整合已有审查结果时, 只补未覆盖内容或新证据影响的部分.
 - 未确认的产品行为或风险取舍仍由 `/root` 向用户确认.
 - 当派发能实质降低 `/root` 的 model-context cost 时优先派发; `/root` 仍负责最终整合和验证.
-- topic 由 owner 负责证据链; `/root` 不得重复调查, 仅可读取 routing / configuration 入口, 复核 owner 指出的 exact file / symbol / line, 或执行形成最终结论所需的最小 validation. 同一 topic 的追加要求, 结果缺口和范围内新假设应交回 owner; 仅当 owner 已完成, 被中断, 明确阻塞或继续价值较低时才可重新分配或接管. 超出 owner 边界的工作按新 topic 派发.
+- topic 的证据链由 owner 负责. `/root` 不得重复调查; 仅可读取 routing / configuration 入口, 复核 owner 指出的 exact file / symbol / line, 或执行形成最终结论所需的最小 validation.
+- 同一 topic 的追加要求, 结果缺口和范围内新假设应交回 owner. 仅当 owner 已完成, 被中断, 明确阻塞或继续价值较低时, 才可重新分配或接管.
+- 超出 owner 边界的工作按新 topic 派发.
