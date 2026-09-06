@@ -51,15 +51,11 @@
 - 相对路径已经以当前 agent 的 notes 目录为基准; 例如 agent `/root/example` 使用相对路径 `checkpoint.md` 等价于使用绝对路径 `/root/example/notes/checkpoint.md`.
 - 路径不确定时先列出当前 agent 的文件, 再使用返回路径; 列举目录时省略 prefix 或使用 null, 不使用空字符串.
 
-### [Context window usage hook] 触发的自主提前 rollover
+### Checkpoint 内容
 
-- 本小节仅约束所有 agent 的自主提前 rollover, 不影响 Codex 内置的 context window nearly exhausted / exhausted 处理, auto-compaction 或 rollover 机制.
-- 自主提前 rollover 的判断仅由新收到的以 `[Context window usage hook]` 开头的 developer 提示触发, 每条提示执行一次以下判断.
-
-1. 遵循 hook 指令调用 `get_context_remaining` 后, 若调用已返回 `tokens_left`, 直接使用该值.
-2. 确认 `tokens_left` 有效且小于 `500000`, 并且 `new_context` 可用. 若此前已经换窗, 还须在最近一次恢复后新增影响后续工作的证据, 决策, 用户纠正或执行进展; 仅恢复既有信息, 重复读取或确认状态不满足此条件. 全部条件满足才进入第 3 步; 否则保留当前窗口并继续工作, 无需说明.
-3. 评估能否在换窗前将必要信息保存到 checkpoint, 并在换窗后结合有界 history 查询, 可靠恢复后续工作所需的信息. 若无法可靠恢复, 或有具体依据表明恢复成本明显高于继续使用当前窗口的成本, 则保留当前窗口并继续工作; 否则进入第 4 步. 同一总体目标, 旧上下文可能有用或余量充足均不能单独作为保留理由.
-4. 使用 notes 创建或更新当前 agent 的 checkpoint, 保存恢复和继续工作所需的信息. 记录本次 hook 提示对应的判断结果, 并明确恢复后尚需完成的工作及必要的先后顺序. 保存后换窗; 不因恢复时重现的历史 hook 提示重复判断或换窗.
+- 使用 notes 保存 checkpoint, 以恢复后能直接继续, 避免重复调查为准. 详细保存影响后续工作的事实, 依据和状态, 不为简短省略必要细节, 不复制完整日志或无关历史.
+- 关键结论, 决策依据及已排除方案的原因直接写明, 并附文件位置或 history 的 window/item 定位, 不只留下引用; 区分事实, 推测和待验证事项.
+- 保留未完成现场, 包括运行中的命令和子代理, 当前状态, 阻塞及恢复方式. 明确恢复入口, 必要执行顺序和无需重复的检查.
 
 ## 子代理调度
 
