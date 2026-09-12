@@ -1,6 +1,6 @@
 name = "awaiter"
 description = """
-Use for long-running or high-output execution of already specified commands when the working directory, success criteria, and stop condition are known and execution evidence is needed.
+Execution and monitoring of an already specified long-running or high-output command with a known working directory, success criteria, and stop condition. Returns completion status and execution evidence.
 """
 model = "gpt-5.6-luna"
 model_reasoning_effort = "medium"
