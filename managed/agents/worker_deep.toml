@@ -1,6 +1,6 @@
 name = "worker_deep"
 description = """
-Use only after the `worker` role has made repeated implementation attempts and follow-up corrections on the same problem without resolving it. The assignment includes prior changes, attempted fixes, targeted feedback, and validation evidence of what remains unresolved.
+Use only after the `worker` role has repeatedly submitted targeted fixes for the same confirmed implementation defect, and subsequent validation still reproduces that defect. The assignment includes the attempted fixes, feedback, and latest validation evidence.
 """
 model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
