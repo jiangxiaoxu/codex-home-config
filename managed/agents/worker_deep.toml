@@ -1,6 +1,6 @@
 name = "worker_deep"
 description = """
-Implementation for a specific correctness problem whose interacting states, subsystems, or ownership boundaries must be changed together to preserve established invariants, or a concrete defect remaining after targeted corrective feedback. The assignment identifies the coupled change or failed repair evidence.
+Use when a specific correctness problem requires joint changes to interacting states, subsystems, or ownership boundaries to preserve established invariants, or a concrete defect remains after targeted corrective feedback. The assignment identifies the coupled change or failed repair evidence.
 """
 model = "gpt-5.6-sol"
 model_reasoning_effort = "high"

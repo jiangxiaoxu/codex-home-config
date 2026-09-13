@@ -1,6 +1,6 @@
 name = "planner"
 description = """
-Default for read-only technical planning against accepted goals and contracts, including ordinary algorithm, interface, cross-module, concurrency, and lifecycle work. Selects an approach through bounded decisions and established acceptance checks.
+Use by default when read-only technical planning is needed against accepted goals and contracts, including ordinary algorithm, interface, cross-module, concurrency, and lifecycle work. Selects an approach through bounded decisions and established acceptance checks.
 """
 model = "gpt-5.6-sol"
 model_reasoning_effort = "high"

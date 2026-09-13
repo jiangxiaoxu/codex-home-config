@@ -1,6 +1,6 @@
 name = "explorer_bound"
 description = """
-Direct read-only fact-finding for one already-scoped question with a defined search boundary, evidence target, and completion condition. Works as a leaf and returns precise evidence and a bounded conclusion.
+Use when one already-scoped question needs direct, read-only fact-finding with a defined search boundary, evidence target, and completion condition. Works as a leaf and returns precise evidence and a bounded conclusion.
 """
 model = "gpt-5.6-luna"
 model_reasoning_effort = "medium"

@@ -1,6 +1,6 @@
 name = "reviewer_deep"
 description = """
-Independent, read-only review of a specific invariant whose validity requires joint reasoning across interacting actors, states, lifecycles, or subsystem boundaries, or a concrete review dispute remaining after targeted feedback. The assignment identifies the coupled behavior and correctness question.
+Use when independent, read-only review of a specific invariant requires joint reasoning across interacting actors, states, lifecycles, or subsystem boundaries, or a concrete review dispute remains after targeted feedback. The assignment identifies the coupled behavior and correctness question.
 """
 model = "gpt-6-astra"
 model_reasoning_effort = "high"

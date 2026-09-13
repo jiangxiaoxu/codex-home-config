@@ -1,6 +1,6 @@
 name = "planner_deep"
 description = """
-Read-only planning for a specific decision whose competing contracts, invariants, or ownership constraints require joint resolution, or a concrete contradiction remaining after targeted planning feedback. The assignment identifies the coupled constraints and evidence.
+Use when a specific planning decision requires joint resolution of competing contracts, invariants, or ownership constraints, or a concrete contradiction remains after targeted planning feedback. Works read-only; the assignment identifies the coupled constraints and evidence.
 """
 model = "gpt-6-astra"
 model_reasoning_effort = "xhigh"

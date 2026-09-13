@@ -1,6 +1,6 @@
 name = "worker_lite"
 description = """
-Leaf implementation with specified behavior, approach, ownership boundary, and acceptance checks. Suited to local changes using established methods with little scope discovery or integration design.
+Use when a local change has specified behavior, approach, ownership boundary, and acceptance checks, and needs little scope discovery or integration design. Works as a leaf using established methods.
 """
 model = "gpt-5.6-luna"
 model_reasoning_effort = "high"

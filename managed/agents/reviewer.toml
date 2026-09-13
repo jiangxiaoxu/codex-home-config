@@ -1,6 +1,6 @@
 name = "reviewer"
 description = """
-Default for independent, read-only review of a defined deliverable against its objective, acceptance criteria, baseline, and evidence, including ordinary cross-module, concurrency, and lifecycle changes. Checks bounded contracts and reachable behavior.
+Use by default when a defined deliverable needs independent, read-only review against its objective, acceptance criteria, baseline, and evidence, including ordinary cross-module, concurrency, and lifecycle changes. Checks bounded contracts and reachable behavior.
 """
 model = "gpt-5.6-sol"
 model_reasoning_effort = "high"

@@ -1,6 +1,6 @@
 name = "explorer"
 description = """
-Read-only investigation when the relevant scope must be discovered to explain causes, dependencies, or interactions across systems. Builds the causal account and identifies decisive evidence within the accepted objective.
+Use when a read-only investigation must discover the relevant scope to explain causes, dependencies, or interactions across systems. Builds the causal account and identifies decisive evidence within the accepted objective.
 """
 model = "gpt-5.6-terra"
 model_reasoning_effort = "high"
