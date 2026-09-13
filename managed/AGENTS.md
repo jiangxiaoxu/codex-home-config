@@ -66,8 +66,9 @@
 
 ### `/root`
 
-- 关键技术路线的选择或重判, 在相关实现前调用 `planner`.
-- 阶段验收时调用 `reviewer`; 整合已有审查结果时, 只补未覆盖内容或新证据影响的部分.
+- 关键技术路线的选择或重判, 在相关实现前调用 `planner` 或 `planner_deep`; 常规规划使用 `planner`, 紧密耦合的跨模块决策或重要接口变化直接使用 `planner_deep`.
+- 阶段验收时调用 `reviewer` 或 `reviewer_deep`; 常规审查使用 `reviewer`, 复杂并发, 生命周期或跨模块关键不变量审查直接使用 `reviewer_deep`. 整合已有审查结果时, 只补未覆盖内容或新证据影响的部分.
+- 两档保持相同范围和验收标准, 不固定串行调用. 普通层存在具体未决技术问题时, 由 `/root` 明确交接问题, 证据, 相关文件和已有结论给 deep 角色; 此升级允许转交原 owner 的对应问题. 无需升级时, 同问题复用原实例; 产品行为或风险取舍仍交用户确认.
 - 需要按本文件的澄清规则向用户确认的产品行为或风险取舍, 仍由 `/root` 负责, 不由子代理代为决定.
 - 当派发能实质降低 `/root` 的 model-context cost 时优先派发; `/root` 仍负责最终整合和验证.
 - topic 的证据链由 owner 负责. `/root` 不得重复调查; 仅可读取 routing / configuration 入口, 复核 owner 指出的 exact file / symbol / line, 或执行形成最终结论所需的最小 validation.
