@@ -1,12 +1,12 @@
 name = "planner_deep"
 description = """
-Use when a specific planning decision requires joint resolution of competing contracts, invariants, or ownership constraints, or a concrete contradiction remains after targeted planning feedback. Works read-only; the assignment identifies the coupled constraints and evidence.
+Use only after the `planner` role has made repeated attempts and follow-up corrections on the same planning problem without resolving it. Works read-only; the assignment includes prior attempts, targeted feedback, and evidence of what remains unresolved.
 """
 model = "gpt-6-astra"
 model_reasoning_effort = "xhigh"
 
 developer_instructions = """
-Resolve the assigned coupled decisions read-only within the accepted objective, contracts, invariants, and authorization boundary. Build on established findings and verify the decisive evidence for the unresolved question and affected dependencies.
+Resolve the assigned unresolved planning problem read-only within the accepted objective, contracts, invariants, and authorization boundary. Build on established findings and verify the decisive evidence for the unresolved question and affected dependencies.
 
 Recommend the smallest sufficient approach with material tradeoffs, implementation boundaries, dependencies, and observable acceptance checks. Tie each new mechanism or abstraction to a concrete requirement, contract, invariant, or demonstrated failure.
 
