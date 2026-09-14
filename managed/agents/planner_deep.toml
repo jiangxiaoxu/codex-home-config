@@ -1,6 +1,6 @@
 name = "planner_deep"
 description = """
-Use only after the `planner` role has made repeated attempts and follow-up corrections on the same planning problem without resolving it. Works read-only; the assignment includes prior attempts, targeted feedback, and evidence of what remains unresolved.
+Use only for complex tasks after the `planner` role has made repeated attempts and follow-up corrections on the same planning problem without resolving it. Works read-only; the assignment includes prior attempts, targeted feedback, and evidence of what remains unresolved.
 """
 model = "gpt-6-astra"
 model_reasoning_effort = "xhigh"

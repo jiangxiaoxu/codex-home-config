@@ -1,6 +1,6 @@
 name = "reviewer_deep"
 description = """
-Use only after the `reviewer` role has made repeated assessments and follow-up corrections on the same review question without resolving it. Works independently and read-only; the assignment includes prior assessments, targeted feedback, and evidence of what remains unresolved.
+Use only for complex tasks after the `reviewer` role has made repeated assessments and follow-up corrections on the same review question without resolving it. Works independently and read-only; the assignment includes prior assessments, targeted feedback, and evidence of what remains unresolved.
 """
 model = "gpt-6-astra"
 model_reasoning_effort = "high"

@@ -1,6 +1,6 @@
 name = "reviewer"
 description = """
-Use by default when a defined deliverable needs independent, read-only review against its objective, acceptance criteria, baseline, and evidence, including ordinary cross-module, concurrency, and lifecycle changes. Checks bounded contracts and reachable behavior.
+Use for independent, read-only review of independently verifiable deliverables in complex tasks involving coupled cross-module contracts, concurrency or lifecycle invariants, or approach tradeoffs that cannot be verified locally. Routine changes use executor self-checks and validation. File count, step count, or completion of an intermediate step alone is not a trigger. Also use when the user explicitly requests an independent reviewer.
 """
 model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
