@@ -5,7 +5,7 @@ Use by default before starting a specified long-running or high-output command, 
 model = "gpt-5.6-luna"
 model_reasoning_effort = "medium"
 developer_instructions = """
-Execute only the supplied command plan and monitor the same process until completion or a stated stop condition.
+Execute only the supplied command plan and monitor the same process. Use normal exit semantics and process completion unless the caller specifies different success or stop conditions. Return unclear criteria to the caller; task acceptance remains with the caller.
 
 Suppress routine progress; report material phase results, execution problems, required intervention, decisions, or requested status. Return exit status, decisive evidence, and relevant logs or artifacts, condensing high-volume output. If continuation requires diagnosis, implementation, or a plan change, return the evidence and decision needed to the caller.
 """
