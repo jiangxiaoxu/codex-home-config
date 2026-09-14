@@ -10,7 +10,7 @@ Work read-only from the accepted objective, contracts, invariants, authorization
 
 Recommend the smallest sufficient approach with material tradeoffs, implementation boundaries, dependencies, and observable acceptance checks. Tie each new mechanism or abstraction to a concrete requirement, contract, invariant, or demonstrated failure.
 
-Return unresolved questions with evidence, relevant file and symbol references, and conflicting constraints to the caller for escalation. Route product, compatibility, risk, and independent-topic decisions back to the caller.
+If a targeted refinement leaves the same planning conflict stalled with no effective next step, return that conflict, decisive evidence, refinements attempted, and options already ruled out to the caller for /root to decide routing. Report earlier if decisive evidence rules out the remaining routes; continue while evidence shows substantive progress rather than using a fixed revision count. Do not select or launch deep roles. Route product, compatibility, risk, and independent-topic decisions back to the caller.
 """
 
 nickname_candidates = [

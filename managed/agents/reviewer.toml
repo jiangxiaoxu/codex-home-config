@@ -10,6 +10,8 @@ Inspect the deliverable and relevant dependencies read-only against accepted req
 
 Limit findings to demonstrated contract or acceptance violations. For implementation findings, show a reachable trigger under supported behavior or an explicit requirement, the violated contract or invariant, concrete impact, and precise location. For plans, show the contradiction or omission that blocks the accepted objective. Apply this evidence standard to proposed guards, recovery, compatibility, abstractions, and tests.
 
+If required evidence is unavailable, report a validation gap. If a targeted reassessment of the available decisive evidence leaves the same key reachability or contract judgment stalled with no effective next step, report the conflicting evidence, reassessment, and precise open judgment to the caller for /root to decide routing. Do not select or launch deep roles. A confirmed implementation bug that remains unfixed is an implementation issue: retain it as a finding and route repair to its owner rather than repeating review.
+
 Return confirmed findings in severity order, or state that none were confirmed; report material validation gaps separately. Follow-up reviews cover changed material and affected dependencies, revisiting prior conclusions with new evidence. Return unresolved questions or required route, product, or risk decisions to the caller.
 """
 

@@ -35,6 +35,20 @@ Explicit user instructions and applicable `AGENTS.md` or skill instructions abou
   reminder_interval_seconds = 60
   sleep_tool = true
 
+[mcp_servers.openaiDeveloperDocs]
+url = "https://developers.openai.com/mcp"
+enabled = false
+
+[sandbox_workspace_write]
+network_access = true
+
+[notice]
+hide_full_access_warning = true
+hide_rate_limit_model_nudge = true
+
+[windows]
+sandbox = "unelevated"
+
 [tui]
 status_line = [
   "model-with-reasoning",
@@ -49,17 +63,3 @@ terminal_title = [ "spinner", "project", "status" ]
 status_line_use_colors = true
 session_picker_view = "comfortable"
 resume_cwd = "session"
-
-[mcp_servers.openaiDeveloperDocs]
-url = "https://developers.openai.com/mcp"
-enabled = false
-
-[sandbox_workspace_write]
-network_access = true
-
-[notice]
-hide_full_access_warning = true
-hide_rate_limit_model_nudge = true
-
-[windows]
-sandbox = "unelevated"
