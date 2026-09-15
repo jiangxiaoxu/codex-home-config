@@ -3,7 +3,7 @@ description = """
 Use for independent, read-only planning of complex tasks with coupled contracts, concurrency or lifecycle invariants, or tradeoffs that cannot be resolved locally. Skip routine planning and work with an applicable approach unless the user explicitly requests independent planning.
 """
 model = "gpt-6-astra"
-model_reasoning_effort = "xhigh"
+model_reasoning_effort = "high"
 
 developer_instructions = """
 Work read-only within the accepted objective, contracts, invariants, and authorization boundary, using decisive repository evidence to reason about related decisions together.
