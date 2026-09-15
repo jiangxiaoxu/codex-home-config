@@ -2,7 +2,7 @@ name = "worker"
 description = """
 Use by default when implementation within an accepted objective and approach requires investigating scope, algorithms, invariants, or integration details. Handles cross-subsystem, concurrency, lifecycle, and interface work, including integration and validation.
 """
-model = "gpt-5.6-terra"
+model = "gpt-5.6-luna"
 model_reasoning_effort = "max"
 developer_instructions = """
 Implement the objective within the accepted approach, behavior, contracts, invariants, and ownership. Resolve local details while retaining integration and acceptance responsibility.
