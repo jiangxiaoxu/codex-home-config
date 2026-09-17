@@ -1157,121 +1157,103 @@ test('merge-install CLI preserves adjacent unchanged managed root assignments an
   });
 });
 
-test('publish-sync orders managed tables and MCP server children according to local configuration order', () => {
-  const localConfig = {
-    mcp_servers: {
-      zulu: {
-        command: 'node-zulu.exe'
-      },
-      alpha: {
-        command: 'node-alpha.exe'
-      }
-    },
-    notice: {
-      hide_full_access_warning: true
-    },
-    features: {
-      runtime_metrics: true
-    }
-  };
-  const managedConfig = {
-    features: {
-      runtime_metrics: false
-    },
-    notice: {
-      hide_full_access_warning: false
-    },
-    mcp_servers: {
-      alpha: {
-        command: 'node-alpha.exe'
-      },
-      zulu: {
-        command: 'node-zulu.exe'
-      }
-    }
-  };
-
-  const publishedConfig = buildPublishedSyncConfig(localConfig, managedConfig);
-  assert.deepStrictEqual(Object.keys(publishedConfig), [
-    'mcp_servers',
-    'notice',
-    'features'
-  ]);
-  assert.deepStrictEqual(Object.keys(publishedConfig.mcp_servers), [
-    'zulu',
-    'alpha'
-  ]);
-});
-
-test('publish-sync CLI writes managed tables and MCP server children in local configuration order', () => {
+test('publish-sync CLI retains managed order recursively and stays stable after local reordering', () => {
   withTempDir((tempDir) => {
     const localPath = join(tempDir, 'local.toml');
     const managedPath = join(tempDir, 'managed.toml');
     const outputPath = join(tempDir, 'output.toml');
+    const localConfig = {
+      mcp_servers: {
+        unlisted: { command: 'unlisted.exe' },
+        zulu: { command: 'zulu.exe' },
+        alpha: {
+          args: ['second', 'first'],
+          command: 'updated-alpha.exe',
+          env: { NEW_Z: 'z', SECOND: 'updated', FIRST: 'first', NEW_A: 'a', ['__proto__']: 'needed' }
+        }
+      },
+      notice: { hide_full_access_warning: true, updated_at: new Date('2026-09-17T00:00:00Z') },
+      features: {
+        new_z: true,
+        multi_agent: true,
+        runtime_metrics: true,
+        new_a: false
+      },
+      unlisted_top_level: { enabled: true }
+    };
+    const managedConfig = {
+      features: { runtime_metrics: false, removed: true, multi_agent: false },
+      notice: { hide_full_access_warning: false, updated_at: new Date('2026-09-16T00:00:00Z') },
+      mcp_servers: {
+        alpha: {
+          command: 'old-alpha.exe',
+          args: ['first', 'second'],
+          env: { FIRST: 'first', REMOVED: 'old', SECOND: 'old' }
+        },
+        removed: { command: 'removed.exe' },
+        zulu: { command: 'zulu.exe' }
+      },
+      removed_table: { enabled: true }
+    };
+    writeFileSync(managedPath, TOML.stringify(managedConfig), 'utf8');
 
-    writeFileSync(
-      localPath,
-      [
-        '[mcp_servers.zulu]',
-        'command = "node-zulu.exe"',
-        '',
-        '[mcp_servers.alpha]',
-        'command = "node-alpha.exe"',
-        '',
-        '[notice]',
-        'hide_full_access_warning = true',
-        '',
-        '[features]',
-        'runtime_metrics = true',
-        ''
-      ].join('\r\n'),
-      'utf8'
-    );
-    writeFileSync(
-      managedPath,
-      [
-        '[features]',
-        'runtime_metrics = false',
-        '',
-        '[notice]',
-        'hide_full_access_warning = false',
-        '',
-        '[mcp_servers.alpha]',
-        'command = "managed-alpha.exe"',
-        '',
-        '[mcp_servers.zulu]',
-        'command = "managed-zulu.exe"',
-        ''
-      ].join('\n'),
-      'utf8'
-    );
-
-    const result = spawnSync(
-      process.execPath,
-      [
-        'tools/config-toml-ops.cjs',
-        'publish-sync',
-        '--local',
-        localPath,
-        '--managed',
-        managedPath,
-        '--output',
-        outputPath
-      ],
-      {
-        cwd: process.cwd(),
-        encoding: 'utf8'
+    // The second publication changes only local key order, including newly managed keys.
+    const reorderedLocalConfig = {
+      features: { new_a: false, runtime_metrics: true, new_z: true, multi_agent: true },
+      notice: localConfig.notice,
+      mcp_servers: {
+        alpha: {
+          env: { ['__proto__']: 'needed', NEW_A: 'a', FIRST: 'first', NEW_Z: 'z', SECOND: 'updated' },
+          command: 'updated-alpha.exe',
+          args: ['second', 'first']
+        },
+        zulu: localConfig.mcp_servers.zulu,
+        unlisted: localConfig.mcp_servers.unlisted
+      },
+      unlisted_top_level: localConfig.unlisted_top_level
+    };
+    let firstOutput;
+    for (const config of [localConfig, reorderedLocalConfig]) {
+      writeFileSync(localPath, TOML.stringify(config), 'utf8');
+      const result = spawnSync(
+        process.execPath,
+        [
+          'tools/config-toml-ops.cjs',
+          'publish-sync',
+          '--local', localPath,
+          '--managed', managedPath,
+          '--output', outputPath
+        ],
+        { cwd: process.cwd(), encoding: 'utf8' }
+      );
+      assert.equal(result.status, 0, result.stderr);
+      const outputText = readFileSync(outputPath, 'utf8');
+      if (firstOutput !== undefined) {
+        assert.equal(outputText, firstOutput, 'local reordering must not change the published file');
+        continue;
       }
-    );
 
-    assert.equal(result.status, 0, result.stderr);
-    const outputText = readFileSync(outputPath, 'utf8');
-    assert.ok(
-      outputText.indexOf('[mcp_servers.zulu]') < outputText.indexOf('[mcp_servers.alpha]') &&
-      outputText.indexOf('[mcp_servers.alpha]') < outputText.indexOf('[notice]') &&
-      outputText.indexOf('[notice]') < outputText.indexOf('[features]'),
-      'publish output must follow local table and MCP child order'
-    );
+      const published = TOML.parse(outputText);
+      assert.deepStrictEqual(published, {
+        features: { runtime_metrics: true, multi_agent: true, new_z: true, new_a: false },
+        notice: { hide_full_access_warning: true, updated_at: new Date('2026-09-17T00:00:00Z') },
+        mcp_servers: {
+          alpha: {
+            command: 'updated-alpha.exe',
+            args: ['second', 'first'],
+            env: { FIRST: 'first', SECOND: 'updated', NEW_Z: 'z', NEW_A: 'a', ['__proto__']: 'needed' }
+          },
+          zulu: { command: 'zulu.exe' }
+        }
+      });
+      assert.deepStrictEqual(Object.keys(published), ['features', 'notice', 'mcp_servers']);
+      assert.deepStrictEqual(Object.keys(published.features), ['runtime_metrics', 'multi_agent', 'new_z', 'new_a']);
+      assert.deepStrictEqual(Object.keys(published.mcp_servers), ['alpha', 'zulu']);
+      assert.deepStrictEqual(Object.keys(published.mcp_servers.alpha), ['command', 'args', 'env']);
+      assert.deepStrictEqual(Object.keys(published.mcp_servers.alpha.env).filter(key => key !== '__proto__'), ['FIRST', 'SECOND', 'NEW_Z', 'NEW_A']);
+      firstOutput = outputText;
+      writeFileSync(managedPath, firstOutput, 'utf8');
+    }
   });
 });
 

@@ -57,7 +57,7 @@ iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/relea
 
 安装时, `config.toml` 使用 syntax-preserving merge, 仅更新 `managed/config.toml` 中实际变化的路径. 未管理或未变化的顶层条目/表块会保留原始引号, 注释, 布局和行尾. `node_repl` 不参与同步, 因而保留目标文件中的原文.
 
-安装生成的 managed 更新片段遵循 `managed/config.toml` 的顺序. publish-sync 生成的内容遵循本地 `config.toml` 的顶层条目和 allowlisted MCP child 的顺序. 未管理的目标顶层条目/表块保留原文中的相对位置.
+安装生成的 managed 更新片段遵循 `managed/config.toml` 的顺序. publish-sync 保留 `managed/config.toml` 已有字段的顺序, 包括嵌套表和 allowlisted MCP child; 允许同步的新增字段按本地顺序追加, 字段值和数组元素顺序以本地配置为准. 顶层条目和 MCP child 仍受现有 allowlist 限制. 未管理的目标顶层条目/表块保留原文中的相对位置.
 
 例如, 本机包含 `apps.github`, `apps.local_app`, `mcp_servers.docs` 和 `mcp_servers.local_mcp`, 仓库已管理 `mcp_servers.docs`:
 

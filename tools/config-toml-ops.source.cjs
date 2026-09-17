@@ -746,6 +746,22 @@ function buildMergeInstallConfig (sourceConfig, targetConfig) {
   return mergedConfig
 }
 
+function preservePublishedKeyOrder (value, previousValue) {
+  if (!isTomlObject(value) || value instanceof Date) {
+    return value
+  }
+
+  const previousTable = isTomlObject(previousValue) && !(previousValue instanceof Date) ? previousValue : {}
+  const orderedEntries = []
+  const keys = new Set([...Object.keys(previousTable), ...Object.keys(value)])
+  for (const key of keys) {
+    if (hasOwn(value, key)) {
+      orderedEntries.push([key, preservePublishedKeyOrder(value[key], previousTable[key])])
+    }
+  }
+  return Object.fromEntries(orderedEntries)
+}
+
 function buildPublishedSyncConfig (localConfig, managedConfig) {
   const publishedConfig = {}
   const managedTopLevelKeys = new Set(Object.keys(managedConfig))
@@ -764,8 +780,9 @@ function buildPublishedSyncConfig (localConfig, managedConfig) {
     publishedConfig[key] = localConfig[key]
   }
 
-  removeNestedPaths(publishedConfig, syncExcludedNestedPaths)
-  return publishedConfig
+  const orderedConfig = preservePublishedKeyOrder(publishedConfig, managedConfig)
+  removeNestedPaths(orderedConfig, syncExcludedNestedPaths)
+  return orderedConfig
 }
 
 function removeNestedPaths (config, nestedPaths) {
