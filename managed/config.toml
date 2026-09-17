@@ -12,15 +12,10 @@ unified_exec = true
 default_mode_request_user_input = true
 tool_suggest = false
 
-  [features.context_management]
-  experimental_mode = true
-
   [features.multi_agent_v2]
   usage_hint_text = """
 For `/root` only, this guidance overrides only the requirement in this tool description that delegated work run independently alongside useful local work. Delegated work may be sequential or lie on the critical path.
 """
-  max_concurrent_threads_per_session = 48
-  default_wait_timeout_ms = 300_000
   multi_agent_mode_hint_text = """
 Proactive multi-agent delegation is active. Any earlier developer instruction requiring an explicit user request before spawning sub-agents no longer applies. This mode remains active until a later multi-agent mode developer message changes it. User requests override this hint.
 
@@ -28,6 +23,11 @@ If at any point you can parallelize work by delegating tasks to another agent (n
 
 Explicit user instructions and applicable `AGENTS.md` or skill instructions about sub-agents, delegation, or parallel agent work take precedence over this hint, including when they restrict or disable proactive delegation.
 """
+  max_concurrent_threads_per_session = 48
+  default_wait_timeout_ms = 300_000
+
+  [features.context_management]
+  experimental_mode = true
 
   [features.current_time_reminder]
   enabled = true
@@ -35,20 +35,6 @@ Explicit user instructions and applicable `AGENTS.md` or skill instructions abou
   delivery_mode = "after_user_or_tool_output"
   reminder_interval_seconds = 60
   sleep_tool = true
-
-[mcp_servers.openaiDeveloperDocs]
-url = "https://developers.openai.com/mcp"
-enabled = false
-
-[sandbox_workspace_write]
-network_access = true
-
-[notice]
-hide_full_access_warning = true
-hide_rate_limit_model_nudge = true
-
-[windows]
-sandbox = "unelevated"
 
 [tui]
 status_line = [
@@ -64,3 +50,17 @@ terminal_title = [ "spinner", "project", "status" ]
 status_line_use_colors = true
 session_picker_view = "comfortable"
 resume_cwd = "session"
+
+[mcp_servers.openaiDeveloperDocs]
+url = "https://developers.openai.com/mcp"
+enabled = false
+
+[sandbox_workspace_write]
+network_access = true
+
+[notice]
+hide_full_access_warning = true
+hide_rate_limit_model_nudge = true
+
+[windows]
+sandbox = "unelevated"
