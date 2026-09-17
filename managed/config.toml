@@ -6,6 +6,9 @@ web_search = "live"
 personality = "pragmatic"
 background_terminal_max_timeout = 1_800_000
 
+[agents]
+default_subagent_reasoning_effort = "medium"
+
 [features]
 js_repl = false
 unified_exec = true
