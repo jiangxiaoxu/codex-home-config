@@ -33,6 +33,7 @@
 ## Shell
 
 - 在 Windows 上通过 shell 删除文件或目录时, 使用 PowerShell 直接调用适用的 .NET 文件系统 API.
+- PowerShell 中需要原生命令退出码时, 立即将 `$LASTEXITCODE` 保存到变量, 或紧接 `exit $LASTEXITCODE` 传递给调用方.
 
 ## 工具
 
