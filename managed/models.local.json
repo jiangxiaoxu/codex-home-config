@@ -45,6 +45,11 @@
           "description": "2x speed, increased usage"
         }
       ],
+      "available_access_programs": {
+        "cyber": [
+          "standard"
+        ]
+      },
       "availability_nux": {
         "message": "This is GPT-6, a new generation of intelligence. Astra is state-of-the-art in coding, computer use, science, and professional work. Give it a hard problem, a half-formed idea, or anything you've been meaning to build. See where it takes you."
       },
@@ -169,6 +174,11 @@
           "description": "1.5x speed, increased usage"
         }
       ],
+      "available_access_programs": {
+        "cyber": [
+          "standard"
+        ]
+      },
       "availability_nux": null,
       "upgrade": null,
       "model_messages": {
@@ -264,6 +274,11 @@
           "description": "1.5x speed, increased usage"
         }
       ],
+      "available_access_programs": {
+        "cyber": [
+          "standard"
+        ]
+      },
       "availability_nux": null,
       "upgrade": null,
       "model_messages": {
@@ -359,6 +374,11 @@
           "description": "1.5x speed, increased usage"
         }
       ],
+      "available_access_programs": {
+        "cyber": [
+          "standard"
+        ]
+      },
       "availability_nux": null,
       "upgrade": null,
       "model_messages": {
@@ -450,6 +470,11 @@
           "description": "1.5x speed, increased usage"
         }
       ],
+      "available_access_programs": {
+        "cyber": [
+          "standard"
+        ]
+      },
       "availability_nux": null,
       "upgrade": null,
       "model_messages": {
@@ -537,6 +562,11 @@
           "description": "1.5x speed, increased usage"
         }
       ],
+      "available_access_programs": {
+        "cyber": [
+          "standard"
+        ]
+      },
       "availability_nux": null,
       "upgrade": {
         "model": "gpt-5.6-sol",
@@ -621,6 +651,11 @@
           "description": "1.5x speed, increased usage"
         }
       ],
+      "available_access_programs": {
+        "cyber": [
+          "standard"
+        ]
+      },
       "availability_nux": null,
       "upgrade": null,
       "model_messages": {
