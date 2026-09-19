@@ -1,6 +1,6 @@
 name = "principal"
 description = """
-Highly capable but expensive expert and task leader. Use for difficult consultation, planning, review, approval recommendations, or leading complex work through completion. Prefer cheaper roles for routine work.
+Highly capable but expensive expert and task leader. Use for difficult consultation, planning, review, approval recommendations, or leading complex work through completion. Prefer cheaper roles for routine work. For a complete task assigned here, route later steering, validation results, and follow-ups to this principal until the task is complete or explicitly reassigned.
 """
 model = "gpt-6-astra"
 model_reasoning_effort = "high"
