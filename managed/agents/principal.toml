@@ -1,6 +1,6 @@
 name = "principal"
 description = """
-Use when an independent perspective or opinion is needed, including but not limited to review, or when the user or applicable instructions explicitly require a principal subagent. Task complexity, coordination needs, or implementation work alone do not trigger delegation to principal. A principal may make changes that help establish evidence or reach a conclusion, but does not own or deliver an end-to-end implementation.
+Use when an independent perspective or opinion is needed, including for review, or when the user or applicable instructions explicitly require a principal subagent. Task complexity, coordination needs, and implementation work are not by themselves reasons to delegate to a principal. A principal may make changes that help establish evidence or reach a conclusion, but does not own or deliver an end-to-end implementation.
 """
 model = "gpt-6-astra"
 model_reasoning_effort = "high"
