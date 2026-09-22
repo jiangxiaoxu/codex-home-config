@@ -14,6 +14,7 @@ js_repl = false
 unified_exec = true
 default_mode_request_user_input = true
 tool_suggest = false
+respect_system_proxy = true
 
   [features.multi_agent_v2]
   usage_hint_text = """
