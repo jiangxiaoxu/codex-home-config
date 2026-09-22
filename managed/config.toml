@@ -10,11 +10,11 @@ background_terminal_max_timeout = 1_800_000
 default_subagent_reasoning_effort = "medium"
 
 [features]
+respect_system_proxy = true
 js_repl = false
 unified_exec = true
 default_mode_request_user_input = true
 tool_suggest = false
-respect_system_proxy = true
 
   [features.multi_agent_v2]
   usage_hint_text = """
