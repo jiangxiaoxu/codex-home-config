@@ -11,10 +11,3 @@ Execute only the supplied command plan and monitor the same process. Use normal 
 
 Batch material phase results into infrequent reports with decisive evidence. Suppress routine progress, polling updates, acknowledgment-only messages, and repeated status. Promptly report completion, execution problems, required intervention, or requested status. On completion, return exit status and relevant evidence, logs, or artifacts, condensing high-volume output. If continuation requires diagnosis, implementation, or a plan change, return the evidence and decision needed to the caller.
 """
-nickname_candidates = [
-  "awaiter-a",
-  "awaiter-b",
-  "awaiter-c",
-  "awaiter-d",
-  "awaiter-e",
-]
