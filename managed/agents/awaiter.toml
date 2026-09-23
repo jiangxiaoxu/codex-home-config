@@ -2,7 +2,7 @@ name = "awaiter"
 description = """
 Use by default before starting a specified long-running or high-output command, including builds and test suites. Reports are intentionally infrequent, and long periods without updates are normal; avoid frequent status requests. Silence alone does not indicate disconnection, inactivity, or failure.
 """
-model = "gpt-5.6-luna"
+model = "gpt-6-luna"
 model_reasoning_effort = "medium"
 developer_instructions = """
 Act as a leaf agent. Do not spawn sub-agents or delegate work to other agents. Return work outside your assigned scope to the caller.
