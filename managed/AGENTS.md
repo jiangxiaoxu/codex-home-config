@@ -57,8 +57,7 @@
 
 ### Checkpoint 路径补充
 
-- notes 相对路径以当前 agent 的 notes 目录为基准.
-- 路径不确定时先列出当前 agent 的文件, 再使用返回路径; 列举目录时省略 prefix 或使用 null, 不使用空字符串.
+- 读取已有笔记但不确定路径时, 先列出笔记, 再使用返回的路径; 列出当前 agent 的全部笔记时省略 prefix, 不传空字符串.
 
 ### Checkpoint 内容
 
