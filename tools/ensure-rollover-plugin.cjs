@@ -38,13 +38,12 @@ function parseArgs(argv) {
 }
 
 function formatStatus(status) {
-  const marketplace = status.marketplaceAdded ? '已添加或修复' : '已配置';
+  const marketplace = status.marketplaceAdded ? 'added or restored' : 'configured';
   const upgrade = !status.upgradeSucceeded
-    ? '更新失败, 已使用现有商城内容'
-    : status.marketplaceUpgraded ? '已更新' : '更新检查完成, 无新版本';
-  const plugin = status.pluginAdded ? '插件: 本次已安装并启用' : '插件: 已安装并启用';
-  const hook = '全部 hook: 已启用并受信任';
-  return `商城 ${MARKETPLACE}: ${marketplace}; ${upgrade}\n${plugin}\n${hook}\n`;
+    ? 'update failed; using the available snapshot'
+    : status.marketplaceUpgraded ? 'updated' : 'checked for updates; no new revision';
+  const plugin = status.pluginAdded ? 'Plugin: newly installed and enabled' : 'Plugin: installed and enabled';
+  return `Marketplace ${MARKETPLACE}: ${marketplace}; ${upgrade}\n${plugin}\nAll hooks: enabled and trusted\n`;
 }
 
 function findCodexCommand() {
@@ -302,7 +301,7 @@ async function ensurePlugin({ target, command }) {
     status.marketplaceUpgraded = Array.isArray(upgrade?.upgradedRoots) && upgrade.upgradedRoots.length > 0;
   } catch (error) {
     status.marketplaceUpgradeError = error.message;
-    process.stderr.write(`商城 ${MARKETPLACE} 更新失败, 将检查现有插件: ${error.message}\n`);
+    process.stderr.write(`Failed to update marketplace ${MARKETPLACE}; checking the installed plugin: ${error.message}\n`);
   }
 
   const listPlugins = () => runJsonCommand(codex, ['plugin', 'list', '--marketplace', MARKETPLACE, '--json'], env);
