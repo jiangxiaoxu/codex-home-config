@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -20,9 +20,10 @@ state.calls.push(args);
 state.cwdCalls.push(process.cwd());
 save();
 
+const targetHash = () => 'hash-for-target-hook' + (state.revision ? '-revision-' + state.revision : '');
 const hook = (key, pluginId, trustStatus) => ({
   key, pluginId, eventName: 'postToolUse', enabled: state.hookEnabled,
-  currentHash: 'hash-for-' + key, trustStatus,
+  currentHash: key === 'target-hook' ? targetHash() : 'hash-for-' + key, trustStatus,
 });
 
 if (args[0] === 'plugin') {
@@ -35,10 +36,26 @@ if (args[0] === 'plugin') {
     state.marketplaceAdded = true;
     state.snapshotMissing = false;
     result = {};
+  } else if (args[1] === 'marketplace' && args[2] === 'upgrade') {
+    if (args.join(' ') !== 'plugin marketplace upgrade jxx-codex-plugins --json') process.exit(3);
+    if (state.upgradeFails) {
+      process.stderr.write('mock marketplace upgrade failed\n');
+      process.exit(7);
+    }
+    const upgraded = state.upgradeAvailable;
+    const repaired = state.snapshotCorrupt || state.snapshotMissing;
+    if (upgraded) {
+      state.revision += 1;
+      state.upgradeAvailable = false;
+    }
+    state.snapshotCorrupt = false;
+    state.snapshotMissing = false;
+    result = { upgradedRoots: upgraded || repaired ? ['jxx-codex-plugins'] : [] };
   } else if (args[1] === 'list') {
     if (args.join(' ') !== 'plugin list --marketplace jxx-codex-plugins --json') process.exit(3);
-    if (state.snapshotMissing) {
-      process.stderr.write('Error: failed to load configured marketplace snapshot(s):\n- \x60jxx-codex-plugins\x60 at cache: marketplace root does not contain a supported manifest\n');
+    if (state.snapshotMissing || state.snapshotCorrupt) {
+      const snapshot = state.snapshotCorrupt ? path.join(process.env.CODEX_HOME, 'corrupt-snapshot') : 'cache';
+      process.stderr.write('Error: failed to load configured marketplace snapshot(s):\n- \x60jxx-codex-plugins\x60 at ' + snapshot + ': marketplace root does not contain a supported manifest\n');
       process.exit(6);
     }
     result = { installed: state.pluginAdded ? [{ pluginId: 'context-window-rollover-reminder@jxx-codex-plugins', installed: true, enabled: state.pluginEnabled }] : [] };
@@ -66,7 +83,7 @@ if (args[0] === 'plugin') {
     }
     else if (request.method === 'hooks/list') {
       result = { data: [{ hooks: [
-        hook('target-hook', 'context-window-rollover-reminder@jxx-codex-plugins', state.trustedHash === 'hash-for-target-hook' ? 'trusted' : 'untrusted'),
+        hook('target-hook', 'context-window-rollover-reminder@jxx-codex-plugins', state.trustedHash === targetHash() ? 'trusted' : 'untrusted'),
         hook('unrelated-hook', 'another-plugin@other-marketplace', 'untrusted'),
       ] }] };
     } else if (request.method === 'config/batchWrite') {
@@ -91,15 +108,22 @@ function withMock(callback, initial = {}) {
       marketplaceAdded: false,
       marketplaceSource: marketplaceUrl,
       snapshotMissing: false,
+      snapshotCorrupt: false,
       pluginAdded: false,
       pluginEnabled: true,
       hookEnabled: true,
       trustedHash: null,
+      revision: 0,
+      upgradeAvailable: false,
+      upgradeFails: false,
       calls: [],
       cwdCalls: [],
       rpcCalls: [],
       ...initial,
     }), 'utf8');
+    if (initial.snapshotCorrupt) {
+      mkdirSync(join(target, 'corrupt-snapshot'));
+    }
     const run = () => spawnSync(process.execPath, [helper, '--target', target, '--codex-command', command], {
       encoding: 'utf8', timeout: 30000,
     });
@@ -119,7 +143,10 @@ test('installs the marketplace and plugin, then trusts only its PostToolUse hook
     const result = run();
     assert.equal(result.error, undefined, result.error?.message);
     assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(JSON.parse(result.stdout), { marketplaceAdded: true, pluginAdded: true, hookTrusted: true });
+    assert.deepEqual(JSON.parse(result.stdout), {
+      marketplaceAdded: true, pluginAdded: true, hookTrusted: true,
+      upgradeAttempted: true, upgradeSucceeded: true, marketplaceUpgraded: false, marketplaceUpgradeError: null,
+    });
 
     const installed = state();
     assert.equal(installed.marketplaceAdded, true);
@@ -127,6 +154,7 @@ test('installs the marketplace and plugin, then trusts only its PostToolUse hook
     assert.equal(installed.trustedHash, 'hash-for-target-hook');
     assert.deepEqual(installed.calls.filter((args) => args[0] === 'plugin'), [
       ['plugin', 'marketplace', 'add', marketplaceUrl, '--json'],
+      ['plugin', 'marketplace', 'upgrade', 'jxx-codex-plugins', '--json'],
       ['plugin', 'list', '--marketplace', 'jxx-codex-plugins', '--json'],
       ['plugin', 'add', pluginId, '--json'],
       ['plugin', 'list', '--marketplace', 'jxx-codex-plugins', '--json'],
@@ -144,15 +172,19 @@ test('installs the marketplace and plugin, then trusts only its PostToolUse hook
   });
 });
 
-test('repeating installation does not add dependencies or write hook trust again', { skip: process.platform !== 'win32' }, () => {
+test('repeating installation attempts upgrade without adding dependencies or writing hook trust again', { skip: process.platform !== 'win32' }, () => {
   withMock(({ run, state }) => {
     assert.equal(run().status, 0);
     const before = state();
     const result = run();
     assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(JSON.parse(result.stdout), { marketplaceAdded: false, pluginAdded: false, hookTrusted: false });
+    assert.deepEqual(JSON.parse(result.stdout), {
+      marketplaceAdded: false, pluginAdded: false, hookTrusted: false,
+      upgradeAttempted: true, upgradeSucceeded: true, marketplaceUpgraded: false, marketplaceUpgradeError: null,
+    });
     const subsequentCalls = state().calls.slice(before.calls.length);
     assert.deepEqual(subsequentCalls.filter((args) => args[0] === 'plugin'), [
+      ['plugin', 'marketplace', 'upgrade', 'jxx-codex-plugins', '--json'],
       ['plugin', 'list', '--marketplace', 'jxx-codex-plugins', '--json'],
     ]);
     const subsequentRpcCalls = state().rpcCalls.slice(before.rpcCalls.length);
@@ -166,7 +198,10 @@ test('accepts an existing marketplace URL without the .git suffix', { skip: proc
   withMock(({ run, state }) => {
     const result = run();
     assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(JSON.parse(result.stdout), { marketplaceAdded: false, pluginAdded: true, hookTrusted: true });
+    assert.deepEqual(JSON.parse(result.stdout), {
+      marketplaceAdded: false, pluginAdded: true, hookTrusted: true,
+      upgradeAttempted: true, upgradeSucceeded: true, marketplaceUpgraded: false, marketplaceUpgradeError: null,
+    });
     assert.equal(state().calls.some((args) => args[0] === 'plugin' && args[1] === 'marketplace' && args[2] === 'add'), false);
   }, {
     marketplaceAdded: true,
@@ -178,15 +213,84 @@ test('materializes a declared marketplace when its local snapshot is missing', {
   withMock(({ run, state }) => {
     const result = run();
     assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(JSON.parse(result.stdout), { marketplaceAdded: true, pluginAdded: true, hookTrusted: true });
+    const status = JSON.parse(result.stdout);
+    assert.deepEqual({ ...status, marketplaceUpgradeError: null }, {
+      marketplaceAdded: true, pluginAdded: true, hookTrusted: true,
+      upgradeAttempted: true, upgradeSucceeded: false, marketplaceUpgraded: false, marketplaceUpgradeError: null,
+    });
+    assert.match(status.marketplaceUpgradeError, /mock marketplace upgrade failed/);
     const current = state();
     assert.equal(current.snapshotMissing, false);
     assert.deepEqual(current.calls.filter((args) => args[0] === 'plugin').slice(0, 3), [
+      ['plugin', 'marketplace', 'upgrade', 'jxx-codex-plugins', '--json'],
       ['plugin', 'list', '--marketplace', 'jxx-codex-plugins', '--json'],
       ['plugin', 'marketplace', 'add', marketplaceUrl, '--json'],
+    ]);
+  }, { marketplaceAdded: true, snapshotMissing: true, upgradeFails: true });
+});
+
+test('upgrades a declared marketplace before reading its corrupt local snapshot', { skip: process.platform !== 'win32' }, () => {
+  withMock(({ run, state }) => {
+    const result = run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      marketplaceAdded: false, pluginAdded: true, hookTrusted: true,
+      upgradeAttempted: true, upgradeSucceeded: true, marketplaceUpgraded: true, marketplaceUpgradeError: null,
+    });
+    const current = state();
+    assert.equal(current.snapshotCorrupt, false);
+    assert.deepEqual(current.calls.filter((args) => args[0] === 'plugin').slice(0, 2), [
+      ['plugin', 'marketplace', 'upgrade', 'jxx-codex-plugins', '--json'],
       ['plugin', 'list', '--marketplace', 'jxx-codex-plugins', '--json'],
     ]);
-  }, { marketplaceAdded: true, snapshotMissing: true });
+  }, { marketplaceAdded: true, snapshotCorrupt: true });
+});
+
+test('trusts the updated hook hash when a marketplace upgrade changes revision', { skip: process.platform !== 'win32' }, () => {
+  withMock(({ run, state }) => {
+    const result = run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      marketplaceAdded: false, pluginAdded: false, hookTrusted: true,
+      upgradeAttempted: true, upgradeSucceeded: true, marketplaceUpgraded: true, marketplaceUpgradeError: null,
+    });
+    const current = state();
+    assert.equal(current.revision, 1);
+    assert.equal(current.trustedHash, 'hash-for-target-hook-revision-1');
+    assert.deepEqual(current.calls.filter((args) => args[0] === 'plugin'), [
+      ['plugin', 'marketplace', 'upgrade', 'jxx-codex-plugins', '--json'],
+      ['plugin', 'list', '--marketplace', 'jxx-codex-plugins', '--json'],
+    ]);
+    const writes = current.rpcCalls.filter(({ method }) => method === 'config/batchWrite');
+    assert.equal(writes.length, 1);
+    assert.deepEqual(writes[0].params.edits, [
+      { keyPath: 'hooks.state."target-hook".trusted_hash', value: 'hash-for-target-hook-revision-1', mergeStrategy: 'replace' },
+    ]);
+  }, {
+    marketplaceAdded: true, pluginAdded: true, trustedHash: 'hash-for-target-hook', upgradeAvailable: true,
+  });
+});
+
+test('reports marketplace upgrade failure while continuing with an available plugin', { skip: process.platform !== 'win32' }, () => {
+  withMock(({ run, state }) => {
+    const result = run();
+    assert.equal(result.status, 0, result.stderr);
+    const status = JSON.parse(result.stdout);
+    assert.deepEqual({ ...status, marketplaceUpgradeError: null }, {
+      marketplaceAdded: false, pluginAdded: false, hookTrusted: false,
+      upgradeAttempted: true, upgradeSucceeded: false, marketplaceUpgraded: false, marketplaceUpgradeError: null,
+    });
+    assert.match(status.marketplaceUpgradeError, /mock marketplace upgrade failed/);
+    assert.match(result.stderr, /mock marketplace upgrade failed/);
+    const current = state();
+    assert.equal(current.pluginEnabled, true);
+    assert.equal(current.trustedHash, 'hash-for-target-hook');
+    assert.equal(current.rpcCalls.some(({ method }) => method === 'config/batchWrite'), false);
+    assert.deepEqual(current.calls.filter((args) => args[0] === 'plugin'), [
+      ['plugin', 'marketplace', 'upgrade', 'jxx-codex-plugins', '--json'],
+      ['plugin', 'list', '--marketplace', 'jxx-codex-plugins', '--json'],
+    ]);
+  }, { marketplaceAdded: true, pluginAdded: true, trustedHash: 'hash-for-target-hook', upgradeFails: true });
 });
 
 for (const [name, disabledState] of [
@@ -199,6 +303,7 @@ for (const [name, disabledState] of [
       assert.equal(result.error, undefined, result.error?.message);
       assert.notEqual(result.status, 0);
       assert.match(result.stderr, /disabled/);
+      assert.equal(state().calls.some((args) => args[0] === 'plugin' && args[1] === 'marketplace' && args[2] === 'upgrade'), true);
       assert.equal(state().rpcCalls.some(({ method }) => method === 'config/batchWrite'), false);
       assert.equal(state().trustedHash, null);
     }, disabledState);

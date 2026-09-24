@@ -394,6 +394,19 @@ test('installation reports a failed plugin dependency setup', { skip: !hasPwsh }
   });
 });
 
+test('installation continues when plugin upgrade reports a warning', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const targetPath = join(tempDir, 'target');
+    writeFileSync(join(localPath, 'tools', 'ensure-rollover-plugin.cjs'), "console.error('mock plugin upgrade warning'); console.log('{}');\n", 'utf8');
+    commitAll(localPath, 'Report plugin upgrade warning');
+
+    const result = runInstaller(localPath, targetPath);
+    assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
+    assert.match([result.stdout, result.stderr].join('\n'), /mock plugin upgrade warning/);
+  });
+});
+
 test('a failed local git pull stops before touching the install target', { skip: !hasPwsh }, () => {
   withTempDir((tempDir) => {
     const { localPath, seedPath } = createLocalRepository(tempDir);

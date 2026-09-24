@@ -259,7 +259,15 @@ async function ensurePlugin({ target, command }) {
   if (!fs.existsSync(codex)) throw new Error(`Codex CLI does not exist: ${codex}`);
   const env = { ...process.env, CODEX_HOME: target };
   await checkPython(env);
-  const status = { marketplaceAdded: false, pluginAdded: false, hookTrusted: false };
+  const status = {
+    marketplaceAdded: false,
+    pluginAdded: false,
+    hookTrusted: false,
+    upgradeAttempted: false,
+    upgradeSucceeded: false,
+    marketplaceUpgraded: false,
+    marketplaceUpgradeError: null,
+  };
 
   const marketplace = await readMarketplaceDeclaration(codex, env, target);
   if (marketplace && !isExpectedMarketplace(marketplace)) {
@@ -268,6 +276,16 @@ async function ensurePlugin({ target, command }) {
   if (!marketplace) {
     await runJsonCommand(codex, ['plugin', 'marketplace', 'add', MARKETPLACE_URL, '--json'], env);
     status.marketplaceAdded = true;
+  }
+
+  status.upgradeAttempted = true;
+  try {
+    const upgrade = await runJsonCommand(codex, ['plugin', 'marketplace', 'upgrade', MARKETPLACE, '--json'], env);
+    status.upgradeSucceeded = true;
+    status.marketplaceUpgraded = Array.isArray(upgrade?.upgradedRoots) && upgrade.upgradedRoots.length > 0;
+  } catch (error) {
+    status.marketplaceUpgradeError = error.message;
+    process.stderr.write(`Marketplace ${MARKETPLACE} upgrade failed; checking the existing plugin: ${error.message}\n`);
   }
 
   const listPlugins = () => runJsonCommand(codex, ['plugin', 'list', '--marketplace', MARKETPLACE, '--json'], env);
