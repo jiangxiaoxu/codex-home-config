@@ -16,11 +16,17 @@ const OUTPUT_LIMIT = 8 * 1024 * 1024;
 function parseArgs(argv) {
   let target;
   let command;
-  for (let index = 0; index < argv.length; index += 2) {
+  let json = false;
+  for (let index = 0; index < argv.length; index += 1) {
     const option = argv[index];
-    const value = argv[index + 1];
-    if (!value || (option !== '--target' && option !== '--codex-command')) {
-      throw new Error('Usage: ensure-rollover-plugin.cjs --target <absolute Codex home> [--codex-command <absolute Codex CLI path>]');
+    if (option === '--json') {
+      if (json) throw new Error(`Duplicate option: ${option}`);
+      json = true;
+      continue;
+    }
+    const value = argv[++index];
+    if (!value || value.startsWith('--') || (option !== '--target' && option !== '--codex-command')) {
+      throw new Error('Usage: ensure-rollover-plugin.cjs --target <absolute Codex home> [--codex-command <absolute Codex CLI path>] [--json]');
     }
     if (option === '--target' && target === undefined) target = value;
     else if (option === '--codex-command' && command === undefined) command = value;
@@ -28,7 +34,17 @@ function parseArgs(argv) {
   }
   if (!target || !path.isAbsolute(target)) throw new Error('--target must be an absolute path');
   if (command && !path.isAbsolute(command)) throw new Error('--codex-command must be an absolute path');
-  return { target: path.resolve(target), command };
+  return { target: path.resolve(target), command, json };
+}
+
+function formatStatus(status) {
+  const marketplace = status.marketplaceAdded ? '已添加或修复' : '已配置';
+  const upgrade = !status.upgradeSucceeded
+    ? '更新失败, 已使用现有商城内容'
+    : status.marketplaceUpgraded ? '已更新' : '更新检查完成, 无新版本';
+  const plugin = status.pluginAdded ? '插件: 本次已安装并启用' : '插件: 已安装并启用';
+  const hook = status.hookTrusted ? 'hook: 本次已设置信任并验证' : 'hook: 已受信任';
+  return `商城 ${MARKETPLACE}: ${marketplace}; ${upgrade}\n${plugin}\n${hook}\n`;
 }
 
 function findCodexCommand() {
@@ -285,7 +301,7 @@ async function ensurePlugin({ target, command }) {
     status.marketplaceUpgraded = Array.isArray(upgrade?.upgradedRoots) && upgrade.upgradedRoots.length > 0;
   } catch (error) {
     status.marketplaceUpgradeError = error.message;
-    process.stderr.write(`Marketplace ${MARKETPLACE} upgrade failed; checking the existing plugin: ${error.message}\n`);
+    process.stderr.write(`商城 ${MARKETPLACE} 更新失败, 将检查现有插件: ${error.message}\n`);
   }
 
   const listPlugins = () => runJsonCommand(codex, ['plugin', 'list', '--marketplace', MARKETPLACE, '--json'], env);
@@ -336,9 +352,12 @@ async function ensurePlugin({ target, command }) {
 }
 
 if (require.main === module) {
-  Promise.resolve().then(() => ensurePlugin(parseArgs(process.argv.slice(2))))
-    .then((status) => { process.stdout.write(`${JSON.stringify(status)}\n`); })
+  Promise.resolve().then(async () => {
+    const options = parseArgs(process.argv.slice(2));
+    const status = await ensurePlugin(options);
+    process.stdout.write(options.json ? `${JSON.stringify(status)}\n` : formatStatus(status));
+  })
     .catch((error) => { process.stderr.write(`${error.message}\n`); process.exitCode = 1; });
 }
 
-module.exports = { parseArgs, findCodexCommand, commandSpec, findHook, isExpectedMarketplace, isMissingMarketplaceSnapshot, ensurePlugin, RpcClient, checkPython };
+module.exports = { parseArgs, formatStatus, findCodexCommand, commandSpec, findHook, isExpectedMarketplace, isMissingMarketplaceSnapshot, ensurePlugin, RpcClient, checkPython };

@@ -124,7 +124,9 @@ function withMock(callback, initial = {}) {
     if (initial.snapshotCorrupt) {
       mkdirSync(join(target, 'corrupt-snapshot'));
     }
-    const run = () => spawnSync(process.execPath, [helper, '--target', target, '--codex-command', command], {
+    const run = ({ json = true } = {}) => spawnSync(process.execPath, [
+      helper, '--target', target, '--codex-command', command, ...(json ? ['--json'] : []),
+    ], {
       encoding: 'utf8', timeout: 30000,
     });
     const state = () => {
