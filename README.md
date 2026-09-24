@@ -45,9 +45,9 @@ iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/relea
 
 ## 插件依赖
 
-正常安装时, 安装器会检查目标 Codex home 中的 `jxx-codex-plugins` marketplace. 缺失时从 `https://github.com/jiangxiaoxu/jxx-codex-plugins.git` 添加; 已声明但本地 snapshot 缺失时重新获取. 每次安装都会尝试执行 `codex plugin marketplace upgrade jxx-codex-plugins`, 检查远端 revision; 有更新时, Codex 会刷新该商城内所有已配置插件的缓存, 包括已禁用的插件, 并保留它们的启用状态. 升级失败时, 安装器报告错误并继续使用现有 snapshot, 前提是目标插件仍可用. 随后在缺失时安装 `context-window-rollover-reminder@jxx-codex-plugins`. 安装器从目标 Codex 的 `hooks/list` 获取该插件当前 `PostToolUse` hook 的 hash, 将对应信任值写入目标 `config.toml`, 并复查 hook 已启用且受信任.
+正常安装时, 安装器会检查目标 Codex home 中的 `jxx-codex-plugins` marketplace. 缺失时从 `https://github.com/jiangxiaoxu/jxx-codex-plugins.git` 添加; 已声明但本地 snapshot 缺失时重新获取. 每次安装都会尝试执行 `codex plugin marketplace upgrade jxx-codex-plugins`, 检查远端 revision; 有更新时, Codex 会刷新该商城内所有已配置插件的缓存, 包括已禁用的插件, 并保留它们的启用状态. 升级失败时, 安装器报告错误并继续使用现有 snapshot, 前提是目标插件仍可用. 随后在缺失时安装 `context-window-rollover-reminder@jxx-codex-plugins`. 安装器从目标 Codex 的 `hooks/list` 获取该插件全部 hook 的当前 hash, 将它们设为启用并写入信任值, 最后逐个复查.
 
-插件或 hook 若已被显式禁用, 安装器会报错并保留禁用状态. `-DryRun` 不执行插件安装或 hook 信任操作, 只预览 managed 文件更新.
+插件本身若已被显式禁用, 安装器会报错并保留禁用状态; 该插件的 hook 即使此前关闭也会重新启用并信任. `-DryRun` 不执行插件安装或 hook 信任操作, 只预览 managed 文件更新.
 
 ## 备份
 

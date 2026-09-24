@@ -129,10 +129,15 @@ function createPublishedReleaseArchive(tempDir) {
   return archivePath;
 }
 
-function runInstaller(repositoryPath, targetPath, args = []) {
+function runInstaller(repositoryPath, targetPath, args = [], {
+  shell = pwshPath,
+  commandPrefix = '',
+  encoding = 'utf8'
+} = {}) {
   const quotePowerShell = (value) => `'${value.replaceAll("'", "''")}'`;
   const commandArguments = args.map((argument) => argument.startsWith('-') ? argument : quotePowerShell(argument));
   const command = [
+    ...(commandPrefix ? [commandPrefix + ';'] : []),
     '&',
     quotePowerShell(join(repositoryPath, 'install-codex-home-config.ps1')),
     '-TargetCodexPath',
@@ -141,7 +146,7 @@ function runInstaller(repositoryPath, targetPath, args = []) {
   ].join(' ');
 
   return spawnSync(
-    pwshPath,
+    shell,
     [
       '-NoLogo',
       '-NoProfile',
@@ -153,7 +158,7 @@ function runInstaller(repositoryPath, targetPath, args = []) {
     ],
     {
       cwd: repositoryPath,
-      encoding: 'utf8',
+      encoding,
       timeout: 30000
     }
   );
@@ -377,6 +382,34 @@ test('installation replaces a stale model catalog path with the target path', { 
     assert.equal(TOML.parse(readFileSync(join(targetPath, 'config.toml'), 'utf8')).model_catalog_json, join(targetPath, 'models.local.json'));
     assert.deepEqual(readFileSync(join(targetPath, 'models.local.json')), modelsLocalFixture);
     assert.ok(result.stdout.includes(`Plugin dependency test stub: ${targetPath}`));
+  });
+});
+
+test('installer preserves UTF-8 plugin status under a legacy console code page', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const status = '\u5546\u57ce: \u5df2\u914d\u7f6e';
+    writeFileSync(
+      join(localPath, 'tools', 'ensure-rollover-plugin.cjs'),
+      String.raw`console.log('\u5546\u57ce: \u5df2\u914d\u7f6e');` + '\n',
+      'utf8'
+    );
+    commitAll(localPath, 'Emit Chinese plugin status');
+
+    const shells = [pwshPath, ...(hasWindowsPowerShell ? [windowsPowerShellPath] : [])];
+    for (const shell of shells) {
+      const targetPath = join(tempDir, shell === pwshPath ? 'pwsh-target' : 'windows-powershell-target');
+      const result = runInstaller(localPath, targetPath, [], {
+        shell,
+        commandPrefix: '[Console]::OutputEncoding = [Text.Encoding]::GetEncoding(936)',
+        encoding: 'buffer'
+      });
+      const stdout = new TextDecoder('gbk').decode(result.stdout);
+      const stderr = new TextDecoder('gbk').decode(result.stderr);
+      assert.equal(result.status, 0, `${shell}: ${[stdout, stderr].filter(Boolean).join('\n')}`);
+      assert.ok(stdout.includes(status), `${shell}: ${stdout}`);
+      assert.doesNotMatch(stdout, /\u935f\u55d7\u7144/, `${shell}: mojibake in plugin status`);
+    }
   });
 });
 

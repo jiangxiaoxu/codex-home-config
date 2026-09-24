@@ -20,10 +20,10 @@ state.calls.push(args);
 state.cwdCalls.push(process.cwd());
 save();
 
-const targetHash = () => 'hash-for-target-hook' + (state.revision ? '-revision-' + state.revision : '');
-const hook = (key, pluginId, trustStatus) => ({
-  key, pluginId, eventName: 'postToolUse', enabled: state.hookEnabled,
-  currentHash: key === 'target-hook' ? targetHash() : 'hash-for-' + key, trustStatus,
+const targetHash = (key) => 'hash-for-' + key + (state.revision ? '-revision-' + state.revision : '');
+const hook = (key, pluginId, eventName, enabled, trustStatus) => ({
+  key, pluginId, eventName, enabled,
+  currentHash: targetHash(key), trustStatus,
 });
 
 if (args[0] === 'plugin') {
@@ -83,12 +83,17 @@ if (args[0] === 'plugin') {
     }
     else if (request.method === 'hooks/list') {
       result = { data: [{ hooks: [
-        hook('target-hook', 'context-window-rollover-reminder@jxx-codex-plugins', state.trustedHash === targetHash() ? 'trusted' : 'untrusted'),
-        hook('unrelated-hook', 'another-plugin@other-marketplace', 'untrusted'),
+        hook('target-hook', 'context-window-rollover-reminder@jxx-codex-plugins', 'postToolUse', state.hookEnabled, state.trustedHash === targetHash('target-hook') ? 'trusted' : 'untrusted'),
+        hook('target-second-hook', 'context-window-rollover-reminder@jxx-codex-plugins', 'sessionStart', state.secondHookEnabled, state.secondTrustedHash === targetHash('target-second-hook') ? 'trusted' : 'untrusted'),
+        hook('unrelated-hook', 'another-plugin@other-marketplace', 'postToolUse', state.unrelatedHookEnabled, 'untrusted'),
       ] }] };
     } else if (request.method === 'config/batchWrite') {
       for (const edit of request.params.edits) {
         if (edit.keyPath === 'hooks.state."target-hook".trusted_hash') state.trustedHash = edit.value;
+        else if (edit.keyPath === 'hooks.state."target-hook".enabled') state.hookEnabled = edit.value;
+        else if (edit.keyPath === 'hooks.state."target-second-hook".trusted_hash') state.secondTrustedHash = edit.value;
+        else if (edit.keyPath === 'hooks.state."target-second-hook".enabled') state.secondHookEnabled = edit.value;
+        else throw new Error('unexpected hook edit: ' + edit.keyPath);
       }
       result = {};
     } else process.exit(4);
@@ -113,6 +118,9 @@ function withMock(callback, initial = {}) {
       pluginEnabled: true,
       hookEnabled: true,
       trustedHash: null,
+      secondHookEnabled: true,
+      secondTrustedHash: null,
+      unrelatedHookEnabled: false,
       revision: 0,
       upgradeAvailable: false,
       upgradeFails: false,
@@ -140,7 +148,7 @@ function withMock(callback, initial = {}) {
   }
 }
 
-test('installs the marketplace and plugin, then trusts only its PostToolUse hook', { skip: process.platform !== 'win32' }, () => {
+test('installs the marketplace and plugin, then trusts all target hooks only', { skip: process.platform !== 'win32' }, () => {
   withMock(({ run, state, target }) => {
     const result = run();
     assert.equal(result.error, undefined, result.error?.message);
@@ -154,6 +162,8 @@ test('installs the marketplace and plugin, then trusts only its PostToolUse hook
     assert.equal(installed.marketplaceAdded, true);
     assert.equal(installed.pluginAdded, true);
     assert.equal(installed.trustedHash, 'hash-for-target-hook');
+    assert.equal(installed.secondTrustedHash, 'hash-for-target-second-hook');
+    assert.equal(installed.unrelatedHookEnabled, false);
     assert.deepEqual(installed.calls.filter((args) => args[0] === 'plugin'), [
       ['plugin', 'marketplace', 'add', marketplaceUrl, '--json'],
       ['plugin', 'marketplace', 'upgrade', 'jxx-codex-plugins', '--json'],
@@ -168,7 +178,10 @@ test('installs the marketplace and plugin, then trusts only its PostToolUse hook
     const writes = installed.rpcCalls.filter(({ method }) => method === 'config/batchWrite');
     assert.equal(writes.length, 1);
     assert.deepEqual(writes[0].params, {
-      edits: [{ keyPath: 'hooks.state."target-hook".trusted_hash', value: 'hash-for-target-hook', mergeStrategy: 'replace' }],
+      edits: [
+        { keyPath: 'hooks.state."target-hook".trusted_hash', value: 'hash-for-target-hook', mergeStrategy: 'replace' },
+        { keyPath: 'hooks.state."target-second-hook".trusted_hash', value: 'hash-for-target-second-hook', mergeStrategy: 'replace' },
+      ],
       reloadUserConfig: true,
     });
   });
@@ -259,6 +272,7 @@ test('trusts the updated hook hash when a marketplace upgrade changes revision',
     const current = state();
     assert.equal(current.revision, 1);
     assert.equal(current.trustedHash, 'hash-for-target-hook-revision-1');
+    assert.equal(current.secondTrustedHash, 'hash-for-target-second-hook-revision-1');
     assert.deepEqual(current.calls.filter((args) => args[0] === 'plugin'), [
       ['plugin', 'marketplace', 'upgrade', 'jxx-codex-plugins', '--json'],
       ['plugin', 'list', '--marketplace', 'jxx-codex-plugins', '--json'],
@@ -267,6 +281,7 @@ test('trusts the updated hook hash when a marketplace upgrade changes revision',
     assert.equal(writes.length, 1);
     assert.deepEqual(writes[0].params.edits, [
       { keyPath: 'hooks.state."target-hook".trusted_hash', value: 'hash-for-target-hook-revision-1', mergeStrategy: 'replace' },
+      { keyPath: 'hooks.state."target-second-hook".trusted_hash', value: 'hash-for-target-second-hook-revision-1', mergeStrategy: 'replace' },
     ]);
   }, {
     marketplaceAdded: true, pluginAdded: true, trustedHash: 'hash-for-target-hook', upgradeAvailable: true,
@@ -287,27 +302,70 @@ test('reports marketplace upgrade failure while continuing with an available plu
     const current = state();
     assert.equal(current.pluginEnabled, true);
     assert.equal(current.trustedHash, 'hash-for-target-hook');
+    assert.equal(current.secondTrustedHash, 'hash-for-target-second-hook');
     assert.equal(current.rpcCalls.some(({ method }) => method === 'config/batchWrite'), false);
     assert.deepEqual(current.calls.filter((args) => args[0] === 'plugin'), [
       ['plugin', 'marketplace', 'upgrade', 'jxx-codex-plugins', '--json'],
       ['plugin', 'list', '--marketplace', 'jxx-codex-plugins', '--json'],
     ]);
-  }, { marketplaceAdded: true, pluginAdded: true, trustedHash: 'hash-for-target-hook', upgradeFails: true });
+  }, { marketplaceAdded: true, pluginAdded: true, trustedHash: 'hash-for-target-hook', secondTrustedHash: 'hash-for-target-second-hook', upgradeFails: true });
 });
 
-for (const [name, disabledState] of [
-  ['plugin', { marketplaceAdded: true, pluginAdded: true, pluginEnabled: false }],
-  ['hook', { marketplaceAdded: true, pluginAdded: true, hookEnabled: false }],
-]) {
-  test(`fails when the ${name} is explicitly disabled`, { skip: process.platform !== 'win32' }, () => {
-    withMock(({ run, state }) => {
-      const result = run();
-      assert.equal(result.error, undefined, result.error?.message);
-      assert.notEqual(result.status, 0);
-      assert.match(result.stderr, /disabled/);
-      assert.equal(state().calls.some((args) => args[0] === 'plugin' && args[1] === 'marketplace' && args[2] === 'upgrade'), true);
-      assert.equal(state().rpcCalls.some(({ method }) => method === 'config/batchWrite'), false);
-      assert.equal(state().trustedHash, null);
-    }, disabledState);
+test('enables a disabled target hook and trusts all target hooks without changing another plugin', { skip: process.platform !== 'win32' }, () => {
+  withMock(({ run, state }) => {
+    const result = run();
+    assert.equal(result.status, 0, result.stderr);
+    const current = state();
+    assert.equal(current.hookEnabled, true);
+    assert.equal(current.secondHookEnabled, true);
+    assert.equal(current.unrelatedHookEnabled, false);
+    assert.equal(current.trustedHash, 'hash-for-target-hook');
+    assert.equal(current.secondTrustedHash, 'hash-for-target-second-hook');
+    const writes = current.rpcCalls.filter(({ method }) => method === 'config/batchWrite');
+    assert.equal(writes.length, 1);
+    assert.deepEqual(writes[0].params, {
+      edits: [
+        { keyPath: 'hooks.state."target-hook".enabled', value: true, mergeStrategy: 'replace' },
+        { keyPath: 'hooks.state."target-hook".trusted_hash', value: 'hash-for-target-hook', mergeStrategy: 'replace' },
+        { keyPath: 'hooks.state."target-second-hook".trusted_hash', value: 'hash-for-target-second-hook', mergeStrategy: 'replace' },
+      ],
+      reloadUserConfig: true,
+    });
+  }, { marketplaceAdded: true, pluginAdded: true, hookEnabled: false });
+});
+
+test('enables an already trusted target hook without rewriting trusted hashes', { skip: process.platform !== 'win32' }, () => {
+  withMock(({ run, state }) => {
+    const result = run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).hookTrusted, false);
+    const current = state();
+    assert.equal(current.hookEnabled, true);
+    assert.equal(current.secondHookEnabled, true);
+    assert.equal(current.unrelatedHookEnabled, false);
+    assert.equal(current.trustedHash, 'hash-for-target-hook');
+    assert.equal(current.secondTrustedHash, 'hash-for-target-second-hook');
+    const writes = current.rpcCalls.filter(({ method }) => method === 'config/batchWrite');
+    assert.equal(writes.length, 1);
+    assert.deepEqual(writes[0].params, {
+      edits: [{ keyPath: 'hooks.state."target-hook".enabled', value: true, mergeStrategy: 'replace' }],
+      reloadUserConfig: true,
+    });
+    assert.equal(current.rpcCalls.filter(({ method }) => method === 'hooks/list').length, 2);
+  }, {
+    marketplaceAdded: true, pluginAdded: true, hookEnabled: false,
+    trustedHash: 'hash-for-target-hook', secondTrustedHash: 'hash-for-target-second-hook',
   });
-}
+});
+
+test('fails when the plugin itself is explicitly disabled', { skip: process.platform !== 'win32' }, () => {
+  withMock(({ run, state }) => {
+    const result = run();
+    assert.equal(result.error, undefined, result.error?.message);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /disabled/);
+    assert.equal(state().calls.some((args) => args[0] === 'plugin' && args[1] === 'marketplace' && args[2] === 'upgrade'), true);
+    assert.equal(state().rpcCalls.some(({ method }) => method === 'config/batchWrite'), false);
+    assert.equal(state().trustedHash, null);
+  }, { marketplaceAdded: true, pluginAdded: true, pluginEnabled: false });
+});

@@ -43,7 +43,7 @@ function formatStatus(status) {
     ? '更新失败, 已使用现有商城内容'
     : status.marketplaceUpgraded ? '已更新' : '更新检查完成, 无新版本';
   const plugin = status.pluginAdded ? '插件: 本次已安装并启用' : '插件: 已安装并启用';
-  const hook = status.hookTrusted ? 'hook: 本次已设置信任并验证' : 'hook: 已受信任';
+  const hook = '全部 hook: 已启用并受信任';
   return `商城 ${MARKETPLACE}: ${marketplace}; ${upgrade}\n${plugin}\n${hook}\n`;
 }
 
@@ -226,16 +226,17 @@ class RpcClient {
   }
 }
 
-function findHook(result) {
+function findHooks(result) {
   if (!Array.isArray(result?.data)) throw new Error('hooks/list returned an unexpected response');
   const hooks = result.data.flatMap((entry) => Array.isArray(entry.hooks) ? entry.hooks : []);
-  const matches = hooks.filter((hook) => hook.pluginId === PLUGIN_ID && hook.eventName === 'postToolUse');
-  if (matches.length !== 1) throw new Error(`Expected one PostToolUse hook for ${PLUGIN_ID}; found ${matches.length}`);
-  const hook = matches[0];
-  if (typeof hook.key !== 'string' || !hook.key || typeof hook.currentHash !== 'string' || !hook.currentHash) {
-    throw new Error('Target hook is missing key or currentHash');
+  const matches = hooks.filter((hook) => hook.pluginId === PLUGIN_ID);
+  if (matches.length === 0) throw new Error(`Expected at least one hook for ${PLUGIN_ID}`);
+  for (const hook of matches) {
+    if (typeof hook.key !== 'string' || !hook.key || typeof hook.currentHash !== 'string' || !hook.currentHash) {
+      throw new Error('Target hook is missing key or currentHash');
+    }
   }
-  return hook;
+  return matches;
 }
 
 function isExpectedMarketplace(item) {
@@ -331,19 +332,27 @@ async function ensurePlugin({ target, command }) {
     await rpc.request('initialize', { clientInfo: { name: 'codex-home-config-installer', version: '1' }, capabilities: { experimentalApi: true } });
     rpc.notify('initialized', {});
     const listHooks = () => rpc.request('hooks/list', { cwds: [target] });
-    let hook = findHook(await listHooks());
-    if (hook.enabled !== true) throw new Error(`Hook ${hook.key} is disabled; enable it explicitly before installation can trust it`);
-    if (hook.trustStatus !== 'trusted') {
-      const keyPath = `hooks.state.${JSON.stringify(hook.key)}.trusted_hash`;
+    let hooks = findHooks(await listHooks());
+    const edits = [];
+    for (const hook of hooks) {
+      const keyPath = `hooks.state.${JSON.stringify(hook.key)}`;
+      if (hook.enabled !== true) edits.push({ keyPath: `${keyPath}.enabled`, value: true, mergeStrategy: 'replace' });
+      if (hook.trustStatus !== 'trusted') {
+        edits.push({ keyPath: `${keyPath}.trusted_hash`, value: hook.currentHash, mergeStrategy: 'replace' });
+        status.hookTrusted = true;
+      }
+    }
+    if (edits.length > 0) {
       await rpc.request('config/batchWrite', {
-        edits: [{ keyPath, value: hook.currentHash, mergeStrategy: 'replace' }],
+        edits,
         reloadUserConfig: true,
       });
-      status.hookTrusted = true;
-      hook = findHook(await listHooks());
+      hooks = findHooks(await listHooks());
     }
-    if (hook.enabled !== true || hook.trustStatus !== 'trusted') {
-      throw new Error(`Hook ${hook.key} is not enabled and trusted after configuration`);
+    for (const hook of hooks) {
+      if (hook.enabled !== true || hook.trustStatus !== 'trusted') {
+        throw new Error(`Hook ${hook.key} is not enabled and trusted after configuration`);
+      }
     }
     return status;
   } finally {
@@ -360,4 +369,4 @@ if (require.main === module) {
     .catch((error) => { process.stderr.write(`${error.message}\n`); process.exitCode = 1; });
 }
 
-module.exports = { parseArgs, formatStatus, findCodexCommand, commandSpec, findHook, isExpectedMarketplace, isMissingMarketplaceSnapshot, ensurePlugin, RpcClient, checkPython };
+module.exports = { parseArgs, formatStatus, findCodexCommand, commandSpec, findHooks, isExpectedMarketplace, isMissingMarketplaceSnapshot, ensurePlugin, RpcClient, checkPython };

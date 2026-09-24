@@ -737,12 +737,15 @@ function Invoke-RolloverPluginDependency {
 
     Write-StageMessage 'Ensuring context-window-rollover-reminder plugin and hook trust...'
     $previousErrorActionPreference = $ErrorActionPreference
+    $previousConsoleOutputEncoding = [Console]::OutputEncoding
     try {
         $ErrorActionPreference = 'Continue'
+        [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
         $toolOutput = @(& $nodeExecutable $toolPath --target ([System.IO.Path]::GetFullPath($TargetCodexPath)) 2>&1)
         $toolExitCode = $LASTEXITCODE
     }
     finally {
+        [Console]::OutputEncoding = $previousConsoleOutputEncoding
         $ErrorActionPreference = $previousErrorActionPreference
     }
 
