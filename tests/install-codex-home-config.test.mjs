@@ -473,10 +473,6 @@ test('UsePublishedRelease ignores a dirty local checkout and installs the mocked
     assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
     assert.match(readFileSync(join(targetPath, 'config.toml'), 'utf8'), /published-release/);
     assert.equal(readFileSync(join(targetPath, 'AGENTS.md'), 'utf8'), 'published release instructions\n');
-    assert.match(result.stdout, /Branch: release/);
-    assert.match(result.stdout, /Subject: Published release snapshot/);
-    assert.match(result.stdout, /Source: remote published release branch/);
-    assert.doesNotMatch(result.stdout, /Pulling latest changes for local branch|Using local repository snapshot/);
   });
 });
 

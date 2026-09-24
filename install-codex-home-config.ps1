@@ -229,7 +229,6 @@ function Assert-NodeEnvironment {
         return $runtimeState.NodeExecutable
     }
 
-    Write-StageMessage 'Checking Node.js runtime...'
     $nodeExecutable = Get-NodeExecutable
     if ([string]::IsNullOrWhiteSpace($nodeExecutable)) {
         throw 'Node.js 18 or later is required. Install Node.js from https://nodejs.org/ and retry.'
@@ -243,7 +242,6 @@ function Assert-NodeEnvironment {
 
     $runtimeState.NodeExecutable = $nodeExecutable
     $runtimeState.NodeVersionText = $versionText
-    Write-StageMessage "Using Node.js runtime: $versionText"
     return $nodeExecutable
 }
 
@@ -352,7 +350,7 @@ function Invoke-LatestInstaller {
     $argumentList.Add('-EncodedCommand')
     $argumentList.Add($encodedCommand)
 
-    Write-StageMessage "Repository updated; relaunching the latest installer from $installerPath"
+    Write-StageMessage 'Repository updated; relaunching the latest installer...'
     $powerShellExecutable = Get-PowerShellExecutablePath
     & $powerShellExecutable @($argumentList)
     if ($LASTEXITCODE -ne 0) {
@@ -401,7 +399,6 @@ function Invoke-LocalRepositoryPull {
         return
     }
 
-    Write-StageMessage "Local branch '$branchName' is up to date."
 }
 
 function Invoke-GitHubApiRequest {
@@ -578,41 +575,13 @@ function Show-InstallCommitInfo {
         return
     }
 
-    Write-Output "Install source commit:"
-    if (-not [string]::IsNullOrWhiteSpace($commitInfo.Branch)) {
-        Write-Output "  Branch: $($commitInfo.Branch)"
-    }
-
-    Write-Output "  SHA: $($commitInfo.Sha)"
-    Write-Output "  Short SHA: $($commitInfo.ShortSha)"
+    $sourceKind = if ($commitInfo.Source -eq 'local repository branch') { 'local' } else { 'published' }
+    $sourceName = if ([string]::IsNullOrWhiteSpace($commitInfo.Branch)) { 'branch' } else { $commitInfo.Branch }
+    $sourceSummary = "Source: $sourceKind $sourceName @ $($commitInfo.ShortSha)"
     if (-not [string]::IsNullOrWhiteSpace($commitInfo.Subject)) {
-        Write-Output "  Subject: $($commitInfo.Subject)"
+        $sourceSummary += " | $($commitInfo.Subject)"
     }
-
-    if (-not [string]::IsNullOrWhiteSpace($commitInfo.Description)) {
-        Write-Output '  Description:'
-        foreach ($line in @($commitInfo.Description -split "(`r`n|`n|`r)")) {
-            if ([string]::IsNullOrWhiteSpace($line)) {
-                continue
-            }
-
-            Write-Output "    $line"
-        }
-    }
-
-    if (-not [string]::IsNullOrWhiteSpace($commitInfo.CommitterName)) {
-        Write-Output "  Committer: $($commitInfo.CommitterName)"
-    }
-
-    if (-not [string]::IsNullOrWhiteSpace($commitInfo.CommitDateText)) {
-        Write-Output "  Committed at: $($commitInfo.CommitDateText)"
-    }
-
-    if (-not [string]::IsNullOrWhiteSpace($commitInfo.HtmlUrl)) {
-        Write-Output "  URL: $($commitInfo.HtmlUrl)"
-    }
-
-    Write-Output "  Source: $($commitInfo.Source)"
+    Write-Output $sourceSummary
 }
 
 function Get-RepositorySupportRoot {
@@ -622,14 +591,6 @@ function Get-RepositorySupportRoot {
 
     $localRepositoryRoot = Get-LocalRepositoryRoot
     if (-not [string]::IsNullOrWhiteSpace($localRepositoryRoot)) {
-        $localBranch = Get-GitBranchName -RepositoryPath $localRepositoryRoot
-        if ([string]::IsNullOrWhiteSpace($localBranch)) {
-            Write-StageMessage 'Using local repository snapshot.'
-        }
-        else {
-            Write-StageMessage "Using local repository snapshot from branch '$localBranch'."
-        }
-
         $runtimeState.SupportRepositoryRoot = $localRepositoryRoot
         return $localRepositoryRoot
     }
@@ -653,7 +614,6 @@ function Get-RepositorySupportRoot {
 
         $runtimeState.SupportRepositoryRoot = $repositoryPath
         $runtimeState.SupportTempRoot = $tempRoot
-        Write-StageMessage 'Loaded repository support files.'
         return $repositoryPath
     }
     catch {
@@ -735,7 +695,6 @@ function Invoke-RolloverPluginDependency {
         throw "Repository support file was not found: $toolPath"
     }
 
-    Write-StageMessage 'Ensuring context-window-rollover-reminder plugin and hook trust...'
     $previousErrorActionPreference = $ErrorActionPreference
     $previousConsoleOutputEncoding = [Console]::OutputEncoding
     try {
@@ -875,19 +834,16 @@ function Backup-CurrentSnapshot {
         }
 
         if (Test-Path -LiteralPath $fileInfo.SourcePath -PathType Leaf) {
-            $backupPath = Backup-ExistingPath -SourcePath $fileInfo.SourcePath -RelativeBackupPath $fileInfo.RelativeBackupPath -TargetCodexPath $TargetCodexPath
-            Write-Output "Backed up $(Join-Path $TargetCodexPath $fileInfo.Name) to $backupPath"
+            $null = Backup-ExistingPath -SourcePath $fileInfo.SourcePath -RelativeBackupPath $fileInfo.RelativeBackupPath -TargetCodexPath $TargetCodexPath
         }
     }
 
     if ($componentSelection.AgentFolder -and (Test-Path -LiteralPath $currentSnapshot.AgentDirectoryPath -PathType Container)) {
-        $backupAgentDirectoryPath = Backup-ExistingPath -SourcePath $currentSnapshot.AgentDirectoryPath -RelativeBackupPath 'agents' -TargetCodexPath $TargetCodexPath -Recurse
-        Write-Output "Backed up $($currentSnapshot.AgentDirectoryPath) to $backupAgentDirectoryPath"
+        $null = Backup-ExistingPath -SourcePath $currentSnapshot.AgentDirectoryPath -RelativeBackupPath 'agents' -TargetCodexPath $TargetCodexPath -Recurse
     }
 
     if ($componentSelection.Skill -and (Test-Path -LiteralPath $currentSnapshot.SkillDirectoryPath -PathType Container)) {
-        $backupSkillDirectoryPath = Backup-ExistingPath -SourcePath $currentSnapshot.SkillDirectoryPath -RelativeBackupPath 'skills\jiangxiaoxu' -TargetCodexPath $TargetCodexPath -Recurse
-        Write-Output "Backed up $($currentSnapshot.SkillDirectoryPath) to $backupSkillDirectoryPath"
+        $null = Backup-ExistingPath -SourcePath $currentSnapshot.SkillDirectoryPath -RelativeBackupPath 'skills\jiangxiaoxu' -TargetCodexPath $TargetCodexPath -Recurse
     }
 }
 
@@ -1294,8 +1250,13 @@ function Install-Snapshot {
 
     if ($CreateBackup -and $effectiveSelectedComponents.Count -gt 0) {
         Backup-CurrentSnapshot -SelectedComponents $effectiveSelectedComponents -TargetCodexPath $TargetCodexPath
+        if (-not [string]::IsNullOrWhiteSpace($backupState.SessionPath)) {
+            Write-Output "Backup: $($backupState.SessionPath)"
+        }
     }
 
+    $installedPaths = @()
+    $removedPaths = @()
     foreach ($fileInfo in @(
             @{ Name = 'config.toml'; SourcePath = $SnapshotInfo.ConfigPath; Component = 'Config' },
             @{ Name = 'AGENTS.md'; SourcePath = $SnapshotInfo.AgentsPath; Component = 'AgentFile' },
@@ -1314,7 +1275,6 @@ function Install-Snapshot {
             throw "Expected file path but found a directory: $destinationPath"
         }
 
-        Write-StageMessage "Installing $($fileInfo.Name)..."
         if ($fileInfo.Component -eq 'Config') {
             Install-ConfigFile -SourcePath $fileInfo.SourcePath -DestinationPath $destinationPath -ModelCatalogJsonPath $modelCatalogJsonPath
         }
@@ -1326,9 +1286,7 @@ function Install-Snapshot {
             ConvertTo-LfLineEnding -Path $destinationPath
         }
 
-        if (-not $DryRun) {
-            Write-Output "Installed $($fileInfo.Name) to $destinationPath"
-        }
+        $installedPaths += $fileInfo.Name
     }
 
     if ($componentSelection.AgentFolder) {
@@ -1341,19 +1299,30 @@ function Install-Snapshot {
             Remove-Item -LiteralPath $targetAgentDirectoryPath -Recurse -Force
         }
 
-        Write-StageMessage 'Installing agents...'
         Copy-Item -LiteralPath $SnapshotInfo.AgentDirectoryPath -Destination $TargetCodexPath -Recurse -Force
         ConvertTo-LfLineEnding -Path $targetAgentDirectoryPath
-        if (-not $DryRun) {
-            Write-Output "Installed agents to $targetAgentDirectoryPath"
-        }
+        $installedPaths += 'agents/'
     }
 
     if ($componentSelection.Skill) {
         $targetSkillDirectoryPath = Join-Path $TargetCodexPath 'skills\jiangxiaoxu'
+        $skillExists = Test-Path -LiteralPath $targetSkillDirectoryPath -PathType Container
         Sync-SkillDirectory -SourcePath $SnapshotInfo.SkillDirectoryPath -DestinationPath $targetSkillDirectoryPath
         if (Test-Path -LiteralPath $targetSkillDirectoryPath -PathType Container) {
             ConvertTo-LfLineEnding -Path $targetSkillDirectoryPath
+            $installedPaths += 'skills/jiangxiaoxu/'
+        }
+        elseif ($skillExists) {
+            $removedPaths += 'skills/jiangxiaoxu/'
+        }
+    }
+
+    if (-not $DryRun) {
+        if ($installedPaths.Count -gt 0) {
+            Write-Output "Installed: $($installedPaths -join ', ')"
+        }
+        if ($removedPaths.Count -gt 0) {
+            Write-Output "Removed: $($removedPaths -join ', ')"
         }
     }
 }
@@ -1381,27 +1350,18 @@ function Sync-SkillDirectory {
             Remove-Item -LiteralPath $DestinationPath -Recurse -Force
         }
 
-        Write-StageMessage 'Installing skill...'
         $destinationParentPath = Split-Path -Path $DestinationPath -Parent
         $null = New-Item -ItemType Directory -Path $destinationParentPath -Force
         Copy-Item -LiteralPath $SourcePath -Destination $destinationParentPath -Recurse -Force
-        if (-not $DryRun) {
-            Write-Output "Installed skill to $DestinationPath"
-        }
         return
     }
 
     if (Test-Path -LiteralPath $DestinationPath -PathType Container) {
-        Write-StageMessage 'Removing skill...'
         if (-not $PSCmdlet.ShouldProcess($DestinationPath, 'Remove skill directory')) {
             return
         }
 
         Remove-Item -LiteralPath $DestinationPath -Recurse -Force
-        if (-not $DryRun) {
-            Write-Output "Removed skill at $DestinationPath"
-        }
-
         $destinationParentPath = Split-Path -Path $DestinationPath -Parent
         if (-not (Test-Path -LiteralPath $destinationParentPath -PathType Container)) {
             return
@@ -1410,9 +1370,6 @@ function Sync-SkillDirectory {
         $remainingEntries = @(Get-ChildItem -LiteralPath $destinationParentPath -Force)
         if (($remainingEntries.Count -eq 0) -and $PSCmdlet.ShouldProcess($destinationParentPath, 'Remove empty skills directory')) {
             Remove-Item -LiteralPath $destinationParentPath -Force
-            if (-not $DryRun) {
-                Write-Output "Removed empty skills directory at $destinationParentPath"
-            }
         }
     }
 }
@@ -1444,18 +1401,23 @@ function Remove-OldBackupVersion {
     }
 
     $directoriesToRemove = @($backupDirectories | Sort-Object Name | Select-Object -First ($backupDirectories.Count - $maxBackupVersions))
+    $recycledCount = 0
+    $deletedCount = 0
     foreach ($directory in $directoriesToRemove) {
         if ($PSCmdlet.ShouldProcess($directory.FullName, 'Remove old backup version')) {
             try {
                 Move-DirectoryToRecycleBin -DirectoryPath $directory.FullName
-                Write-Output "Moved old backup version to Recycle Bin: $($directory.FullName)"
+                $recycledCount++
             }
             catch {
                 Write-Warning "Failed to move old backup version to Recycle Bin: $($directory.FullName). Falling back to permanent deletion."
                 Remove-Item -LiteralPath $directory.FullName -Recurse -Force
-                Write-Output "Deleted old backup version: $($directory.FullName)"
+                $deletedCount++
             }
         }
+    }
+    if (($recycledCount + $deletedCount) -gt 0) {
+        Write-Output "Old backups: $recycledCount recycled, $deletedCount deleted."
     }
 }
 
@@ -1850,7 +1812,6 @@ function Invoke-UpdateAction {
     if (-not $DryRun) {
         Show-InstallCommitInfo
     }
-    Write-StageMessage 'Preparing repository snapshot...'
     $repositoryPath = Get-RepositorySupportRoot
     $managedPath = Join-Path $repositoryPath 'managed'
     $snapshotInfo = Get-SnapshotInfo -RootPath $managedPath -Name 'repository'
@@ -1861,7 +1822,7 @@ function Invoke-UpdateAction {
         return
     }
 
-    Write-StageMessage 'Installing default components...'
+    Write-Output "Target: $([System.IO.Path]::GetFullPath($TargetCodexPath))"
     Install-Snapshot -SnapshotInfo $snapshotInfo -TargetCodexPath $TargetCodexPath -SelectedComponents $defaultComponents -CreateBackup
     Remove-OldBackupVersion -TargetCodexPath $TargetCodexPath
     Invoke-RolloverPluginDependency -TargetCodexPath $TargetCodexPath
