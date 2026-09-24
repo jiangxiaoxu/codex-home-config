@@ -54,6 +54,8 @@ terminal_title = [ "spinner", "project", "status" ]
 status_line_use_colors = true
 session_picker_view = "comfortable"
 resume_cwd = "session"
+screen_reader_detection_done = true
+fullscreen_transcript = true
 
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"
