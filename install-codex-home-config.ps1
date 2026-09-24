@@ -719,6 +719,43 @@ function Invoke-ConfigTomlTool {
     }
 }
 
+function Invoke-RolloverPluginDependency {
+    param(
+        [Parameter(Mandatory)]
+        [string]$TargetCodexPath
+    )
+
+    $nodeExecutable = Assert-NodeEnvironment
+    $toolPath = Join-Path (Get-RepositorySupportRoot) 'tools\ensure-rollover-plugin.cjs'
+    if (-not (Test-Path -LiteralPath $toolPath -PathType Leaf)) {
+        if (-not [string]::IsNullOrWhiteSpace($runtimeState.SupportTempRoot)) {
+            Write-Warning 'Published snapshot predates the rollover plugin dependency; skipping plugin setup.'
+            return
+        }
+        throw "Repository support file was not found: $toolPath"
+    }
+
+    Write-StageMessage 'Ensuring context-window-rollover-reminder plugin and hook trust...'
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $toolOutput = @(& $nodeExecutable $toolPath --target ([System.IO.Path]::GetFullPath($TargetCodexPath)) 2>&1)
+        $toolExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    if ($toolExitCode -ne 0) {
+        $toolDetails = @($toolOutput | ForEach-Object { $_.ToString().TrimEnd() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join [Environment]::NewLine
+        throw "Rollover plugin dependency setup failed.`n$toolDetails"
+    }
+
+    if ($toolOutput.Count -gt 0) {
+        $toolOutput | Write-Output
+    }
+}
+
 function Remove-RepositorySupportTempRoot {
     [CmdletBinding(SupportsShouldProcess)]
     param()
@@ -1824,6 +1861,7 @@ function Invoke-UpdateAction {
     Write-StageMessage 'Installing default components...'
     Install-Snapshot -SnapshotInfo $snapshotInfo -TargetCodexPath $TargetCodexPath -SelectedComponents $defaultComponents -CreateBackup
     Remove-OldBackupVersion -TargetCodexPath $TargetCodexPath
+    Invoke-RolloverPluginDependency -TargetCodexPath $TargetCodexPath
 }
 
 try {

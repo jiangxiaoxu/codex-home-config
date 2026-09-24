@@ -4,8 +4,8 @@
 
 ## 使用前提
 
-- 安装要求 `Node.js 18+`.
-- 公开在线安装只使用已发布的 `release` 分支, 不会安装 `main` 上尚未发布的内容, 且不要求 Git.
+- 安装要求 `Node.js 18+`, 支持插件命令和 `hooks/list` 的 Codex CLI, 以及 `Python 3.10+`.
+- 公开在线安装只使用已发布的 `release` 分支, 不会安装 `main` 上尚未发布的内容. 缺少插件商城时, Codex CLI 还需能获取 GitHub 上的 Git marketplace.
 
 ## 安装和更新
 
@@ -42,6 +42,12 @@ iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/relea
 ```
 
 `-DryRun` 只读取 managed snapshot 和目标配置, 跳过本地仓库 `git pull`, 不创建备份且不修改目标. 它会输出按实际安装规则计算的目标文件 diff; 对 `models.local.json` 只报告文件是否存在差异, 不显示文件内容.
+
+## 插件依赖
+
+正常安装时, 安装器会检查目标 Codex home 中的 `jxx-codex-plugins` marketplace. 缺失时从 `https://github.com/jiangxiaoxu/jxx-codex-plugins.git` 添加; 已声明但本地 snapshot 缺失时重新获取. 随后在缺失时安装 `context-window-rollover-reminder@jxx-codex-plugins`. 安装器从目标 Codex 的 `hooks/list` 获取该插件当前 `PostToolUse` hook 的 hash, 将对应信任值写入目标 `config.toml`, 并复查 hook 已启用且受信任. 已安装的插件不会因本配置更新而自动升级.
+
+插件或 hook 若已被显式禁用, 安装器会报错并保留禁用状态. `-DryRun` 不执行插件安装或 hook 信任操作, 只预览 managed 文件更新.
 
 ## 备份
 

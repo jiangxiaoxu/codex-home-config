@@ -66,6 +66,12 @@ function writeSnapshot(rootPath, {
   mkdirSync(join(rootPath, 'tools'), { recursive: true });
   cpSync(installerPath, join(rootPath, 'install-codex-home-config.ps1'));
   cpSync(configToolPath, join(rootPath, 'tools', 'config-toml-ops.cjs'));
+  writeFileSync(join(rootPath, 'tools', 'ensure-rollover-plugin.cjs'), [
+    "const targetIndex = process.argv.indexOf('--target');",
+    "if (targetIndex < 0 || !process.argv[targetIndex + 1]) process.exit(2);",
+    "console.log('Plugin dependency test stub: ' + process.argv[targetIndex + 1]);",
+    ''
+  ].join('\n'), 'utf8');
   writeFileSync(join(rootPath, 'managed', 'config.toml'), config, 'utf8');
   writeFileSync(join(rootPath, 'managed', 'models.local.json'), modelsLocal);
   writeFileSync(join(rootPath, 'managed', 'AGENTS.md'), agents, 'utf8');
@@ -370,6 +376,21 @@ test('installation replaces a stale model catalog path with the target path', { 
     assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
     assert.equal(TOML.parse(readFileSync(join(targetPath, 'config.toml'), 'utf8')).model_catalog_json, join(targetPath, 'models.local.json'));
     assert.deepEqual(readFileSync(join(targetPath, 'models.local.json')), modelsLocalFixture);
+    assert.ok(result.stdout.includes(`Plugin dependency test stub: ${targetPath}`));
+  });
+});
+
+test('installation reports a failed plugin dependency setup', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const targetPath = join(tempDir, 'target');
+    writeFileSync(join(localPath, 'tools', 'ensure-rollover-plugin.cjs'), "console.error('mock plugin setup failure'); process.exit(1);\n", 'utf8');
+    commitAll(localPath, 'Fail plugin dependency setup');
+
+    const result = runInstaller(localPath, targetPath);
+    assert.notEqual(result.status, 0);
+    assert.match([result.stdout, result.stderr].join('\n'), /Rollover plugin dependency setup failed/);
+    assert.match([result.stdout, result.stderr].join('\n'), /mock plugin setup failure/);
   });
 });
 
@@ -549,6 +570,7 @@ test('DryRun prints actual managed file diffs without modifying the target or cr
     assert.match(result.stdout, /\+base agent/);
     assert.doesNotMatch(result.stdout, /\[codex-home-config\]\s+(?:Checking Node\.js runtime|Using Node\.js runtime|Preparing repository snapshot|Using local repository snapshot|Dry run enabled|Installing |Normalizing temporary config\.toml)/);
     assert.doesNotMatch(result.stdout, /^(?:Install source commit:|Installed |Removed )/m);
+    assert.doesNotMatch(result.stdout, /Plugin dependency test stub/);
 
     assert.deepEqual(readFileSync(join(targetPath, 'config.toml')), originalFiles.config);
     assert.deepEqual(readFileSync(join(targetPath, 'models.local.json')), originalFiles.modelsLocal);
