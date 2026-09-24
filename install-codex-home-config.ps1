@@ -1100,18 +1100,24 @@ function Install-ConfigFile {
         [string]$SourcePath,
 
         [Parameter(Mandatory)]
-        [string]$DestinationPath
+        [string]$DestinationPath,
+
+        [string]$ModelCatalogJsonPath
     )
 
     if (Test-Path -LiteralPath $DestinationPath -PathType Container) {
         throw "Expected file path but found a directory: $DestinationPath"
     }
 
-    Invoke-ConfigTomlTool -Command 'merge-install' -Arguments @{
+    $mergeArguments = @{
         source = $SourcePath
         target = $DestinationPath
         output = $DestinationPath
     }
+    if ($ModelCatalogJsonPath) {
+        $mergeArguments['model-catalog-json'] = $ModelCatalogJsonPath
+    }
+    Invoke-ConfigTomlTool -Command 'merge-install' -Arguments $mergeArguments
 }
 
 function Get-ExtractedRepositoryPath {
@@ -1225,6 +1231,8 @@ function Install-Snapshot {
         [Parameter()]
         [string[]]$SelectedComponents = @('Config', 'AgentFile', 'AgentFolder', 'ModelsLocalFile', 'Skill'),
 
+        [string]$ModelCatalogTargetPath,
+
         [switch]$CreateBackup
     )
 
@@ -1235,6 +1243,14 @@ function Install-Snapshot {
         }
     )
     $componentSelection = Get-ComponentSelection -SelectedComponents $effectiveSelectedComponents
+    if (-not $ModelCatalogTargetPath) {
+        $ModelCatalogTargetPath = $TargetCodexPath
+    }
+    $modelCatalogJsonPath = $null
+    if ((Test-Path -LiteralPath $SnapshotInfo.ModelsLocalFilePath -PathType Leaf) -or
+        (Test-Path -LiteralPath (Join-Path $TargetCodexPath 'models.local.json') -PathType Leaf)) {
+        $modelCatalogJsonPath = Join-Path ([System.IO.Path]::GetFullPath($ModelCatalogTargetPath)) 'models.local.json'
+    }
 
     if ($CreateBackup -and $effectiveSelectedComponents.Count -gt 0) {
         Backup-CurrentSnapshot -SelectedComponents $effectiveSelectedComponents -TargetCodexPath $TargetCodexPath
@@ -1260,7 +1276,7 @@ function Install-Snapshot {
 
         Write-StageMessage "Installing $($fileInfo.Name)..."
         if ($fileInfo.Component -eq 'Config') {
-            Install-ConfigFile -SourcePath $fileInfo.SourcePath -DestinationPath $destinationPath
+            Install-ConfigFile -SourcePath $fileInfo.SourcePath -DestinationPath $destinationPath -ModelCatalogJsonPath $modelCatalogJsonPath
         }
         elseif ($fileInfo.Component -eq 'ModelsLocalFile') {
             Copy-Item -LiteralPath $fileInfo.SourcePath -Destination $destinationPath -Force
@@ -1746,7 +1762,7 @@ function Invoke-DryRunInstallation {
     try {
         Copy-DryRunManagedTargetContents -SourcePath $TargetCodexPath -DestinationPath $beforePath
         Copy-DryRunManagedTargetContents -SourcePath $beforePath -DestinationPath $baselinePath
-        Install-Snapshot -SnapshotInfo $SnapshotInfo -TargetCodexPath $baselinePath -SelectedComponents $SelectedComponents
+        Install-Snapshot -SnapshotInfo $SnapshotInfo -TargetCodexPath $baselinePath -SelectedComponents $SelectedComponents -ModelCatalogTargetPath $TargetCodexPath
         Write-StageMessage 'Normalizing temporary config.toml files before comparing the dry-run result.'
         Normalize-DryRunConfigFile -ConfigPath (Join-Path $beforePath 'config.toml') -NormalizedPath $normalizedBeforeConfigPath
         Normalize-DryRunConfigFile -ConfigPath (Join-Path $baselinePath 'config.toml') -NormalizedPath $normalizedBaselineConfigPath

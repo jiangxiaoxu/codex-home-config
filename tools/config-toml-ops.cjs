@@ -5623,8 +5623,11 @@ function writeNestedPath(config, pathSegments, value) {
   }
   currentValue[pathSegments[pathSegments.length - 1]] = value;
 }
-function mergeInstallConfig({ sourcePath, targetPath, outputPath }) {
+function mergeInstallConfig({ sourcePath, targetPath, outputPath, modelCatalogJson }) {
   const sourceConfig = readTomlFile(sourcePath);
+  if (typeof modelCatalogJson !== "undefined") {
+    sourceConfig.model_catalog_json = modelCatalogJson;
+  }
   const targetSnapshot = readTomlSnapshot(targetPath, { allowMissing: true });
   writeMergeInstallTomlFile({
     outputPath,
@@ -5651,7 +5654,8 @@ function runCli() {
       mergeInstallConfig({
         sourcePath: options.source,
         targetPath: options.target,
-        outputPath: options.output
+        outputPath: options.output,
+        modelCatalogJson: options["model-catalog-json"]
       });
       break;
     case "publish-sync":

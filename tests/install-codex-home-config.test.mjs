@@ -345,6 +345,7 @@ test('default installation tolerates a snapshot without models.local.json and pr
     const result = runInstaller(localPath, targetPath);
     assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
     assert.deepEqual(readFileSync(join(targetPath, 'models.local.json')), originalModelsLocal);
+    assert.equal(TOML.parse(readFileSync(join(targetPath, 'config.toml'), 'utf8')).model_catalog_json, join(targetPath, 'models.local.json'));
 
     const backupRoot = join(targetPath, 'sync_codex-home-config_backup');
     assert.ok(
@@ -353,6 +354,22 @@ test('default installation tolerates a snapshot without models.local.json and pr
       ),
       'a missing managed models.local.json must not create a models-only backup'
     );
+  });
+});
+
+test('installation replaces a stale model catalog path with the target path', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const targetPath = join(tempDir, 'target with spaces');
+    mkdirSync(targetPath, { recursive: true });
+    writeFileSync(join(targetPath, 'config.toml'), TOML.stringify({
+      model_catalog_json: join(tempDir, 'wrong location', 'models.local.json')
+    }), 'utf8');
+
+    const result = runInstaller(localPath, targetPath);
+    assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
+    assert.equal(TOML.parse(readFileSync(join(targetPath, 'config.toml'), 'utf8')).model_catalog_json, join(targetPath, 'models.local.json'));
+    assert.deepEqual(readFileSync(join(targetPath, 'models.local.json')), modelsLocalFixture);
   });
 });
 
@@ -522,6 +539,8 @@ test('DryRun prints actual managed file diffs without modifying the target or cr
     assert.match(result.stdout, /agents[\\/]reviewer\.toml/);
     assert.match(result.stdout, /-model = "old"/);
     assert.match(result.stdout, /\+model = "base"/);
+    assert.ok(result.stdout.includes('+' + TOML.stringify({ model_catalog_json: join(targetPath, 'models.local.json') }).trimEnd()));
+    assert.doesNotMatch(result.stdout, /model_catalog_json.*codex-home-config-dry-run-/);
     assert.doesNotMatch(result.stdout, /^(?:diff --git .*models\.local\.json|--- .*models\.local\.json|\+\+\+ .*models\.local\.json)$/m);
     assert.doesNotMatch(result.stdout, /^[+-]\s+"models":/m);
     assert.match(result.stdout, /-old instructions/);
@@ -561,7 +580,10 @@ test('DryRun reports only whether models.local.json differs', { skip: !hasPwsh }
     const { localPath } = createLocalRepository(tempDir);
     const targetPath = join(tempDir, 'target');
     mkdirSync(join(targetPath, 'agents'), { recursive: true });
-    writeFileSync(join(targetPath, 'config.toml'), 'model = "base"\n', 'utf8');
+    writeFileSync(join(targetPath, 'config.toml'), TOML.stringify({
+      model: 'base',
+      model_catalog_json: join(targetPath, 'models.local.json')
+    }), 'utf8');
     writeFileSync(join(targetPath, 'models.local.json'), '{\n  "models": ["private-model"]\n}\n', 'utf8');
     writeFileSync(join(targetPath, 'AGENTS.md'), 'base instructions\n', 'utf8');
     writeFileSync(join(targetPath, 'agents', 'reviewer.toml'), 'base agent\n', 'utf8');
@@ -623,7 +645,10 @@ test('DryRun reports when the target already matches the managed snapshot', { sk
     const { localPath } = createLocalRepository(tempDir);
     const targetPath = join(tempDir, 'target');
     mkdirSync(join(targetPath, 'agents'), { recursive: true });
-    writeFileSync(join(targetPath, 'config.toml'), 'model = "base"\n', 'utf8');
+    writeFileSync(join(targetPath, 'config.toml'), TOML.stringify({
+      model: 'base',
+      model_catalog_json: join(targetPath, 'models.local.json')
+    }), 'utf8');
     writeFileSync(join(targetPath, 'models.local.json'), modelsLocalFixture);
     writeFileSync(join(targetPath, 'AGENTS.md'), 'base instructions\n', 'utf8');
     writeFileSync(join(targetPath, 'agents', 'reviewer.toml'), 'base agent\n', 'utf8');

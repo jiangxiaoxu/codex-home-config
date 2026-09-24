@@ -51,6 +51,8 @@ iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/relea
 
 `models.local.json` 是独立的可选 snapshot 文件. 同步时, 本地 `.codex/models.local.json` 存在才会原样复制到 `managed/models.local.json`, 不处理 CRLF, 也不受 `config.toml` 同步排除规则影响; 源文件缺失时会跳过并保留 managed 现状. 安装更新时, managed snapshot 存在才会原样复制并覆盖目标文件; snapshot 缺失时会跳过并保留目标现状.
 
+安装后若目标目录中有 `models.local.json` (来自 snapshot 或目标原有文件), 安装器会将目标 `config.toml` 的 `model_catalog_json` 设置为该文件的绝对路径, 包括使用 `-TargetCodexPath` 指定的自定义目录. `-DryRun` 显示同一实际目标路径, 不写入临时目录路径. 若两处都没有该文件, 安装器不会更改此配置项.
+
 ## config.toml 同步策略
 
 同步脚本不会上传完整的 `config.toml`. 默认只同步 `managed/config.toml` 中已经管理的顶层配置, 并排除下方列出的配置. `apps` 整张 table 都不会上传. `mcp_servers` 按仓库中已经管理的名称过滤, 本地新增的 MCP server 不会自动进入仓库.
