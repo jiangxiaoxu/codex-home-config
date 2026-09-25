@@ -16,7 +16,6 @@ unified_exec = true
 default_mode_request_user_input = true
 tool_suggest = false
 daemon_auto_start = false
-agent_message_board = true
 apply_patch_preserve_line_endings = true
 reasoning_effort_override = true
 runtime_metrics = true
