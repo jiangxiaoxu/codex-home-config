@@ -15,6 +15,7 @@ js_repl = false
 unified_exec = true
 default_mode_request_user_input = true
 tool_suggest = false
+daemon_auto_start = false
 
   [features.multi_agent_v2]
   usage_hint_text = """
