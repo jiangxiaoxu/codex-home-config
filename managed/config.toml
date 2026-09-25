@@ -16,6 +16,10 @@ unified_exec = true
 default_mode_request_user_input = true
 tool_suggest = false
 daemon_auto_start = false
+agent_message_board = true
+apply_patch_preserve_line_endings = true
+reasoning_effort_override = true
+runtime_metrics = true
 
   [features.multi_agent_v2]
   usage_hint_text = """
@@ -30,6 +34,7 @@ Explicit user instructions, applicable `AGENTS.md` or skill instructions, and ag
 """
   max_concurrent_threads_per_session = 48
   default_wait_timeout_ms = 300_000
+  enabled = true
 
   [features.context_management]
   experimental_mode = true
