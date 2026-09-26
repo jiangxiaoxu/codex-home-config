@@ -48,9 +48,9 @@ Explicit user instructions, applicable `AGENTS.md` or skill instructions, and ag
 status_line = [
   "model-with-reasoning",
   "context-used",
+  "context-window-size",
   "five-hour-limit",
   "weekly-limit",
-  "context-window-size",
   "run-state",
   "git-branch"
 ]
