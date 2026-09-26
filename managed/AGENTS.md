@@ -15,7 +15,7 @@
 - 以性能或成本为由改变 production 行为或新增机制前, 必须有当前缺陷或测量基线; 否则仅诊断或测量.
 - 优先采用 breaking change, 不保留旧接口兼容层.
 - 仅在维护稳定语义, 不变量或明确边界时引入包装; 不为命名, 转发或打包参数增加薄包装.
-- 仅处理已出现, 可复现且会导致错误的竞态; 不为假设竞态增加锁或其他防御, 不因跨流程调用已有操作而增加过渡锁或嵌套锁.
+- 仅处理有具体证据表明会导致错误的竞态; 不为假设竞态增加锁或其他防御, 不因跨流程调用已有操作而增加过渡锁或嵌套锁.
 - 文件系统操作中, 将 junction, symbolic link 和其他 reparse point 视为普通文件系统项; 不为其增加检查, 拒绝或专用分支.
 
 ## 测试
@@ -43,7 +43,7 @@
 - 获取日志, 搜索结果, 执行结果及其他 artifact 时, 默认分层获取并按需展开.
 - 处理 JSON / JSONL 时优先使用 `jq`.
 - Windows native debugging 可直接使用 `cdbX64.exe`; 将其视为 CDB executable.
-- `new_context` 和 `request_user_input` 只能作为平台直接工具调用. 不得在 `exec` JavaScript 中调用 `tools.new_context()` 或 `tools.request_user_input()`, 这些对象不在 exec runtime 中可用.
+- `new_context` 只能作为平台直接工具调用. 不得在 `exec` JavaScript 中调用 `tools.new_context()`, 该对象不在 exec runtime 中可用.
 
 ## 上下文管理
 
