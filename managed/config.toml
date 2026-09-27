@@ -13,7 +13,6 @@ default_subagent_reasoning_effort = "medium"
 respect_system_proxy = true
 js_repl = false
 unified_exec = true
-default_mode_request_user_input = true
 tool_suggest = false
 daemon_auto_start = false
 apply_patch_preserve_line_endings = true
