@@ -14,6 +14,7 @@ respect_system_proxy = true
 js_repl = false
 unified_exec = true
 tool_suggest = false
+daemon_auto_start = false
 apply_patch_preserve_line_endings = true
 reasoning_effort_override = true
 
