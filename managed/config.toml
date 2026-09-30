@@ -73,3 +73,14 @@ hide_rate_limit_model_nudge = true
 
 [windows]
 sandbox = "unelevated"
+
+[marketplaces.jxx-codex-plugins]
+source_type = "git"
+source = "https://github.com/jiangxiaoxu/jxx-codex-plugins.git"
+
+
+[plugins."context-window-rollover-reminder@jxx-codex-plugins"]
+enabled = true
+
+[hooks.state."context-window-rollover-reminder@jxx-codex-plugins:hooks/hooks.json:post_tool_use:0:0"]
+trusted_hash = "sha256:1d26b05240dba2ed2d34ff6bc51465a86226a0bcf96234236de553f26155e390"

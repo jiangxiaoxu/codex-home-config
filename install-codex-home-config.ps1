@@ -150,82 +150,6 @@ if ($policy -ne 'Unrestricted') {
     }
 }
 
-function Get-CodexCliVersion {
-    $codexCommand = Get-Command codex -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($null -eq $codexCommand) {
-        return $null
-    }
-
-    $previousErrorActionPreference = $ErrorActionPreference
-    try {
-        $ErrorActionPreference = 'Continue'
-        $versionOutput = @(& $codexCommand.Source --version 2>&1)
-        $versionExitCode = $LASTEXITCODE
-    }
-    catch {
-        throw "Unable to run codex --version: $($_.Exception.Message)"
-    }
-    finally {
-        $ErrorActionPreference = $previousErrorActionPreference
-    }
-
-    if ($versionExitCode -ne 0) {
-        throw "codex --version failed with exit code $versionExitCode.`n$(($versionOutput | Out-String).Trim())"
-    }
-
-    $versionText = ($versionOutput | Out-String).Trim()
-    $versionMatch = [regex]::Match($versionText, '^codex-cli (?<version>\d+\.\d+\.\d+)(?<prerelease>-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$')
-    $version = $null
-    if (-not $versionMatch.Success -or -not [version]::TryParse($versionMatch.Groups['version'].Value, [ref]$version)) {
-        throw "Unable to determine the Codex CLI version from: $versionText"
-    }
-
-    return [pscustomobject]@{
-        Version = $version
-        IsPrerelease = $versionMatch.Groups['prerelease'].Success
-        DisplayVersion = $versionText
-    }
-}
-
-function Assert-CodexEnvironment {
-    $minimumVersion = [version]'0.159.2'
-    for ($attempt = 0; $attempt -lt 2; $attempt++) {
-        $codexVersion = Get-CodexCliVersion
-        if ($null -ne $codexVersion -and ($codexVersion.Version -gt $minimumVersion -or ($codexVersion.Version -eq $minimumVersion -and -not $codexVersion.IsPrerelease))) {
-            return
-        }
-
-        $reason = if ($null -eq $codexVersion) { 'Codex CLI was not found on PATH.' } else { "Found $($codexVersion.DisplayVersion). Codex CLI $minimumVersion or later is required." }
-        if ($attempt -eq 1) {
-            throw "Codex CLI installation completed, but verification failed. $reason Check PATH and run codex --version before retrying."
-        }
-
-        $npmCommand = Get-Command npm -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($null -eq $npmCommand) {
-            throw "$reason Cannot install Codex CLI because npm was not found on PATH. Install Node.js and npm, then retry."
-        }
-        Write-Information "[codex-home-config] $reason Running npm i -g @openai/codex@latest" -InformationAction Continue
-        $previousErrorActionPreference = $ErrorActionPreference
-        try {
-            $ErrorActionPreference = 'Continue'
-            $installOutput = @(& $npmCommand.Source i -g @openai/codex@latest 2>&1)
-            $installExitCode = $LASTEXITCODE
-        }
-        catch {
-            throw "Unable to install Codex CLI with npm i -g @openai/codex@latest: $($_.Exception.Message)"
-        }
-        finally {
-            $ErrorActionPreference = $previousErrorActionPreference
-        }
-        if ($installExitCode -ne 0) {
-            throw "Codex CLI installation failed with exit code $installExitCode.`n$(($installOutput | Out-String).Trim())"
-        }
-        foreach ($line in $installOutput) {
-            Write-Information "[codex-home-config] $line" -InformationAction Continue
-        }
-    }
-}
-
 function Get-ComponentSelection {
     param(
         [Parameter(Mandatory)]
@@ -811,45 +735,6 @@ function Invoke-ConfigTomlTool {
         }
 
         throw "Config TOML helper command failed: $Command`n$toolDetails"
-    }
-
-    if ($toolOutput.Count -gt 0) {
-        $toolOutput | Write-Output
-    }
-}
-
-function Invoke-RolloverPluginDependency {
-    param(
-        [Parameter(Mandatory)]
-        [string]$TargetCodexPath
-    )
-
-    $nodeExecutable = Assert-NodeEnvironment
-    $toolPath = Join-Path (Get-RepositorySupportRoot) 'tools\ensure-rollover-plugin.cjs'
-    if (-not (Test-Path -LiteralPath $toolPath -PathType Leaf)) {
-        if (-not [string]::IsNullOrWhiteSpace($runtimeState.SupportTempRoot)) {
-            Write-Warning 'Published snapshot predates the rollover plugin dependency; skipping plugin setup.'
-            return
-        }
-        throw "Repository support file was not found: $toolPath"
-    }
-
-    $previousErrorActionPreference = $ErrorActionPreference
-    $previousConsoleOutputEncoding = [Console]::OutputEncoding
-    try {
-        $ErrorActionPreference = 'Continue'
-        [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
-        $toolOutput = @(& $nodeExecutable $toolPath --target ([System.IO.Path]::GetFullPath($TargetCodexPath)) 2>&1)
-        $toolExitCode = $LASTEXITCODE
-    }
-    finally {
-        [Console]::OutputEncoding = $previousConsoleOutputEncoding
-        $ErrorActionPreference = $previousErrorActionPreference
-    }
-
-    if ($toolExitCode -ne 0) {
-        $toolDetails = @($toolOutput | ForEach-Object { $_.ToString().TrimEnd() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join [Environment]::NewLine
-        throw "Rollover plugin dependency setup failed.`n$toolDetails"
     }
 
     if ($toolOutput.Count -gt 0) {
@@ -1964,14 +1849,6 @@ function Invoke-UpdateAction {
     Write-Output "Target: $([System.IO.Path]::GetFullPath($TargetCodexPath))"
     Install-Snapshot -SnapshotInfo $snapshotInfo -TargetCodexPath $TargetCodexPath -SelectedComponents $defaultComponents -CreateBackup
     Remove-OldBackupVersion -TargetCodexPath $TargetCodexPath
-    try {
-        Assert-CodexEnvironment
-    }
-    catch {
-        Write-Warning "Configuration update completed. Skipping plugin installation and hook enablement: $(Get-ErrorDisplayMessage -ErrorRecord $_)"
-        return
-    }
-    Invoke-RolloverPluginDependency -TargetCodexPath $TargetCodexPath
 }
 
 try {

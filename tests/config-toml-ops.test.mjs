@@ -26,6 +26,75 @@ function withTempDir(callback) {
   }
 }
 
+test('publish-sync limits plugin entries and hook trust fields to the managed snapshot', () => {
+  const hookKey = 'context-window-rollover-reminder@jxx-codex-plugins:hooks/hooks.json:post_tool_use:0:0';
+  const managedConfig = {
+    marketplaces: { public: { source_type: 'git', source: 'old' } },
+    plugins: { 'reminder@public': { enabled: true } },
+    hooks: { state: { [hookKey]: { trusted_hash: 'old' } } }
+  };
+  const localConfig = {
+    marketplaces: { private: { source: 'private' }, public: { source_type: 'git', source: 'new' } },
+    plugins: { 'private@private': { enabled: true }, 'reminder@public': { enabled: false } },
+    hooks: {
+      enabled: false,
+      state: {
+        unrelated: { trusted_hash: 'private' },
+        [hookKey]: { enabled: false, trusted_hash: 'new', local_setting: 1 }
+      }
+    }
+  };
+  assert.deepStrictEqual(buildPublishedSyncConfig(localConfig, managedConfig), {
+    marketplaces: { public: { source_type: 'git', source: 'new' } },
+    plugins: { 'reminder@public': { enabled: false } },
+    hooks: { state: { [hookKey]: { trusted_hash: 'new' } } }
+  });
+});
+
+test('merge-install CLI updates plugin configuration and hook trust while preserving local syntax and state', () => {
+  withTempDir((tempDir) => {
+    const sourcePath = join(tempDir, 'source.toml');
+    const targetPath = join(tempDir, 'target.toml');
+    const outputPath = join(tempDir, 'output.toml');
+    const hookKey = 'context-window-rollover-reminder@jxx-codex-plugins:hooks/hooks.json:post_tool_use:0:0';
+    const preservedBlocks = [
+      "[marketplaces.private]\r\nsource = 'private' # local marketplace\r\n",
+      "[plugins.'private@private']\r\nenabled = false # local plugin\r\n",
+      "[hooks]\r\nenabled = false # global hook setting\r\n",
+      "[hooks.state.unrelated]\r\ntrusted_hash = 'private' # local trust\r\n"
+    ];
+    writeFileSync(sourcePath, [
+      '[marketplaces.public]', 'source_type = "git"', 'source = "new"',
+      '[plugins."reminder@public"]', 'enabled = true',
+      `[hooks.state."${hookKey}"]`, 'trusted_hash = "new"', ''
+    ].join('\n'), 'utf8');
+    const localHookField = 'enabled = false # retain explicit local hook state\r\n';
+    writeFileSync(targetPath, [
+      '[marketplaces.public]\r\nsource_type = "git"\r\nsource = "old"\r\n',
+      preservedBlocks[0],
+      '[plugins."reminder@public"]\r\nenabled = false\r\n',
+      preservedBlocks[1], preservedBlocks[2],
+      `[hooks.state."${hookKey}"]\r\ntrusted_hash = "old"\r\n${localHookField}`,
+      preservedBlocks[3]
+    ].join('\r\n'), 'utf8');
+    const args = ['tools/config-toml-ops.cjs', 'merge-install', '--source', sourcePath, '--target', targetPath, '--output', outputPath];
+    const result = spawnSync(process.execPath, args, { cwd: process.cwd(), encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    const outputText = readFileSync(outputPath, 'utf8');
+    for (const block of [...preservedBlocks, localHookField]) {
+      assert.ok(outputText.includes(block), `Local source text must remain unchanged: ${block}`);
+    }
+    const outputConfig = TOML.parse(outputText);
+    assert.equal(outputConfig.marketplaces.public.source, 'new');
+    assert.equal(outputConfig.plugins['reminder@public'].enabled, true);
+    assert.deepStrictEqual(outputConfig.hooks.state[hookKey], { trusted_hash: 'new', enabled: false });
+    writeFileSync(targetPath, outputText, 'utf8');
+    const secondResult = spawnSync(process.execPath, args, { cwd: process.cwd(), encoding: 'utf8' });
+    assert.equal(secondResult.status, 0, secondResult.stderr);
+    assert.equal(readFileSync(outputPath, 'utf8'), outputText);
+  });
+});
+
 test('merge-install replaces managed tables, preserves unmanaged keys, and keeps local projects', () => {
   const sourceConfig = {
     model: 'gpt-5.4',

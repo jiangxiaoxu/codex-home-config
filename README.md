@@ -4,11 +4,10 @@
 
 ## 使用前提
 
-- 普通配置安装要求 `Node.js 18+` 和 `Python 3.10+`, 不依赖 Codex CLI. 插件安装与 hook 启用要求 `Codex CLI >= 0.159.2`, 最低版本固定, 同步时不随本机版本更新.
+- 配置安装要求 `Node.js 18+`, 不依赖 Codex CLI 或 npm. rollover hook 运行时需要 `Python 3.10+`.
 - Windows 上的脚本先在启动阶段分别检查已安装的 `pwsh` 和 Windows PowerShell 5.1 的 `CurrentUser` 执行策略. 不是 `Unrestricted` 时自动执行 `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Unrestricted -Force` 并复查, 失败则停止后续操作. `-DryRun` 也会进行这项持久化调整; 不修改 `LocalMachine` 或 Group Policy.
-- 正常安装先更新普通配置, 完成备份和旧备份清理, 再检查本机 Codex CLI. CLI 不存在或版本不足时, 自动执行一次 `npm i -g @openai/codex@latest`, 随后重新执行 `codex --version`. npm 不可用, 安装失败, CLI 版本无法读取或安装后的版本仍不满足要求时, 输出警告并跳过插件安装与 hook 启用, 已更新的普通配置保留. CLI 检查通过才继续插件步骤. `0.159.2` 的 prerelease 版本不满足要求; 更高版本按数字比较, `+build` metadata 不影响判断. 同步脚本和 `-DryRun` 不检查或安装 CLI.
 - 如果本地 `.ps1` 在加载前就被执行策略阻止, 脚本无法自行调整. 可先用 `pwsh -NoProfile -ExecutionPolicy Bypass -File .\install-codex-home-config.ps1` 启动; Windows PowerShell 5.1 使用 `powershell.exe` 替代 `pwsh`.
-- 公开在线安装只使用已发布的 `release` 分支, 不会安装 `main` 上尚未发布的内容. 缺少插件商城时, Codex CLI 还需能获取 GitHub 上的 Git marketplace.
+- 公开在线安装只使用已发布的 `release` 分支, 不会安装 `main` 上尚未发布的内容.
 
 ## 安装和更新
 
@@ -46,11 +45,13 @@ iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/relea
 
 `-DryRun` 在安装范围内只读取 managed snapshot 和目标配置, 跳过本地仓库 `git pull`, 不创建备份且不修改目标. 启动时仍会按上面的规则调整 `CurrentUser` 执行策略. 它会输出按实际安装规则计算的目标文件 diff; 对 `models.local.json` 只报告文件是否存在差异, 不显示文件内容.
 
-## 插件依赖
+## 插件配置
 
-正常安装时, 安装器会检查目标 Codex home 中的 `jxx-codex-plugins` marketplace. 缺失时从 `https://github.com/jiangxiaoxu/jxx-codex-plugins.git` 添加; 已声明但本地 snapshot 缺失时重新获取. 每次安装都会尝试执行 `codex plugin marketplace upgrade jxx-codex-plugins`, 检查远端 revision; 有更新时, Codex 会刷新该商城内所有已配置插件的缓存, 包括已禁用的插件, 并保留它们的启用状态. 升级失败时, 安装器报告错误并继续使用现有 snapshot, 前提是目标插件仍可用. 随后在缺失时安装 `context-window-rollover-reminder@jxx-codex-plugins`. 安装器从目标 Codex 的 `hooks/list` 获取该插件全部 hook 的当前 hash, 将它们设为启用并写入信任值, 最后逐个复查.
+插件相关设置随 `config.toml` 同步和安装: `marketplaces.jxx-codex-plugins` 声明 Git 来源, `plugins` 声明 `context-window-rollover-reminder@jxx-codex-plugins` 的 `enabled = true`.
 
-插件本身若已被显式禁用, 安装器会报错并保留禁用状态; 该插件的 hook 即使此前关闭也会重新启用并信任. `-DryRun` 不执行插件安装或 hook 信任操作, 只预览 managed 文件更新.
+hook 信任仅管理 `hooks.state."context-window-rollover-reminder@jxx-codex-plugins:hooks/hooks.json:post_tool_use:0:0".trusted_hash`. 发布同步只采集这一字段; 安装时保留目标中的其他 hook 条目和同一 hook 的 `enabled` 等其他字段.
+
+安装器只合并配置声明. 普通 Codex TUI 启动后, Codex 按原有逻辑异步获取缺失插件和更新插件缓存. `trusted_hash` 随配置同步, 对应特定 hook 内容; 插件更新改变该内容后, Codex 可能要求重新信任.
 
 ## 备份
 
@@ -64,9 +65,9 @@ iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/relea
 
 ## config.toml 同步策略
 
-同步脚本不会上传完整的 `config.toml`. 默认只同步 `managed/config.toml` 中已经管理的顶层配置, 并排除下方列出的配置. `apps` 整张 table 都不会上传. `mcp_servers` 按仓库中已经管理的名称过滤, 本地新增的 MCP server 不会自动进入仓库.
+同步脚本不会上传完整的 `config.toml`. 默认只同步 `managed/config.toml` 中已经管理的顶层配置, 并排除下方列出的配置. `apps` 整张 table 都不会上传. `mcp_servers`, `plugins` 和 `marketplaces` 按仓库中已经管理的名称过滤, 本地新增的条目不会自动进入仓库. `hooks` 只同步 managed snapshot 已管理的字段.
 
-安装时, `config.toml` 使用 syntax-preserving merge, 仅更新 `managed/config.toml` 中实际变化的路径. 未管理或未变化的顶层条目/表块会保留原始引号, 注释, 布局和行尾. `node_repl` 不参与同步, 因而保留目标文件中的原文.
+安装时, `config.toml` 使用 syntax-preserving merge, 仅更新 `managed/config.toml` 中实际变化的路径. `mcp_servers`, `plugins` 和 `marketplaces` 按名称合并, `hooks` 按 snapshot 管理的字段合并. 未管理或未变化的顶层条目/表块会保留原始引号, 注释, 布局和行尾. `node_repl` 不参与同步, 因而保留目标文件中的原文.
 
 安装生成的 managed 更新片段遵循 `managed/config.toml` 的顺序. publish-sync 保留 `managed/config.toml` 已有字段的顺序, 包括嵌套表和 allowlisted MCP child; 允许同步的新增字段按本地顺序追加, 字段值和数组元素顺序以本地配置为准. 顶层条目和 MCP child 仍受现有 allowlist 限制. 未管理的目标顶层条目/表块保留原文中的相对位置.
 

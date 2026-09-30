@@ -4937,7 +4937,12 @@ var configTomlPolicy = {
       ["tui", "model_availability_nux"]
     ],
     childAllowlistedTables: [
-      "mcp_servers"
+      "mcp_servers",
+      "marketplaces",
+      "plugins"
+    ],
+    fieldAllowlistedTables: [
+      "hooks"
     ]
   },
   install: {
@@ -4962,7 +4967,12 @@ var configTomlPolicy = {
       ["notice", "model_migrations"]
     ],
     namedChildMergedTables: [
-      "mcp_servers"
+      "mcp_servers",
+      "marketplaces",
+      "plugins"
+    ],
+    fieldMergedTables: [
+      "hooks"
     ]
   }
 };
@@ -4972,6 +4982,8 @@ var installPreservedTopLevelKeys = new Set(configTomlPolicy.install.preservedTop
 var installPreservedTopLevelTables = new Set(configTomlPolicy.install.preservedTopLevelTables);
 var partiallyManagedTopLevelTables = new Set(configTomlPolicy.install.namedChildMergedTables);
 var syncAllowlistedChildTables = new Set(configTomlPolicy.sync.childAllowlistedTables);
+var fieldManagedTopLevelTables = new Set(configTomlPolicy.install.fieldMergedTables);
+var syncFieldAllowlistedTables = new Set(configTomlPolicy.sync.fieldAllowlistedTables);
 var syncExcludedTopLevelKeys = new Set(configTomlPolicy.sync.excludedTopLevelKeys);
 var installRemovedTopLevelKeys = new Set(configTomlPolicy.install.removedTopLevelKeys);
 var installRemovedNestedPaths = configTomlPolicy.install.removedNestedPaths;
@@ -5151,7 +5163,7 @@ function joinTomlFragments(leftContent, rightContent) {
   if (rightContent.length === 0) {
     return leftContent;
   }
-  const normalizedLeft = leftContent.replace(/(?:\r?\n)+$/, "\n");
+  const normalizedLeft = leftContent.replace(/(\r?\n)(?:\r?\n)*$/, "$1");
   const normalizedRight = rightContent.replace(/^(?:\r?\n)+/, "");
   return `${normalizedLeft}
 ${normalizedRight}`;
@@ -5163,6 +5175,10 @@ function buildMergeInstallSourceContribution(sourceConfig, mergedConfig, targetC
       continue;
     }
     if (installPreservedTopLevelTables.has(key) || installRemovedTopLevelKeys.has(key) || installPreservedTopLevelKeys.has(key)) {
+      continue;
+    }
+    if (fieldManagedTopLevelTables.has(key)) {
+      contribution[key] = pickManagedFields(mergedConfig[key], sourceConfig[key]);
       continue;
     }
     if (partiallyManagedTopLevelTables.has(key) && isTomlObject(sourceConfig[key])) {
@@ -5478,10 +5494,36 @@ function pickNamedChildEntriesByAllowlist(candidateValue, allowlistValue) {
   }
   return filteredValue;
 }
+function pickManagedFields(candidateValue, managedValue) {
+  if (!isTomlObject(candidateValue) || !isTomlObject(managedValue)) {
+    return cloneTomlValue(candidateValue);
+  }
+  const filteredValue = {};
+  for (const key of Object.keys(managedValue)) {
+    if (hasOwn(candidateValue, key)) {
+      filteredValue[key] = pickManagedFields(candidateValue[key], managedValue[key]);
+    }
+  }
+  return filteredValue;
+}
+function mergeManagedFields(sourceValue, targetValue) {
+  if (!isTomlObject(sourceValue) || !isTomlObject(targetValue)) {
+    return cloneTomlValue(sourceValue);
+  }
+  const mergedValue = cloneTomlValue(targetValue);
+  for (const key of Object.keys(sourceValue)) {
+    mergedValue[key] = mergeManagedFields(sourceValue[key], targetValue[key]);
+  }
+  return mergedValue;
+}
 function buildMergeInstallConfig(sourceConfig, targetConfig) {
   const mergedConfig = {};
   for (const key of Object.keys(sourceConfig)) {
     if (installPreservedTopLevelTables.has(key) || installRemovedTopLevelKeys.has(key) || installPreservedTopLevelKeys.has(key)) {
+      continue;
+    }
+    if (fieldManagedTopLevelTables.has(key)) {
+      mergedConfig[key] = mergeManagedFields(sourceConfig[key], targetConfig[key]);
       continue;
     }
     if (partiallyManagedTopLevelTables.has(key) && hasOwn(targetConfig, key)) {
@@ -5531,6 +5573,10 @@ function buildPublishedSyncConfig(localConfig, managedConfig) {
   const managedTopLevelKeys = new Set(Object.keys(managedConfig));
   for (const key of Object.keys(localConfig)) {
     if (!managedTopLevelKeys.has(key) || syncExcludedTopLevelKeys.has(key)) {
+      continue;
+    }
+    if (syncFieldAllowlistedTables.has(key)) {
+      publishedConfig[key] = pickManagedFields(localConfig[key], managedConfig[key]);
       continue;
     }
     if (syncAllowlistedChildTables.has(key)) {

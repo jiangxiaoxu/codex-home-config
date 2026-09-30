@@ -36,7 +36,12 @@ const configTomlPolicy = {
       ['tui', 'model_availability_nux']
     ],
     childAllowlistedTables: [
-      'mcp_servers'
+      'mcp_servers',
+      'marketplaces',
+      'plugins'
+    ],
+    fieldAllowlistedTables: [
+      'hooks'
     ]
   },
   install: {
@@ -61,7 +66,12 @@ const configTomlPolicy = {
       ['notice', 'model_migrations']
     ],
     namedChildMergedTables: [
-      'mcp_servers'
+      'mcp_servers',
+      'marketplaces',
+      'plugins'
+    ],
+    fieldMergedTables: [
+      'hooks'
     ]
   }
 }
@@ -73,6 +83,8 @@ const installPreservedTopLevelKeys = new Set(configTomlPolicy.install.preservedT
 const installPreservedTopLevelTables = new Set(configTomlPolicy.install.preservedTopLevelTables)
 const partiallyManagedTopLevelTables = new Set(configTomlPolicy.install.namedChildMergedTables)
 const syncAllowlistedChildTables = new Set(configTomlPolicy.sync.childAllowlistedTables)
+const fieldManagedTopLevelTables = new Set(configTomlPolicy.install.fieldMergedTables)
+const syncFieldAllowlistedTables = new Set(configTomlPolicy.sync.fieldAllowlistedTables)
 const syncExcludedTopLevelKeys = new Set(configTomlPolicy.sync.excludedTopLevelKeys)
 const installRemovedTopLevelKeys = new Set(configTomlPolicy.install.removedTopLevelKeys)
 const installRemovedNestedPaths = configTomlPolicy.install.removedNestedPaths
@@ -293,7 +305,7 @@ function joinTomlFragments (leftContent, rightContent) {
     return leftContent
   }
 
-  const normalizedLeft = leftContent.replace(/(?:\r?\n)+$/, '\n')
+  const normalizedLeft = leftContent.replace(/(\r?\n)(?:\r?\n)*$/, '$1')
   const normalizedRight = rightContent.replace(/^(?:\r?\n)+/, '')
   return `${normalizedLeft}\n${normalizedRight}`
 }
@@ -307,6 +319,11 @@ function buildMergeInstallSourceContribution (sourceConfig, mergedConfig, target
     }
 
     if (installPreservedTopLevelTables.has(key) || installRemovedTopLevelKeys.has(key) || installPreservedTopLevelKeys.has(key)) {
+      continue
+    }
+
+    if (fieldManagedTopLevelTables.has(key)) {
+      contribution[key] = pickManagedFields(mergedConfig[key], sourceConfig[key])
       continue
     }
 
@@ -702,11 +719,42 @@ function pickNamedChildEntriesByAllowlist (candidateValue, allowlistValue) {
   return filteredValue
 }
 
+function pickManagedFields (candidateValue, managedValue) {
+  if (!isTomlObject(candidateValue) || !isTomlObject(managedValue)) {
+    return cloneTomlValue(candidateValue)
+  }
+
+  const filteredValue = {}
+  for (const key of Object.keys(managedValue)) {
+    if (hasOwn(candidateValue, key)) {
+      filteredValue[key] = pickManagedFields(candidateValue[key], managedValue[key])
+    }
+  }
+  return filteredValue
+}
+
+function mergeManagedFields (sourceValue, targetValue) {
+  if (!isTomlObject(sourceValue) || !isTomlObject(targetValue)) {
+    return cloneTomlValue(sourceValue)
+  }
+
+  const mergedValue = cloneTomlValue(targetValue)
+  for (const key of Object.keys(sourceValue)) {
+    mergedValue[key] = mergeManagedFields(sourceValue[key], targetValue[key])
+  }
+  return mergedValue
+}
+
 function buildMergeInstallConfig (sourceConfig, targetConfig) {
   const mergedConfig = {}
 
   for (const key of Object.keys(sourceConfig)) {
     if (installPreservedTopLevelTables.has(key) || installRemovedTopLevelKeys.has(key) || installPreservedTopLevelKeys.has(key)) {
+      continue
+    }
+
+    if (fieldManagedTopLevelTables.has(key)) {
+      mergedConfig[key] = mergeManagedFields(sourceConfig[key], targetConfig[key])
       continue
     }
 
@@ -768,6 +816,11 @@ function buildPublishedSyncConfig (localConfig, managedConfig) {
 
   for (const key of Object.keys(localConfig)) {
     if (!managedTopLevelKeys.has(key) || syncExcludedTopLevelKeys.has(key)) {
+      continue
+    }
+
+    if (syncFieldAllowlistedTables.has(key)) {
+      publishedConfig[key] = pickManagedFields(localConfig[key], managedConfig[key])
       continue
     }
 
