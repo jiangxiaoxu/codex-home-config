@@ -87,6 +87,106 @@ function Wait-OnFatalError {
     }
 }
 
+function Ensure-PowerShellExecutionPolicy {
+    if ($env:OS -ne 'Windows_NT') {
+        return
+    }
+
+    $shells = @(
+        @{ Name = 'pwsh'; CurrentHost = ($PSVersionTable.PSVersion.Major -ge 6); Fallback = (Join-Path $env:ProgramFiles 'PowerShell\7\pwsh.exe') },
+        @{ Name = 'powershell'; CurrentHost = ($PSVersionTable.PSVersion.Major -le 5); Fallback = (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') }
+    )
+    $policyCommand = @'
+$ErrorActionPreference = 'Stop'
+$policy = Get-ExecutionPolicy -Scope CurrentUser
+if ($policy -ne 'Unrestricted') {
+    Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Unrestricted -Force
+    if ((Get-ExecutionPolicy -Scope CurrentUser) -ne 'Unrestricted') {
+        throw 'CurrentUser execution policy did not become Unrestricted.'
+    }
+    Write-Output 'CurrentUser execution policy changed to Unrestricted.'
+}
+'@
+    $encodedPolicyCommand = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($policyCommand))
+
+    foreach ($shell in $shells) {
+        $executable = $null
+        if ($shell.CurrentHost) {
+            $executable = Join-Path $PSHOME "$($shell.Name).exe"
+        }
+        else {
+            $command = Get-Command $shell.Name -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($null -ne $command) {
+                $executable = $command.Source
+            }
+            elseif (Test-Path -LiteralPath $shell.Fallback -PathType Leaf) {
+                $executable = $shell.Fallback
+            }
+        }
+        if ([string]::IsNullOrWhiteSpace($executable)) {
+            Write-Verbose "$($shell.Name) is not installed; skipping its execution policy."
+            continue
+        }
+
+        $previousErrorActionPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $policyOutput = @(& $executable -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Unrestricted -EncodedCommand $encodedPolicyCommand 2>&1)
+            $policyExitCode = $LASTEXITCODE
+        }
+        catch {
+            throw "Unable to check CurrentUser execution policy in $($shell.Name): $($_.Exception.Message)"
+        }
+        finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+        if ($policyExitCode -ne 0) {
+            $details = ($policyOutput | Out-String).Trim()
+            throw "Failed to ensure CurrentUser Unrestricted in $($shell.Name). Check permissions or Group Policy.`n$details"
+        }
+        foreach ($line in $policyOutput) {
+            Write-Information "[codex-home-config] $($shell.Name): $line" -InformationAction Continue
+        }
+    }
+}
+
+function Assert-CodexEnvironment {
+    $minimumVersion = [version]'0.159.2'
+    $updateHint = "Codex CLI $minimumVersion or later is required.`nUpdate it yourself with:`nnpm install -g @openai/codex@latest`nThen run codex --version and retry."
+    $codexCommand = Get-Command codex -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -eq $codexCommand) {
+        throw "Codex CLI was not found on PATH. $updateHint"
+    }
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $versionOutput = @(& $codexCommand.Source --version 2>&1)
+        $versionExitCode = $LASTEXITCODE
+    }
+    catch {
+        throw "Unable to run codex --version. $updateHint"
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    if ($versionExitCode -ne 0) {
+        throw "codex --version failed with exit code $versionExitCode. $updateHint"
+    }
+
+    $versionText = ($versionOutput | Out-String).Trim()
+    $versionMatch = [regex]::Match($versionText, '^codex-cli (?<version>\d+\.\d+\.\d+)(?<prerelease>-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$')
+    $version = $null
+    if (-not $versionMatch.Success -or -not [version]::TryParse($versionMatch.Groups['version'].Value, [ref]$version)) {
+        throw "Unable to determine the Codex CLI version. $updateHint"
+    }
+
+    if ($version -lt $minimumVersion -or ($version -eq $minimumVersion -and $versionMatch.Groups['prerelease'].Success)) {
+        throw "Found $versionText. $updateHint"
+    }
+}
+
 function Get-ComponentSelection {
     param(
         [Parameter(Mandatory)]
@@ -1829,6 +1929,8 @@ function Invoke-UpdateAction {
 }
 
 try {
+    Assert-CodexEnvironment
+    Ensure-PowerShellExecutionPolicy
     if (Test-Path -LiteralPath $TargetCodexPath -PathType Leaf) {
         throw "Target path '$TargetCodexPath' points to a file."
     }

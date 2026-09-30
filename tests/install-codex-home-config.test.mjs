@@ -1,7 +1,8 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cpSync,
+  chmodSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -13,7 +14,7 @@ import {
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -35,6 +36,56 @@ const hasWindowsPowerShell = windowsPowerShellPath !== null && spawnSync(windows
   '$PSVersionTable.PSVersion.Major'
 ], { encoding: 'utf8' }).status === 0;
 const modelsLocalFixture = Buffer.from('\uFEFF{\r\n  "models": []\r\n}\r\n', 'utf8');
+const cliStubPath = mkdtempSync(join(tmpdir(), 'codex-cli-test-'));
+if (process.platform === 'win32') {
+  writeFileSync(join(cliStubPath, 'codex.cmd'), '@echo off\r\necho %CODEX_TEST_VERSION_OUTPUT%\r\nexit /b %CODEX_TEST_VERSION_EXIT%\r\n');
+} else {
+  writeFileSync(join(cliStubPath, 'codex'), '#!/bin/sh\nprintf "%s\\n" "$CODEX_TEST_VERSION_OUTPUT"\nexit "$CODEX_TEST_VERSION_EXIT"\n');
+  chmodSync(join(cliStubPath, 'codex'), 0o755);
+}
+after(() => rmSync(cliStubPath, { recursive: true, force: true, maxRetries: 3 }));
+
+function codexCliEnvironment({ output = 'codex-cli 0.159.2', exitCode = 0, policyState = '', policyLog = '', policyFailure = '' } = {}) {
+  return {
+    ...process.env,
+    PATH: `${cliStubPath}${delimiter}${process.env.PATH ?? process.env.Path ?? ''}`,
+    CODEX_TEST_VERSION_OUTPUT: output,
+    CODEX_TEST_VERSION_EXIT: String(exitCode),
+    CODEX_TEST_POLICY_STATE: policyState,
+    CODEX_TEST_POLICY_LOG: policyLog,
+    CODEX_TEST_POLICY_FAILURE: policyFailure
+  };
+}
+
+function instrumentExecutionPolicy(source) {
+  const marker = "$policyCommand = @'";
+  assert.ok(source.includes(marker), 'Execution policy payload must be mocked before any test runs');
+  const mock = [
+    "$testShell = if ($PSVersionTable.PSVersion.Major -ge 7) { 'pwsh' } else { 'powershell' }",
+    'function Get-ExecutionPolicy {',
+    '  param($Scope)',
+    '  if ($Scope -ne "CurrentUser") { throw "Unexpected policy scope" }',
+    '  if ($env:CODEX_TEST_POLICY_LOG) { Add-Content -LiteralPath $env:CODEX_TEST_POLICY_LOG -Value "$testShell Get" }',
+    '  $statePath = "$($env:CODEX_TEST_POLICY_STATE).$testShell"',
+    '  if ($env:CODEX_TEST_POLICY_STATE -and (Test-Path -LiteralPath $statePath)) { return (Get-Content -LiteralPath $statePath -Raw).Trim() }',
+    '  return "Unrestricted"',
+    '}',
+    'function Set-ExecutionPolicy {',
+    '  param($Scope, $ExecutionPolicy, [switch]$Force)',
+    '  if ($Scope -ne "CurrentUser" -or $ExecutionPolicy -ne "Unrestricted" -or -not $Force) { throw "Unexpected policy change" }',
+    '  if ($env:CODEX_TEST_POLICY_LOG) { Add-Content -LiteralPath $env:CODEX_TEST_POLICY_LOG -Value "$testShell Set" }',
+    '  if ($env:CODEX_TEST_POLICY_FAILURE -eq "set") { throw "Mock policy update denied" }',
+    '  if ($env:CODEX_TEST_POLICY_FAILURE -ne "readback" -and $env:CODEX_TEST_POLICY_STATE) { Set-Content -LiteralPath "$($env:CODEX_TEST_POLICY_STATE).$testShell" -Value "Unrestricted" }',
+    '}'
+  ].join('\n');
+  return source.replace(marker, `${marker}\n${mock}`);
+}
+
+function instrumentedSyncPath() {
+  const path = join(cliStubPath, 'sync-codex-home-config-repo.ps1');
+  writeFileSync(path, instrumentExecutionPolicy(readFileSync(syncScriptPath, 'utf8')), 'utf8');
+  return path;
+}
 
 function withTempDir(callback) {
   const tempDir = mkdtempSync(join(tmpdir(), 'codex-home-config-installer-test-'));
@@ -64,7 +115,7 @@ function writeSnapshot(rootPath, {
 } = {}) {
   mkdirSync(join(rootPath, 'managed', 'agents'), { recursive: true });
   mkdirSync(join(rootPath, 'tools'), { recursive: true });
-  cpSync(installerPath, join(rootPath, 'install-codex-home-config.ps1'));
+  writeFileSync(join(rootPath, 'install-codex-home-config.ps1'), instrumentExecutionPolicy(readFileSync(installerPath, 'utf8')), 'utf8');
   cpSync(configToolPath, join(rootPath, 'tools', 'config-toml-ops.cjs'));
   writeFileSync(join(rootPath, 'tools', 'ensure-rollover-plugin.cjs'), [
     "const targetIndex = process.argv.indexOf('--target');",
@@ -132,7 +183,8 @@ function createPublishedReleaseArchive(tempDir) {
 function runInstaller(repositoryPath, targetPath, args = [], {
   shell = pwshPath,
   commandPrefix = '',
-  encoding = 'utf8'
+  encoding = 'utf8',
+  cli = {}
 } = {}) {
   const quotePowerShell = (value) => `'${value.replaceAll("'", "''")}'`;
   const commandArguments = args.map((argument) => argument.startsWith('-') ? argument : quotePowerShell(argument));
@@ -159,6 +211,7 @@ function runInstaller(repositoryPath, targetPath, args = [], {
     {
       cwd: repositoryPath,
       encoding,
+      env: codexCliEnvironment(cli),
       timeout: 30000
     }
   );
@@ -205,6 +258,7 @@ function runInstallerWithPublishedReleaseMock(repositoryPath, targetPath, archiv
     {
       cwd: repositoryPath,
       encoding: 'utf8',
+      env: codexCliEnvironment(),
       timeout: 30000
     }
   );
@@ -240,12 +294,13 @@ function runInstallerFromDynamicScriptBlock(repositoryPath, targetPath, args = [
     {
       cwd: repositoryPath,
       encoding: 'utf8',
+      env: codexCliEnvironment(),
       timeout: 30000
     }
   );
 }
 
-function runSync(repositoryPath, sourcePath, args = [], { skipInitialPull = true } = {}) {
+function runSync(repositoryPath, sourcePath, args = [], { skipInitialPull = true, commandPrefix = '', cli = {} } = {}) {
   const quotePowerShell = (value) => `'${value.replaceAll("'", "''")}'`;
   const componentsIndex = args.indexOf('-Components');
   const commandArguments = componentsIndex === -1
@@ -256,8 +311,9 @@ function runSync(repositoryPath, sourcePath, args = [], { skipInitialPull = true
       args.slice(componentsIndex + 1).map(quotePowerShell).join(',')
     ];
   const command = [
+    ...(commandPrefix ? [commandPrefix + ';'] : []),
     '&',
-    quotePowerShell(syncScriptPath),
+    quotePowerShell(instrumentedSyncPath()),
     '-SourceCodexPath',
     quotePowerShell(sourcePath),
     '-RepoPath',
@@ -280,6 +336,7 @@ function runSync(repositoryPath, sourcePath, args = [], { skipInitialPull = true
     {
       cwd: repositoryPath,
       encoding: 'utf8',
+      env: codexCliEnvironment(cli),
       timeout: 30000
     }
   );
@@ -289,7 +346,7 @@ function runSyncFromWindowsPowerShell(repositoryPath, sourcePath, components, { 
   const quotePowerShell = (value) => `'${value.replaceAll("'", "''")}'`;
   const command = [
     '&',
-    quotePowerShell(syncScriptPath),
+    quotePowerShell(instrumentedSyncPath()),
     '-SourceCodexPath',
     quotePowerShell(sourcePath),
     '-RepoPath',
@@ -313,6 +370,7 @@ function runSyncFromWindowsPowerShell(repositoryPath, sourcePath, components, { 
     {
       cwd: repositoryRoot,
       encoding: 'utf8',
+      env: codexCliEnvironment(),
       timeout: 30000
     }
   );
@@ -323,6 +381,147 @@ test('installer always performs the default installation with no action or compo
 
   assert.doesNotMatch(installer, /\$Action\b|\b-Action\b|\bRestore\b/);
   assert.doesNotMatch(installer, /\$Components\b|\b-Components\b/);
+});
+
+test('installer and sync reject unavailable or unsupported Codex CLI before side effects', { skip: !hasPwsh }, () => {
+  const cases = [
+    { name: 'older version', cli: { output: 'codex-cli 0.159.1' } },
+    { name: 'minimum prerelease', cli: { output: 'codex-cli 0.159.2-rc.1' } },
+    { name: 'unexpected output', cli: { output: 'unrecognized CLI output' } },
+    { name: 'command failure', cli: { exitCode: 1 } },
+    {
+      name: 'missing executable',
+      commandPrefix: "function Get-Command { param($Name, $CommandType, $ErrorAction) if ($Name -ne 'codex') { Microsoft.PowerShell.Core\\Get-Command @PSBoundParameters } }"
+    }
+  ];
+  const sideEffectGuards = [
+    "function git { throw 'Unexpected git operation' }",
+    "function Invoke-RestMethod { throw 'Unexpected release API request' }",
+    "function Invoke-WebRequest { throw 'Unexpected release download' }"
+  ].join('; ');
+
+  for (const scenario of cases) {
+    withTempDir((tempDir) => {
+      const repositoryPath = join(tempDir, 'repository');
+      const targetPath = join(tempDir, 'target');
+      const policyLog = join(tempDir, 'policy.log');
+      writeSnapshot(repositoryPath);
+      const configBefore = readFileSync(join(repositoryPath, 'managed', 'config.toml'));
+      const options = {
+        cli: { ...scenario.cli, policyLog },
+        commandPrefix: [scenario.commandPrefix, sideEffectGuards].filter(Boolean).join('; ')
+      };
+      const results = [
+        runInstaller(repositoryPath, targetPath, ['-UsePublishedRelease'], options),
+        runSync(repositoryPath, targetPath, [], { ...options, skipInitialPull: false })
+      ];
+      for (const result of results) {
+        const output = [result.stdout, result.stderr].filter(Boolean).join('\n');
+        assert.equal(result.error, undefined, result.error?.message);
+        assert.notEqual(result.status, 0, scenario.name);
+        assert.match(output, /0\.159\.2/, scenario.name);
+        assert.match(output, /npm install -g @openai\/codex@latest/, scenario.name);
+        assert.doesNotMatch(output, /Unexpected (git operation|release API request|release download)/, scenario.name);
+      }
+      assert.ok(!existsSync(targetPath), scenario.name);
+      assert.ok(!existsSync(policyLog), scenario.name);
+      assert.deepEqual(readFileSync(join(repositoryPath, 'managed', 'config.toml')), configBefore);
+    });
+  }
+});
+
+test('startup preserves Unrestricted policies and repairs both shells before DryRun continues', {
+  skip: !hasPwsh || !hasWindowsPowerShell
+}, () => {
+  for (const initialPolicy of ['Unrestricted', 'RemoteSigned']) {
+    withTempDir((tempDir) => {
+      const repositoryPath = join(tempDir, 'repository');
+      const targetPath = join(tempDir, 'target');
+      const policyState = join(tempDir, 'policy');
+      const policyLog = join(tempDir, 'policy.log');
+      writeSnapshot(repositoryPath);
+      run('git', ['init', '--initial-branch=main'], repositoryPath);
+      for (const shell of ['pwsh', 'powershell']) {
+        writeFileSync(`${policyState}.${shell}`, initialPolicy, 'utf8');
+      }
+
+      const result = runInstaller(repositoryPath, targetPath, ['-DryRun'], {
+        cli: { policyState, policyLog }
+      });
+      assert.equal(result.error, undefined, result.error?.message);
+      assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
+      const calls = readFileSync(policyLog, 'utf8').split(/\r?\n/).filter(Boolean);
+      for (const shell of ['pwsh', 'powershell']) {
+        assert.ok(calls.includes(`${shell} Get`), `${shell} must be checked`);
+        assert.equal(calls.filter((call) => call === `${shell} Set`).length, initialPolicy === 'Unrestricted' ? 0 : 1);
+        assert.equal(readFileSync(`${policyState}.${shell}`, 'utf8').trim(), 'Unrestricted');
+      }
+      assert.ok(!existsSync(targetPath));
+    });
+  }
+});
+
+test('installer and sync stop before file changes when policy update fails or does not take effect', {
+  skip: !hasPwsh || !hasWindowsPowerShell
+}, () => {
+  for (const policyFailure of ['set', 'readback']) {
+    for (const script of ['installer', 'sync']) {
+      withTempDir((tempDir) => {
+        const repositoryPath = join(tempDir, 'repository');
+        const targetPath = join(tempDir, 'target');
+        const policyState = join(tempDir, 'policy');
+        const policyLog = join(tempDir, 'policy.log');
+        writeSnapshot(repositoryPath);
+        const configBefore = readFileSync(join(repositoryPath, 'managed', 'config.toml'));
+        for (const shell of ['pwsh', 'powershell']) {
+          writeFileSync(`${policyState}.${shell}`, 'RemoteSigned', 'utf8');
+        }
+        const options = { cli: { policyState, policyLog, policyFailure } };
+        const result = script === 'installer'
+          ? runInstaller(repositoryPath, targetPath, ['-DryRun'], options)
+          : runSync(repositoryPath, targetPath, [], options);
+        assert.equal(result.error, undefined, result.error?.message);
+        assert.notEqual(result.status, 0, `${script}: ${policyFailure}`);
+        assert.match(readFileSync(policyLog, 'utf8'), /Set/);
+        assert.ok(!existsSync(targetPath));
+        assert.deepEqual(readFileSync(join(repositoryPath, 'managed', 'config.toml')), configBefore);
+      });
+    }
+  }
+});
+
+test('installer accepts the minimum and numerically newer Codex CLI versions', { skip: !hasPwsh }, () => {
+  for (const version of ['0.159.2', '0.159.10', '0.159.2+build.1', '0.159.3-rc.1']) {
+    withTempDir((tempDir) => {
+      const repositoryPath = join(tempDir, 'repository');
+      const targetPath = join(tempDir, 'target');
+      writeSnapshot(repositoryPath);
+      run('git', ['init', '--initial-branch=main'], repositoryPath);
+      const result = runInstaller(repositoryPath, targetPath, ['-DryRun'], {
+        cli: { output: `codex-cli ${version}` }
+      });
+      assert.equal(result.error, undefined, result.error?.message);
+      assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
+      assert.ok(!existsSync(targetPath));
+    });
+  }
+});
+
+test('Windows PowerShell installer rejects an older Codex CLI before creating the target', { skip: !hasWindowsPowerShell }, () => {
+  withTempDir((tempDir) => {
+    const repositoryPath = join(tempDir, 'repository');
+    const targetPath = join(tempDir, 'target');
+    writeSnapshot(repositoryPath);
+    const result = runInstaller(repositoryPath, targetPath, ['-DryRun'], {
+      shell: windowsPowerShellPath,
+      cli: { output: 'codex-cli 0.159.1' }
+    });
+    const output = [result.stdout, result.stderr].filter(Boolean).join('\n');
+    assert.notEqual(result.status, 0);
+    assert.match(output, /0\.159\.2/);
+    assert.match(output, /npm install -g @openai\/codex@latest/);
+    assert.ok(!existsSync(targetPath));
+  });
 });
 
 test('local repository pull happens before default installation and installs the pulled snapshot', { skip: !hasPwsh }, () => {
@@ -725,7 +924,7 @@ test('DryRun reports when the target already matches the managed snapshot', { sk
   });
 });
 
-test('ModelsLocalFile sync preserves the source JSON bytes', { skip: !hasPwsh }, () => {
+test('ModelsLocalFile sync accepts a numerically newer Codex CLI and preserves the source JSON bytes', { skip: !hasPwsh }, () => {
   withTempDir((tempDir) => {
     const { localPath } = createLocalRepository(tempDir);
     const sourcePath = join(tempDir, 'source');
@@ -733,7 +932,9 @@ test('ModelsLocalFile sync preserves the source JSON bytes', { skip: !hasPwsh },
     mkdirSync(sourcePath, { recursive: true });
     writeFileSync(join(sourcePath, 'models.local.json'), sourceModelsLocal);
 
-    const result = runSync(localPath, sourcePath, ['-Components', 'ModelsLocalFile']);
+    const result = runSync(localPath, sourcePath, ['-Components', 'ModelsLocalFile'], {
+      cli: { output: 'codex-cli 0.159.10' }
+    });
     assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
     assert.deepEqual(readFileSync(join(localPath, 'managed', 'models.local.json')), sourceModelsLocal);
   });
@@ -749,7 +950,7 @@ test('sync relaunch preserves source, repository, and component parameters after
 
     writeFileSync(
       join(seedPath, 'sync-codex-home-config-repo.ps1'),
-      readFileSync(syncScriptPath),
+      instrumentExecutionPolicy(readFileSync(syncScriptPath, 'utf8')),
       'utf8'
     );
     commitAll(seedPath, 'Add sync script to repository snapshot');
