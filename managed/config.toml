@@ -78,7 +78,6 @@ sandbox = "unelevated"
 source_type = "git"
 source = "https://github.com/jiangxiaoxu/jxx-codex-plugins.git"
 
-
 [plugins."context-window-rollover-reminder@jxx-codex-plugins"]
 enabled = true
 
