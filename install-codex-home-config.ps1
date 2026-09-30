@@ -151,10 +151,9 @@ if ($policy -ne 'Unrestricted') {
 }
 
 function Get-CodexCliVersion {
-    $updateHint = "Install or update Codex CLI yourself with:`nnpm install -g @openai/codex@latest`nThen run codex --version and retry."
     $codexCommand = Get-Command codex -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($null -eq $codexCommand) {
-        throw "Codex CLI was not found on PATH. $updateHint"
+        return $null
     }
 
     $previousErrorActionPreference = $ErrorActionPreference
@@ -164,21 +163,21 @@ function Get-CodexCliVersion {
         $versionExitCode = $LASTEXITCODE
     }
     catch {
-        throw "Unable to run codex --version. $updateHint"
+        throw "Unable to run codex --version: $($_.Exception.Message)"
     }
     finally {
         $ErrorActionPreference = $previousErrorActionPreference
     }
 
     if ($versionExitCode -ne 0) {
-        throw "codex --version failed with exit code $versionExitCode. $updateHint"
+        throw "codex --version failed with exit code $versionExitCode.`n$(($versionOutput | Out-String).Trim())"
     }
 
     $versionText = ($versionOutput | Out-String).Trim()
     $versionMatch = [regex]::Match($versionText, '^codex-cli (?<version>\d+\.\d+\.\d+)(?<prerelease>-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$')
     $version = $null
     if (-not $versionMatch.Success -or -not [version]::TryParse($versionMatch.Groups['version'].Value, [ref]$version)) {
-        throw "Unable to determine the Codex CLI version. $updateHint"
+        throw "Unable to determine the Codex CLI version from: $versionText"
     }
 
     return [pscustomobject]@{
@@ -189,26 +188,41 @@ function Get-CodexCliVersion {
 }
 
 function Assert-CodexEnvironment {
-    param(
-        [Parameter(Mandatory)]
-        [pscustomobject]$CodexVersion,
+    $minimumVersion = [version]'0.159.2'
+    for ($attempt = 0; $attempt -lt 2; $attempt++) {
+        $codexVersion = Get-CodexCliVersion
+        if ($null -ne $codexVersion -and ($codexVersion.Version -gt $minimumVersion -or ($codexVersion.Version -eq $minimumVersion -and -not $codexVersion.IsPrerelease))) {
+            return
+        }
 
-        [Parameter(Mandatory)]
-        [string]$RepositoryPath
-    )
+        $reason = if ($null -eq $codexVersion) { 'Codex CLI was not found on PATH.' } else { "Found $($codexVersion.DisplayVersion). Codex CLI $minimumVersion or later is required." }
+        if ($attempt -eq 1) {
+            throw "Codex CLI installation completed, but verification failed. $reason Check PATH and run codex --version before retrying."
+        }
 
-    $versionPath = Join-Path $RepositoryPath 'codex-cli-min-version.txt'
-    if (-not (Test-Path -LiteralPath $versionPath -PathType Leaf)) {
-        throw "Snapshot Codex CLI minimum version record was not found: $versionPath"
-    }
-    $minimumVersionText = [System.IO.File]::ReadAllText($versionPath).Trim()
-    $minimumVersion = $null
-    if ($minimumVersionText -notmatch '^\d+\.\d+\.\d+$' -or -not [version]::TryParse($minimumVersionText, [ref]$minimumVersion)) {
-        throw "Snapshot Codex CLI minimum version record is invalid: $versionPath"
-    }
-
-    if ($CodexVersion.Version -lt $minimumVersion -or ($CodexVersion.Version -eq $minimumVersion -and $CodexVersion.IsPrerelease)) {
-        throw "Found $($CodexVersion.DisplayVersion). Codex CLI $minimumVersion or later is required.`nUpdate it yourself with:`nnpm install -g @openai/codex@latest`nThen run codex --version and retry."
+        $npmCommand = Get-Command npm -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($null -eq $npmCommand) {
+            throw "$reason Cannot install Codex CLI because npm was not found on PATH. Install Node.js and npm, then retry."
+        }
+        Write-Information "[codex-home-config] $reason Running npm i -g @openai/codex@latest" -InformationAction Continue
+        $previousErrorActionPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $installOutput = @(& $npmCommand.Source i -g @openai/codex@latest 2>&1)
+            $installExitCode = $LASTEXITCODE
+        }
+        catch {
+            throw "Unable to install Codex CLI with npm i -g @openai/codex@latest: $($_.Exception.Message)"
+        }
+        finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+        if ($installExitCode -ne 0) {
+            throw "Codex CLI installation failed with exit code $installExitCode.`n$(($installOutput | Out-String).Trim())"
+        }
+        foreach ($line in $installOutput) {
+            Write-Information "[codex-home-config] $line" -InformationAction Continue
+        }
     }
 }
 
@@ -1950,11 +1964,17 @@ function Invoke-UpdateAction {
     Write-Output "Target: $([System.IO.Path]::GetFullPath($TargetCodexPath))"
     Install-Snapshot -SnapshotInfo $snapshotInfo -TargetCodexPath $TargetCodexPath -SelectedComponents $defaultComponents -CreateBackup
     Remove-OldBackupVersion -TargetCodexPath $TargetCodexPath
+    try {
+        Assert-CodexEnvironment
+    }
+    catch {
+        Write-Warning "Configuration update completed. Skipping plugin installation and hook enablement: $(Get-ErrorDisplayMessage -ErrorRecord $_)"
+        return
+    }
     Invoke-RolloverPluginDependency -TargetCodexPath $TargetCodexPath
 }
 
 try {
-    $codexVersion = Get-CodexCliVersion
     Ensure-PowerShellExecutionPolicy
     if (Test-Path -LiteralPath $TargetCodexPath -PathType Leaf) {
         throw "Target path '$TargetCodexPath' points to a file."
@@ -1972,7 +1992,6 @@ try {
     }
 
     $repositoryPath = Get-RepositorySupportRoot
-    Assert-CodexEnvironment -CodexVersion $codexVersion -RepositoryPath $repositoryPath
     $null = Assert-NodeEnvironment
     $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
 

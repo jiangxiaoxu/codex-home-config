@@ -86,44 +86,6 @@ if ($policy -ne 'Unrestricted') {
     }
 }
 
-function Get-CodexCliVersion {
-    $updateHint = "Install or update Codex CLI yourself with:`nnpm install -g @openai/codex@latest`nThen run codex --version and retry."
-    $codexCommand = Get-Command codex -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($null -eq $codexCommand) {
-        throw "Codex CLI was not found on PATH. $updateHint"
-    }
-
-    $previousErrorActionPreference = $ErrorActionPreference
-    try {
-        $ErrorActionPreference = 'Continue'
-        $versionOutput = @(& $codexCommand.Source --version 2>&1)
-        $versionExitCode = $LASTEXITCODE
-    }
-    catch {
-        throw "Unable to run codex --version. $updateHint"
-    }
-    finally {
-        $ErrorActionPreference = $previousErrorActionPreference
-    }
-
-    if ($versionExitCode -ne 0) {
-        throw "codex --version failed with exit code $versionExitCode. $updateHint"
-    }
-
-    $versionText = ($versionOutput | Out-String).Trim()
-    $versionMatch = [regex]::Match($versionText, '^codex-cli (?<version>\d+\.\d+\.\d+)(?<prerelease>-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$')
-    $version = $null
-    if (-not $versionMatch.Success -or -not [version]::TryParse($versionMatch.Groups['version'].Value, [ref]$version)) {
-        throw "Unable to determine the Codex CLI version. $updateHint"
-    }
-
-    return [pscustomobject]@{
-        Version = $version
-        IsPrerelease = $versionMatch.Groups['prerelease'].Success
-        DisplayVersion = $versionText
-    }
-}
-
 function Get-ComponentSelection {
     param(
         [Parameter(Mandatory)]
@@ -865,7 +827,6 @@ function Write-Utf8FileIfDifferent {
 }
 
 try {
-    $codexVersion = Get-CodexCliVersion
     Ensure-PowerShellExecutionPolicy
     if ($PSVersionTable.PSVersion.Major -lt 7) {
         $pwshExecutable = Get-PowerShell7Executable
@@ -986,15 +947,6 @@ try {
 
                 return
             }
-        }
-    }
-
-    if (-not $codexVersion.IsPrerelease) {
-        $minimumVersionPath = Join-Path $RepoPath 'codex-cli-min-version.txt'
-        $minimumVersionText = $codexVersion.Version.ToString()
-        if (-not (Test-Path -LiteralPath $minimumVersionPath -PathType Leaf) -or [System.IO.File]::ReadAllText($minimumVersionPath).Trim() -ne $minimumVersionText) {
-            [System.IO.File]::WriteAllText($minimumVersionPath, "$minimumVersionText`n", [System.Text.UTF8Encoding]::new($false))
-            Write-Output "Updated minimum Codex CLI version to $minimumVersionText"
         }
     }
 
