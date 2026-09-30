@@ -4,9 +4,10 @@
 
 ## 使用前提
 
-- 安装要求 `Node.js 18+`, `Codex CLI >= 0.159.2`, 以及 `Python 3.10+`.
-- 安装和同步脚本首先检查 Codex CLI 版本, 包括 `-DryRun`. 版本不足或无法检测时会停止并提示自行更新, 不会自动更新 CLI. 使用 npm 安装的 CLI 可运行 `npm install -g @openai/codex@latest`, 再用 `codex --version` 确认版本后重试.
-- Codex CLI 检查通过后, Windows 上的脚本会分别检查已安装的 `pwsh` 和 Windows PowerShell 5.1 的 `CurrentUser` 执行策略. 不是 `Unrestricted` 时自动执行 `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Unrestricted -Force` 并复查, 失败则停止后续操作. `-DryRun` 也会进行这项持久化调整; 不修改 `LocalMachine` 或 Group Policy.
+- 安装要求 `Node.js 18+`, `Python 3.10+`, 以及满足安装 snapshot 最低版本要求的 Codex CLI. 最低版本记录在仓库根目录的 `codex-cli-min-version.txt`, 不安装到 `.codex`.
+- 安装器先读取本机 Codex CLI 版本, 在本地仓库拉取或下载已发布的 snapshot 后, 按同一 snapshot 的最低版本记录进行检查, 包括 `-DryRun`. 版本不足或无法检测时会停止并提示自行更新, 不会自动更新 CLI. 最低版本记录缺失或无效时停止安装. 使用 npm 安装的 CLI 可运行 `npm install -g @openai/codex@latest`, 再用 `codex --version` 确认版本后重试.
+- 同步脚本以本机 Codex CLI 的正式版本更新最低版本记录, 即使本机版本低于旧记录也会覆盖. 带 `-alpha`, `-beta`, `-rc` 等 prerelease 后缀的测试版本不修改该记录. 只有 `+build` metadata 而没有 prerelease 后缀的版本按正式版本处理, 记录其 `major.minor.patch`. 此记录不受 `-Components` 选择影响; 同步不会按旧记录拒绝本机版本.
+- 读取本机 Codex CLI 版本成功后, Windows 上的脚本会在启动阶段分别检查已安装的 `pwsh` 和 Windows PowerShell 5.1 的 `CurrentUser` 执行策略. 不是 `Unrestricted` 时自动执行 `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Unrestricted -Force` 并复查, 失败则停止后续操作. `-DryRun` 也会进行这项持久化调整; 不修改 `LocalMachine` 或 Group Policy. 安装器取得 snapshot 后才检查最低版本, 因此版本不足或 snapshot 检查失败时, 策略调整可能已完成.
 - 如果本地 `.ps1` 在加载前就被执行策略阻止, 脚本无法自行调整. 可先用 `pwsh -NoProfile -ExecutionPolicy Bypass -File .\install-codex-home-config.ps1` 启动; Windows PowerShell 5.1 使用 `powershell.exe` 替代 `pwsh`.
 - 公开在线安装只使用已发布的 `release` 分支, 不会安装 `main` 上尚未发布的内容. 缺少插件商城时, Codex CLI 还需能获取 GitHub 上的 Git marketplace.
 

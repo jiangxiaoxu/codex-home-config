@@ -86,9 +86,8 @@ if ($policy -ne 'Unrestricted') {
     }
 }
 
-function Assert-CodexEnvironment {
-    $minimumVersion = [version]'0.159.2'
-    $updateHint = "Codex CLI $minimumVersion or later is required.`nUpdate it yourself with:`nnpm install -g @openai/codex@latest`nThen run codex --version and retry."
+function Get-CodexCliVersion {
+    $updateHint = "Install or update Codex CLI yourself with:`nnpm install -g @openai/codex@latest`nThen run codex --version and retry."
     $codexCommand = Get-Command codex -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($null -eq $codexCommand) {
         throw "Codex CLI was not found on PATH. $updateHint"
@@ -118,8 +117,10 @@ function Assert-CodexEnvironment {
         throw "Unable to determine the Codex CLI version. $updateHint"
     }
 
-    if ($version -lt $minimumVersion -or ($version -eq $minimumVersion -and $versionMatch.Groups['prerelease'].Success)) {
-        throw "Found $versionText. $updateHint"
+    return [pscustomobject]@{
+        Version = $version
+        IsPrerelease = $versionMatch.Groups['prerelease'].Success
+        DisplayVersion = $versionText
     }
 }
 
@@ -864,7 +865,7 @@ function Write-Utf8FileIfDifferent {
 }
 
 try {
-    Assert-CodexEnvironment
+    $codexVersion = Get-CodexCliVersion
     Ensure-PowerShellExecutionPolicy
     if ($PSVersionTable.PSVersion.Major -lt 7) {
         $pwshExecutable = Get-PowerShell7Executable
@@ -985,6 +986,15 @@ try {
 
                 return
             }
+        }
+    }
+
+    if (-not $codexVersion.IsPrerelease) {
+        $minimumVersionPath = Join-Path $RepoPath 'codex-cli-min-version.txt'
+        $minimumVersionText = $codexVersion.Version.ToString()
+        if (-not (Test-Path -LiteralPath $minimumVersionPath -PathType Leaf) -or [System.IO.File]::ReadAllText($minimumVersionPath).Trim() -ne $minimumVersionText) {
+            [System.IO.File]::WriteAllText($minimumVersionPath, "$minimumVersionText`n", [System.Text.UTF8Encoding]::new($false))
+            Write-Output "Updated minimum Codex CLI version to $minimumVersionText"
         }
     }
 

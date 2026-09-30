@@ -150,9 +150,8 @@ if ($policy -ne 'Unrestricted') {
     }
 }
 
-function Assert-CodexEnvironment {
-    $minimumVersion = [version]'0.159.2'
-    $updateHint = "Codex CLI $minimumVersion or later is required.`nUpdate it yourself with:`nnpm install -g @openai/codex@latest`nThen run codex --version and retry."
+function Get-CodexCliVersion {
+    $updateHint = "Install or update Codex CLI yourself with:`nnpm install -g @openai/codex@latest`nThen run codex --version and retry."
     $codexCommand = Get-Command codex -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($null -eq $codexCommand) {
         throw "Codex CLI was not found on PATH. $updateHint"
@@ -182,8 +181,34 @@ function Assert-CodexEnvironment {
         throw "Unable to determine the Codex CLI version. $updateHint"
     }
 
-    if ($version -lt $minimumVersion -or ($version -eq $minimumVersion -and $versionMatch.Groups['prerelease'].Success)) {
-        throw "Found $versionText. $updateHint"
+    return [pscustomobject]@{
+        Version = $version
+        IsPrerelease = $versionMatch.Groups['prerelease'].Success
+        DisplayVersion = $versionText
+    }
+}
+
+function Assert-CodexEnvironment {
+    param(
+        [Parameter(Mandatory)]
+        [pscustomobject]$CodexVersion,
+
+        [Parameter(Mandatory)]
+        [string]$RepositoryPath
+    )
+
+    $versionPath = Join-Path $RepositoryPath 'codex-cli-min-version.txt'
+    if (-not (Test-Path -LiteralPath $versionPath -PathType Leaf)) {
+        throw "Snapshot Codex CLI minimum version record was not found: $versionPath"
+    }
+    $minimumVersionText = [System.IO.File]::ReadAllText($versionPath).Trim()
+    $minimumVersion = $null
+    if ($minimumVersionText -notmatch '^\d+\.\d+\.\d+$' -or -not [version]::TryParse($minimumVersionText, [ref]$minimumVersion)) {
+        throw "Snapshot Codex CLI minimum version record is invalid: $versionPath"
+    }
+
+    if ($CodexVersion.Version -lt $minimumVersion -or ($CodexVersion.Version -eq $minimumVersion -and $CodexVersion.IsPrerelease)) {
+        throw "Found $($CodexVersion.DisplayVersion). Codex CLI $minimumVersion or later is required.`nUpdate it yourself with:`nnpm install -g @openai/codex@latest`nThen run codex --version and retry."
     }
 }
 
@@ -1929,7 +1954,7 @@ function Invoke-UpdateAction {
 }
 
 try {
-    Assert-CodexEnvironment
+    $codexVersion = Get-CodexCliVersion
     Ensure-PowerShellExecutionPolicy
     if (Test-Path -LiteralPath $TargetCodexPath -PathType Leaf) {
         throw "Target path '$TargetCodexPath' points to a file."
@@ -1946,18 +1971,18 @@ try {
         }
     }
 
+    $repositoryPath = Get-RepositorySupportRoot
+    Assert-CodexEnvironment -CodexVersion $codexVersion -RepositoryPath $repositoryPath
     $null = Assert-NodeEnvironment
     $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
 
-    try {
-        Invoke-UpdateAction -DryRun:$DryRun -TargetCodexPath $TargetCodexPath
-    }
-    finally {
-        Remove-RepositorySupportTempRoot
-    }
+    Invoke-UpdateAction -DryRun:$DryRun -TargetCodexPath $TargetCodexPath
 }
 catch {
     Write-Error "[codex-home-config] $(Get-ErrorDisplayMessage -ErrorRecord $_)"
     Wait-OnFatalError
     exit 1
+}
+finally {
+    Remove-RepositorySupportTempRoot
 }

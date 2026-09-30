@@ -109,6 +109,7 @@ function run(command, args, cwd) {
 
 function writeSnapshot(rootPath, {
   config = 'model = "base"\n',
+  minimumVersion = '0.159.2\n',
   modelsLocal = modelsLocalFixture,
   agents = 'base instructions\n',
   agent = 'base agent\n'
@@ -116,6 +117,7 @@ function writeSnapshot(rootPath, {
   mkdirSync(join(rootPath, 'managed', 'agents'), { recursive: true });
   mkdirSync(join(rootPath, 'tools'), { recursive: true });
   writeFileSync(join(rootPath, 'install-codex-home-config.ps1'), instrumentExecutionPolicy(readFileSync(installerPath, 'utf8')), 'utf8');
+  if (minimumVersion !== null) writeFileSync(join(rootPath, 'codex-cli-min-version.txt'), minimumVersion, 'utf8');
   cpSync(configToolPath, join(rootPath, 'tools', 'config-toml-ops.cjs'));
   writeFileSync(join(rootPath, 'tools', 'ensure-rollover-plugin.cjs'), [
     "const targetIndex = process.argv.indexOf('--target');",
@@ -149,7 +151,7 @@ function createLocalRepository(tempDir) {
   return { localPath, seedPath };
 }
 
-function createPublishedReleaseArchive(tempDir) {
+function createPublishedReleaseArchive(tempDir, snapshotOptions = {}) {
   const publishedReleaseRoot = join(tempDir, 'published-release');
   const publishedReleaseSnapshotPath = join(publishedReleaseRoot, 'codex-home-config-release');
   const archivePath = join(tempDir, 'published-release.zip');
@@ -157,7 +159,8 @@ function createPublishedReleaseArchive(tempDir) {
   writeSnapshot(publishedReleaseSnapshotPath, {
     config: 'model = "published-release"\n',
     agents: 'published release instructions\n',
-    agent: 'published release agent\n'
+    agent: 'published release agent\n',
+    ...snapshotOptions
   });
 
   const result = spawnSync(
@@ -219,7 +222,8 @@ function runInstaller(repositoryPath, targetPath, args = [], {
 
 function runInstallerWithPublishedReleaseMock(repositoryPath, targetPath, archivePath, args = [], {
   apiFailure = false,
-  archiveFailure = false
+  archiveFailure = false,
+  cli = {}
 } = {}) {
   const quotePowerShell = (value) => `'${value.replaceAll("'", "''")}'`;
   const commandArguments = args.map((argument) => argument.startsWith('-') ? argument : quotePowerShell(argument));
@@ -258,7 +262,7 @@ function runInstallerWithPublishedReleaseMock(repositoryPath, targetPath, archiv
     {
       cwd: repositoryPath,
       encoding: 'utf8',
-      env: codexCliEnvironment(),
+      env: codexCliEnvironment(cli),
       timeout: 30000
     }
   );
@@ -267,9 +271,10 @@ function runInstallerWithPublishedReleaseMock(repositoryPath, targetPath, archiv
 function runInstallerFromDynamicScriptBlock(repositoryPath, targetPath, args = []) {
   const quotePowerShell = (value) => `'${value.replaceAll("'", "''")}'`;
   const commandArguments = args.map((argument) => argument.startsWith('-') ? argument : quotePowerShell(argument));
-  const installerSourceMarker = 'Set-StrictMode -Version Latest';
-  const installerSourceReplacement = `$PSScriptRoot = ${quotePowerShell(repositoryPath)}\n${installerSourceMarker}`;
+  const installerSourceMarker = 'function Get-LocalRepositoryRoot {';
+  const installerSourceReplacement = `${installerSourceMarker}\n    return ${quotePowerShell(repositoryPath)}`;
   const command = [
+    "function Invoke-WebRequest { throw 'Unexpected network request in dynamic scriptblock test' }",
     `$installerContent = Get-Content -LiteralPath ${quotePowerShell(join(repositoryPath, 'install-codex-home-config.ps1'))} -Raw`,
     `$installerContent = $installerContent.Replace(${quotePowerShell(installerSourceMarker)}, ${quotePowerShell(installerSourceReplacement)})`,
     [
@@ -383,10 +388,8 @@ test('installer always performs the default installation with no action or compo
   assert.doesNotMatch(installer, /\$Components\b|\b-Components\b/);
 });
 
-test('installer and sync reject unavailable or unsupported Codex CLI before side effects', { skip: !hasPwsh }, () => {
+test('installer and sync reject unavailable or unparseable Codex CLI before side effects', { skip: !hasPwsh }, () => {
   const cases = [
-    { name: 'older version', cli: { output: 'codex-cli 0.159.1' } },
-    { name: 'minimum prerelease', cli: { output: 'codex-cli 0.159.2-rc.1' } },
     { name: 'unexpected output', cli: { output: 'unrecognized CLI output' } },
     { name: 'command failure', cli: { exitCode: 1 } },
     {
@@ -419,7 +422,6 @@ test('installer and sync reject unavailable or unsupported Codex CLI before side
         const output = [result.stdout, result.stderr].filter(Boolean).join('\n');
         assert.equal(result.error, undefined, result.error?.message);
         assert.notEqual(result.status, 0, scenario.name);
-        assert.match(output, /0\.159\.2/, scenario.name);
         assert.match(output, /npm install -g @openai\/codex@latest/, scenario.name);
         assert.doesNotMatch(output, /Unexpected (git operation|release API request|release download)/, scenario.name);
       }
@@ -472,6 +474,7 @@ test('installer and sync stop before file changes when policy update fails or do
         const policyState = join(tempDir, 'policy');
         const policyLog = join(tempDir, 'policy.log');
         writeSnapshot(repositoryPath);
+        run('git', ['init', '--initial-branch=main'], repositoryPath);
         const configBefore = readFileSync(join(repositoryPath, 'managed', 'config.toml'));
         for (const shell of ['pwsh', 'powershell']) {
           writeFileSync(`${policyState}.${shell}`, 'RemoteSigned', 'utf8');
@@ -507,11 +510,77 @@ test('installer accepts the minimum and numerically newer Codex CLI versions', {
   }
 });
 
+test('installer enforces the snapshot minimum before target changes', { skip: !hasPwsh }, () => {
+  for (const version of ['0.200.2', '0.200.3-rc.1', '0.200.3']) {
+    withTempDir((tempDir) => {
+      const repositoryPath = join(tempDir, 'repository');
+      const targetPath = join(tempDir, 'target');
+      const policyLog = join(tempDir, 'policy.log');
+      writeSnapshot(repositoryPath, { minimumVersion: '0.200.3\n' });
+      run('git', ['init', '--initial-branch=main'], repositoryPath);
+      const result = runInstaller(repositoryPath, targetPath, ['-DryRun'], {
+        cli: { output: `codex-cli ${version}`, policyLog }
+      });
+      const output = [result.stdout, result.stderr].filter(Boolean).join('\n');
+      assert.equal(result.error, undefined, result.error?.message);
+      if (version === '0.200.3') {
+        assert.equal(result.status, 0, output);
+        assert.ok(existsSync(policyLog));
+      } else {
+        assert.notEqual(result.status, 0, output);
+        assert.match(output, /0\.200\.3/);
+        assert.match(output, /npm install -g @openai\/codex@latest/);
+        assert.ok(existsSync(policyLog));
+      }
+      assert.ok(!existsSync(targetPath));
+    });
+  }
+});
+
+test('installer rejects missing or invalid minimum metadata without changing target', { skip: !hasPwsh }, () => {
+  for (const minimumVersion of [null, 'unrecognized version\n', '0.200.3-rc.1\n']) {
+    withTempDir((tempDir) => {
+      const repositoryPath = join(tempDir, 'repository');
+      const targetPath = join(tempDir, 'target');
+      const policyLog = join(tempDir, 'policy.log');
+      writeSnapshot(repositoryPath, { minimumVersion });
+      run('git', ['init', '--initial-branch=main'], repositoryPath);
+      const result = runInstaller(repositoryPath, targetPath, ['-DryRun'], { cli: { policyLog } });
+      const output = [result.stdout, result.stderr].filter(Boolean).join('\n');
+      assert.equal(result.error, undefined, result.error?.message);
+      assert.notEqual(result.status, 0, output);
+      assert.match(output, /codex-cli-min-version\.txt/);
+      assert.ok(existsSync(policyLog));
+      assert.ok(!existsSync(targetPath));
+    });
+  }
+});
+
+test('published installation uses the archive minimum instead of the launcher minimum', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const repositoryPath = join(tempDir, 'repository');
+    const targetPath = join(tempDir, 'target');
+    const policyLog = join(tempDir, 'policy.log');
+    writeSnapshot(repositoryPath, { minimumVersion: '0.159.2\n' });
+    const archivePath = createPublishedReleaseArchive(tempDir, { minimumVersion: '0.200.3\n' });
+    const result = runInstallerWithPublishedReleaseMock(repositoryPath, targetPath, archivePath, ['-DryRun'], {
+      cli: { output: 'codex-cli 0.200.2', policyLog }
+    });
+    const output = [result.stdout, result.stderr].filter(Boolean).join('\n');
+    assert.equal(result.error, undefined, result.error?.message);
+    assert.notEqual(result.status, 0, output);
+    assert.match(output, /0\.200\.3/);
+    assert.ok(existsSync(policyLog));
+    assert.ok(!existsSync(targetPath));
+  });
+});
+
 test('Windows PowerShell installer rejects an older Codex CLI before creating the target', { skip: !hasWindowsPowerShell }, () => {
   withTempDir((tempDir) => {
     const repositoryPath = join(tempDir, 'repository');
     const targetPath = join(tempDir, 'target');
     writeSnapshot(repositoryPath);
+    run('git', ['init', '--initial-branch=main'], repositoryPath);
     const result = runInstaller(repositoryPath, targetPath, ['-DryRun'], {
       shell: windowsPowerShellPath,
       cli: { output: 'codex-cli 0.159.1' }
@@ -703,11 +772,12 @@ test('UsePublishedRelease fails on a published release commit API error without 
     writeFileSync(join(localPath, 'managed', 'config.toml'), 'model = "local-checkout"\n', 'utf8');
     mkdirSync(targetPath, { recursive: true });
     writeFileSync(join(targetPath, 'config.toml'), originalConfig);
+    const archivePath = createPublishedReleaseArchive(tempDir);
 
     const result = runInstallerWithPublishedReleaseMock(
       localPath,
       targetPath,
-      join(tempDir, 'unused-release.zip'),
+      archivePath,
       [],
       { apiFailure: true }
     );
@@ -924,19 +994,33 @@ test('DryRun reports when the target already matches the managed snapshot', { sk
   });
 });
 
-test('ModelsLocalFile sync accepts a numerically newer Codex CLI and preserves the source JSON bytes', { skip: !hasPwsh }, () => {
-  withTempDir((tempDir) => {
+test('sync records the local stable CLI minimum and preserves prerelease metadata bytes', { skip: !hasPwsh }, () => {
+  for (const scenario of [
+    { version: '0.200.3', expected: '0.200.3' },
+    { version: '0.158.1', expected: '0.158.1' },
+    { version: '0.200.3+build.1', expected: '0.200.3' },
+    { version: '0.159.2-rc.1', expected: null }
+  ]) withTempDir((tempDir) => {
     const { localPath } = createLocalRepository(tempDir);
+    const minimumPath = join(localPath, 'codex-cli-min-version.txt');
+    const minimumBefore = Buffer.from('\uFEFF0.159.2\r\n', 'utf8');
+    writeFileSync(minimumPath, minimumBefore);
+    commitAll(localPath, 'Prepare minimum metadata bytes');
     const sourcePath = join(tempDir, 'source');
     const sourceModelsLocal = Buffer.from('\uFEFF{\r\n  "models": ["synced"]\r\n}\r\n', 'utf8');
     mkdirSync(sourcePath, { recursive: true });
     writeFileSync(join(sourcePath, 'models.local.json'), sourceModelsLocal);
 
     const result = runSync(localPath, sourcePath, ['-Components', 'ModelsLocalFile'], {
-      cli: { output: 'codex-cli 0.159.10' }
+      cli: { output: `codex-cli ${scenario.version}` }
     });
     assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
     assert.deepEqual(readFileSync(join(localPath, 'managed', 'models.local.json')), sourceModelsLocal);
+    if (scenario.expected === null) {
+      assert.deepEqual(readFileSync(minimumPath), minimumBefore);
+    } else {
+      assert.equal(readFileSync(minimumPath, 'utf8').trim(), scenario.expected);
+    }
   });
 });
 
