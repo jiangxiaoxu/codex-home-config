@@ -964,8 +964,8 @@
       },
       "availability_nux": null,
       "upgrade": {
-        "model": "gpt-5.6-sol",
-        "migration_markdown": "GPT-5.5 retires on October 14, 2026. Switch to GPT-5.6 Sol to continue working in Codex.",
+        "model": "gpt-6.1-sol",
+        "migration_markdown": "GPT-5.5 retires on October 14, 2026. Switch to GPT-6.1 Sol to continue working in Codex.",
         "retirement_at": "2026-10-14T19:00:00Z"
       },
       "model_messages": {
