@@ -3,7 +3,6 @@ approval_policy = "on-request"
 approvals_reviewer = "auto_review"
 suppress_unstable_features_warning = true
 web_search = "live"
-personality = "pragmatic"
 background_terminal_max_timeout = 1_800_000
 
 [agents]
@@ -11,7 +10,6 @@ default_subagent_reasoning_effort = "medium"
 
 [features]
 respect_system_proxy = true
-js_repl = false
 unified_exec = true
 tool_suggest = false
 apply_patch_preserve_line_endings = true

@@ -27,7 +27,8 @@
 
 - 不得将 `AGENTS.md` 的内容复制或沉淀到项目文件.
 - 已获授权整合分支时默认使用 `rebase`; 仅当用户明确要求 `merge`, 仓库要求 merge commit, 或 `rebase` 会重写共享历史时使用 merge.
-- 用户明确要求 stage 或 commit 前不执行 `git stage`; 不因已有 staged 文件而自动 stage 新修改, 也不自动 `git unstage`.
+- 可按任务需要自主管理本地 Git 状态, 用暂存区, stash 或本地 commit 比对, 保存和恢复工作区, 并自主还原或丢弃本任务中 Agent 产生的改动, 无需逐次确认.
+- 可临时调整用户已有改动及暂存状态, 但须保留可恢复基线并恢复无关状态.
 - 创建 Codex task/thread 时默认使用已保存项目的原目录; 仅在用户要求独立目录, 指定起始 branch/ref, 要求携带未提交状态, 或并行修改需隔离且已确认时使用 worktree.
 - 指定 `agent_type` 时, `task_name` 必须以 `<agent_type>_` 开头并后接简洁语义.
 
