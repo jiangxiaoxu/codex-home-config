@@ -15,6 +15,7 @@ tool_suggest = false
 apply_patch_preserve_line_endings = true
 reasoning_effort_override = true
 instant_interrupt = true
+daemon_auto_start = false
 
   [features.multi_agent_v2]
   usage_hint_text = """
