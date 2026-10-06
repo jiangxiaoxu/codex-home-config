@@ -944,7 +944,7 @@
         }
       ],
       "shell_type": "unified_exec",
-      "visibility": "list",
+      "visibility": "hide",
       "supported_in_api": true,
       "priority": 13,
       "additional_speed_tiers": [
