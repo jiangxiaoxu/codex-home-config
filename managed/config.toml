@@ -4,6 +4,7 @@ approvals_reviewer = "auto_review"
 suppress_unstable_features_warning = true
 web_search = "live"
 background_terminal_max_timeout = 1_800_000
+mcp_servers = { }
 
 [agents]
 default_subagent_reasoning_effort = "medium"
@@ -58,10 +59,6 @@ resume_cwd = "session"
 screen_reader_detection_done = true
 fullscreen_transcript = true
 show_tooltips = false
-
-[mcp_servers.openaiDeveloperDocs]
-url = "https://developers.openai.com/mcp"
-enabled = false
 
 [sandbox_workspace_write]
 network_access = true
