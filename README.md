@@ -65,7 +65,7 @@ hook 信任仅管理 `hooks.state."context-window-rollover-reminder@jxx-codex-pl
 
 ## config.toml 同步策略
 
-同步脚本不会上传完整的 `config.toml`. 默认只同步 `managed/config.toml` 中已经管理的顶层配置, 并排除下方列出的配置. `apps` 整张 table 都不会上传. `mcp_servers`, `plugins` 和 `marketplaces` 按仓库中已经管理的名称过滤, 本地新增的条目不会自动进入仓库. `hooks` 只同步 managed snapshot 已管理的字段.
+同步脚本不会上传完整的 `config.toml`. 默认只同步 `managed/config.toml` 中已经管理的顶层配置, 并排除下方列出的配置. `apps` 整张 table 都不会上传. `mcp_servers`, `plugins` 和 `marketplaces` 按仓库中已经管理的名称过滤, 本地新增的条目不会自动进入仓库. `mcp_servers` 筛选后为空时省略整个配置项. `hooks` 只同步 managed snapshot 已管理的字段.
 
 安装时, `config.toml` 使用 syntax-preserving merge, 仅更新 `managed/config.toml` 中实际变化的路径. `mcp_servers`, `plugins` 和 `marketplaces` 按名称合并, `hooks` 按 snapshot 管理的字段合并. 未管理或未变化的顶层条目/表块会保留原始引号, 注释, 布局和行尾. `node_repl` 不参与同步, 因而保留目标文件中的原文.
 

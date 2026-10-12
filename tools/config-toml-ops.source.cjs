@@ -826,7 +826,11 @@ function buildPublishedSyncConfig (localConfig, managedConfig) {
 
     if (syncAllowlistedChildTables.has(key)) {
       const managedAllowlist = isTomlObject(managedConfig[key]) ? managedConfig[key] : {}
-      publishedConfig[key] = pickNamedChildEntriesByAllowlist(localConfig[key], managedAllowlist)
+      const filteredValue = pickNamedChildEntriesByAllowlist(localConfig[key], managedAllowlist)
+      if (key === 'mcp_servers' && isTomlObject(filteredValue) && Object.keys(filteredValue).length === 0) {
+        continue
+      }
+      publishedConfig[key] = filteredValue
       continue
     }
 

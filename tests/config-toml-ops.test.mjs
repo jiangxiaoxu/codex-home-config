@@ -1519,6 +1519,16 @@ test('publish-sync only emits managed mcp servers by server name', () => {
   );
 });
 
+test('publish-sync omits mcp_servers when no managed servers remain after filtering', () => {
+  assert.deepStrictEqual(
+    buildPublishedSyncConfig(
+      { web_search: 'live', mcp_servers: { node_repl: { command: 'node.exe' } } },
+      { web_search: 'live', mcp_servers: { docs: { url: 'https://example.com/mcp' } } }
+    ),
+    { web_search: 'live' }
+  );
+});
+
 test('publish-sync excludes the entire apps table even when apps are already managed', () => {
   const localConfig = {
     apps: {
