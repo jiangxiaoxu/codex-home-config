@@ -4993,6 +4993,9 @@ var syncExcludedNestedPaths = configTomlPolicy.sync.excludedNestedPaths;
 function hasOwn(object, key) {
   return Object.prototype.hasOwnProperty.call(object, key);
 }
+function setTomlProperty(object, key, value) {
+  Object.defineProperty(object, key, { value, enumerable: true, configurable: true, writable: true });
+}
 function ensureSupportedNodeVersion() {
   const majorVersion = Number.parseInt(process.versions.node.split(".")[0], 10);
   if (Number.isNaN(majorVersion) || majorVersion < minimumNodeMajorVersion) {
@@ -5146,7 +5149,8 @@ function buildMergeInstallTomlContent({ sourceConfig, mergedConfig, targetConfig
   }
   const managedSections = splitTomlRootAndTableContent(managedContent);
   const preservedRootContent = `${preservedTargetSections.preferredRoot}${preservedTargetSections.root}`;
-  const rootContent = preservedRootContent.length === 0 ? managedSections.root : `${preservedTargetSections.preferredRoot}${removeTrailingBlankLines(managedSections.root)}${preservedTargetSections.root}`;
+  const rootContent = preservedRootContent.length === 0 ? managedSections.root : [preservedTargetSections.preferredRoot, removeTrailingBlankLines(managedSections.root), preservedTargetSections.root].filter(Boolean).map((part) => part.endsWith("\n") ? part : `${part}
+`).join("");
   const tableContent = joinTomlFragments(managedSections.tables, preservedTargetSections.tables);
   if (rootContent.length === 0) {
     return tableContent;
@@ -5178,7 +5182,7 @@ function buildMergeInstallSourceContribution(sourceConfig, mergedConfig, targetC
       continue;
     }
     if (fieldManagedTopLevelTables.has(key)) {
-      contribution[key] = pickManagedFields(mergedConfig[key], sourceConfig[key]);
+      setTomlProperty(contribution, key, pickManagedFields(mergedConfig[key], sourceConfig[key]));
       continue;
     }
     if (partiallyManagedTopLevelTables.has(key) && isTomlObject(sourceConfig[key])) {
@@ -5187,18 +5191,18 @@ function buildMergeInstallSourceContribution(sourceConfig, mergedConfig, targetC
         if (!isTomlObject(mergedConfig[key]) || !hasOwn(mergedConfig[key], childKey)) {
           continue;
         }
-        managedChildren[childKey] = cloneTomlValue(mergedConfig[key][childKey]);
+        setTomlProperty(managedChildren, childKey, cloneTomlValue(mergedConfig[key][childKey]));
       }
-      contribution[key] = managedChildren;
+      setTomlProperty(contribution, key, managedChildren);
       continue;
     }
     if (hasOwn(mergedConfig, key)) {
-      contribution[key] = cloneTomlValue(mergedConfig[key]);
+      setTomlProperty(contribution, key, cloneTomlValue(mergedConfig[key]));
     }
   }
   for (const key of preferredTopLevelKeyOrder) {
     if (!hasOwn(contribution, key) && hasOwn(mergedConfig, key) && !canPreserveTomlValue(targetConfig, mergedConfig, key)) {
-      contribution[key] = cloneTomlValue(mergedConfig[key]);
+      setTomlProperty(contribution, key, cloneTomlValue(mergedConfig[key]));
     }
   }
   removePreservedTargetPaths(contribution, preservedNodePaths);
@@ -5213,13 +5217,17 @@ function cloneTomlValue(value) {
   }
   const clone = {};
   for (const key of Object.keys(value)) {
-    clone[key] = cloneTomlValue(value[key]);
+    setTomlProperty(clone, key, cloneTomlValue(value[key]));
   }
   return clone;
 }
 function removePreservedTargetPaths(contribution, preservedNodePaths) {
   for (const pathKey of preservedNodePaths) {
-    removeNestedPath(contribution, JSON.parse(pathKey));
+    let path = JSON.parse(pathKey);
+    const arrayIndex = path.findIndex((segment) => typeof segment === "number");
+    if (arrayIndex !== -1) path = path.slice(0, arrayIndex);
+    if (path.length === 1) delete contribution[path[0]];
+    else removeNestedPath(contribution, path);
   }
 }
 function getTomlPathKey(pathSegments) {
@@ -5248,6 +5256,15 @@ function collectPreservedTargetTomlSections(targetText, sourceConfig, targetConf
   let tableContent = "";
   for (let index = 0; index < nodes.length; index += 1) {
     const node = nodes[index];
+    if (!preservedNodes[index] && node.type === "TOMLKeyValue" && node.value.type === "TOMLInlineTable") {
+      const path = getTomlNodePath(node);
+      const mergedValue = getTomlPathValue(mergedConfig, path);
+      if (isTomlObject(mergedValue)) {
+        preservedNodePaths.add(getTomlPathKey(path));
+        rootContent += `${getTomlNodeLeadingComment(targetText, nodes[index - 1], node)}${targetText.slice(node.range[0], node.value.range[0])}${renderMergedInlineTable(targetText, node.value, getTomlPathValue(targetConfig, path), mergedValue)}${targetText.slice(node.value.range[1], findTomlLineEnd(targetText, node.range[1]))}`;
+        continue;
+      }
+    }
     if (preservedNodes[index] && node.type === "TOMLTable") {
       preservedNodePaths.add(getTomlPathKey(getTomlNodePath(node)));
     }
@@ -5314,6 +5331,39 @@ function splitTomlRootAndTableContent(content) {
     tables: content.slice(firstTable.range[0])
   };
 }
+function renderInlineTomlValue(value) {
+  if (Array.isArray(value)) return `[${value.map(renderInlineTomlValue).join(", ")}]`;
+  if (isTomlObject(value) && !(value instanceof Date)) return `{ ${Object.entries(value).map(([key, child]) => `${JSON.stringify(key)} = ${renderInlineTomlValue(child)}`).join(", ")} }`;
+  return TOML.stringify({ value }).trim().slice("value = ".length);
+}
+function renderMergedInlineTable(text, node, targetValue, mergedValue) {
+  const remaining = cloneTomlValue(mergedValue);
+  const entries = [];
+  for (const child of node.body) {
+    const path = getTomlNodePath(child);
+    const value = getTomlPathValue(mergedValue, path);
+    if (typeof value === "undefined") continue;
+    const previousValue = getTomlPathValue(targetValue, path);
+    const renderedValue = tomlValuesEqual(previousValue, value) ? text.slice(child.value.range[0], child.value.range[1]) : child.value.type === "TOMLInlineTable" && isTomlObject(value) ? renderMergedInlineTable(text, child.value, previousValue, value) : renderInlineTomlValue(value);
+    entries.push(`${text.slice(child.range[0], child.value.range[0])}${renderedValue}`);
+    removeNestedPath({ root: remaining }, ["root", ...path]);
+  }
+  for (const [key, value] of Object.entries(remaining)) {
+    const hasDottedChildren = node.body.some((child) => {
+      const path = getTomlNodePath(child);
+      return path.length > 1 && path[0] === key;
+    });
+    if (hasDottedChildren) entries.push(...renderDottedInlineEntries(value, [key]));
+    else entries.push(`${JSON.stringify(key)} = ${renderInlineTomlValue(value)}`);
+  }
+  return `{ ${entries.join(", ")} }`;
+}
+function renderDottedInlineEntries(value, path) {
+  if (isTomlObject(value) && !(value instanceof Date) && Object.keys(value).length > 0) {
+    return Object.entries(value).flatMap(([key, child]) => renderDottedInlineEntries(child, [...path, key]));
+  }
+  return [`${path.map((key) => JSON.stringify(key)).join(".")} = ${renderInlineTomlValue(value)}`];
+}
 function insertPreservedNestedKeyValueContent(managedContent, nestedKeyValueContent) {
   if (nestedKeyValueContent.size === 0) {
     return managedContent;
@@ -5343,7 +5393,7 @@ function insertPreservedNestedKeyValueContent(managedContent, nestedKeyValueCont
     });
   }
   let content = managedContent;
-  for (const insertion of insertions.sort((left, right) => right.offset - left.offset)) {
+  for (const insertion of insertions.map((entry, index) => ({ ...entry, index })).sort((left, right) => right.offset - left.offset || right.index - left.index)) {
     content = `${content.slice(0, insertion.offset)}${insertion.content}${content.slice(insertion.offset)}`;
   }
   return content;
@@ -5370,6 +5420,11 @@ function shouldPreserveTargetTomlNode(node, sourceConfig, targetConfig, mergedCo
 function shouldPreserveTargetTomlPath(pathSegments, sourceConfig, targetConfig, mergedConfig) {
   if (pathSegments.length === 0) {
     return false;
+  }
+  const arrayIndex = pathSegments.findIndex((segment) => typeof segment === "number");
+  if (arrayIndex !== -1) {
+    const arrayPath = pathSegments.slice(0, arrayIndex);
+    return tomlValuesEqual(getTomlPathValue(targetConfig, arrayPath), getTomlPathValue(mergedConfig, arrayPath));
   }
   const [topLevelKey, childKey] = pathSegments;
   if (isRemovedTomlPath(pathSegments)) {
@@ -5419,6 +5474,10 @@ function tomlValuesEqual(leftValue, rightValue) {
   if (leftValue === rightValue) {
     return true;
   }
+  if (leftValue instanceof Date || rightValue instanceof Date) {
+    return leftValue instanceof Date && rightValue instanceof Date && leftValue.constructor === rightValue.constructor && leftValue.isDate === rightValue.isDate && leftValue.isTime === rightValue.isTime && leftValue.isFloating === rightValue.isFloating && leftValue.toISOString() === rightValue.toISOString();
+  }
+  if (Number.isNaN(leftValue) && Number.isNaN(rightValue)) return true;
   if (Array.isArray(leftValue) || Array.isArray(rightValue)) {
     if (!Array.isArray(leftValue) || !Array.isArray(rightValue) || leftValue.length !== rightValue.length) {
       return false;
@@ -5440,7 +5499,7 @@ function tomlValuesEqual(leftValue, rightValue) {
 }
 function getTomlNodePath(node) {
   if (node.type === "TOMLTable") {
-    return node.resolvedKey.filter((segment) => typeof segment === "string");
+    return node.resolvedKey;
   }
   if (node.type === "TOMLKeyValue") {
     return node.key.keys.map((key) => key.type === "TOMLQuoted" ? key.value : key.name);
@@ -5451,14 +5510,14 @@ function orderTopLevelKeys(config) {
   const orderedConfig = {};
   for (const key of preferredTopLevelKeyOrder) {
     if (hasOwn(config, key)) {
-      orderedConfig[key] = config[key];
+      setTomlProperty(orderedConfig, key, config[key]);
     }
   }
   for (const key of Object.keys(config)) {
     if (hasOwn(orderedConfig, key)) {
       continue;
     }
-    orderedConfig[key] = config[key];
+    setTomlProperty(orderedConfig, key, config[key]);
   }
   return orderedConfig;
 }
@@ -5471,13 +5530,13 @@ function mergeNamedChildEntries(preferredValue, fallbackValue) {
   }
   const mergedValue = {};
   for (const key of Object.keys(preferredValue)) {
-    mergedValue[key] = preferredValue[key];
+    setTomlProperty(mergedValue, key, preferredValue[key]);
   }
   for (const key of Object.keys(fallbackValue)) {
     if (hasOwn(preferredValue, key)) {
       continue;
     }
-    mergedValue[key] = fallbackValue[key];
+    setTomlProperty(mergedValue, key, fallbackValue[key]);
   }
   return mergedValue;
 }
@@ -5490,7 +5549,7 @@ function pickNamedChildEntriesByAllowlist(candidateValue, allowlistValue) {
     if (!hasOwn(allowlistValue, key)) {
       continue;
     }
-    filteredValue[key] = candidateValue[key];
+    setTomlProperty(filteredValue, key, candidateValue[key]);
   }
   return filteredValue;
 }
@@ -5501,7 +5560,7 @@ function pickManagedFields(candidateValue, managedValue) {
   const filteredValue = {};
   for (const key of Object.keys(managedValue)) {
     if (hasOwn(candidateValue, key)) {
-      filteredValue[key] = pickManagedFields(candidateValue[key], managedValue[key]);
+      setTomlProperty(filteredValue, key, pickManagedFields(candidateValue[key], managedValue[key]));
     }
   }
   return filteredValue;
@@ -5512,7 +5571,7 @@ function mergeManagedFields(sourceValue, targetValue) {
   }
   const mergedValue = cloneTomlValue(targetValue);
   for (const key of Object.keys(sourceValue)) {
-    mergedValue[key] = mergeManagedFields(sourceValue[key], targetValue[key]);
+    setTomlProperty(mergedValue, key, mergeManagedFields(sourceValue[key], targetValue[key]));
   }
   return mergedValue;
 }
@@ -5523,31 +5582,31 @@ function buildMergeInstallConfig(sourceConfig, targetConfig) {
       continue;
     }
     if (fieldManagedTopLevelTables.has(key)) {
-      mergedConfig[key] = mergeManagedFields(sourceConfig[key], targetConfig[key]);
+      setTomlProperty(mergedConfig, key, mergeManagedFields(sourceConfig[key], targetConfig[key]));
       continue;
     }
     if (partiallyManagedTopLevelTables.has(key) && hasOwn(targetConfig, key)) {
-      mergedConfig[key] = mergeNamedChildEntries(sourceConfig[key], targetConfig[key]);
+      setTomlProperty(mergedConfig, key, mergeNamedChildEntries(sourceConfig[key], targetConfig[key]));
       continue;
     }
-    mergedConfig[key] = sourceConfig[key];
+    setTomlProperty(mergedConfig, key, sourceConfig[key]);
   }
   for (const key of Object.keys(targetConfig)) {
     if (installPreservedTopLevelTables.has(key) || installRemovedTopLevelKeys.has(key)) {
       continue;
     }
     if (installPreservedTopLevelKeys.has(key)) {
-      mergedConfig[key] = targetConfig[key];
+      setTomlProperty(mergedConfig, key, targetConfig[key]);
       continue;
     }
     if (hasOwn(sourceConfig, key)) {
       continue;
     }
-    mergedConfig[key] = targetConfig[key];
+    setTomlProperty(mergedConfig, key, targetConfig[key]);
   }
   for (const tableName of installPreservedTopLevelTables) {
     if (hasOwn(targetConfig, tableName)) {
-      mergedConfig[tableName] = targetConfig[tableName];
+      setTomlProperty(mergedConfig, tableName, targetConfig[tableName]);
     }
   }
   preserveNestedPaths(mergedConfig, targetConfig, installPreservedNestedPaths);
@@ -5576,7 +5635,7 @@ function buildPublishedSyncConfig(localConfig, managedConfig) {
       continue;
     }
     if (syncFieldAllowlistedTables.has(key)) {
-      publishedConfig[key] = pickManagedFields(localConfig[key], managedConfig[key]);
+      setTomlProperty(publishedConfig, key, pickManagedFields(localConfig[key], managedConfig[key]));
       continue;
     }
     if (syncAllowlistedChildTables.has(key)) {
@@ -5585,10 +5644,10 @@ function buildPublishedSyncConfig(localConfig, managedConfig) {
       if (key === "mcp_servers" && isTomlObject(filteredValue) && Object.keys(filteredValue).length === 0) {
         continue;
       }
-      publishedConfig[key] = filteredValue;
+      setTomlProperty(publishedConfig, key, filteredValue);
       continue;
     }
-    publishedConfig[key] = localConfig[key];
+    setTomlProperty(publishedConfig, key, localConfig[key]);
   }
   const orderedConfig = preservePublishedKeyOrder(publishedConfig, managedConfig);
   removeNestedPaths(orderedConfig, syncExcludedNestedPaths);

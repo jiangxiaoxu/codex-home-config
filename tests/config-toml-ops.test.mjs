@@ -9,6 +9,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const {
   buildMergeInstallConfig,
+  buildMergeInstallTomlContent,
   buildPublishedSyncConfig,
   configTomlPolicy,
   orderTopLevelKeys,
@@ -2104,7 +2105,7 @@ test('validated TOML writes reject a changed in-place target without replacing i
   });
 });
 
-test('merge-install preserves an inline MCP target when the semantic guard rejects an unsupported mixed merge', () => {
+test('merge-install updates mixed inline MCP tables and preserves local child source text', () => {
   withTempDir((tempDir) => {
     const sourcePath = join(tempDir, 'source.toml');
     const targetPath = join(tempDir, 'target.toml');
@@ -2133,8 +2134,60 @@ test('merge-install preserves an inline MCP target when the semantic guard rejec
       }
     );
 
-    assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /unexpected semantics/);
-    assert.deepStrictEqual(readFileSync(targetPath), targetContent);
+    assert.equal(result.status, 0, result.stderr);
+    const output = readFileSync(targetPath, 'utf8');
+    assert.ok(output.includes("node_repl = { command = 'node-repl.exe' }"));
+    assert.deepStrictEqual(TOML.parse(output).mcp_servers, {
+      managed: { command: 'managed.exe' },
+      node_repl: { command: 'node-repl.exe' }
+    });
   });
+});
+
+test('merge-install keeps preserved fields in their table at a shared insertion boundary', () => {
+  const sourceConfig = { features: { apps: false }, tui: { status_line: ['model'], show_tooltips: false } };
+  const targetText = '[features]\napps = false\nold_setting = true\n[tui]\nstatus_line = ["model"]\n';
+  const targetConfig = TOML.parse(targetText);
+  const mergedConfig = buildMergeInstallConfig(sourceConfig, targetConfig);
+  const output = buildMergeInstallTomlContent({ sourceConfig, targetConfig, mergedConfig, targetText });
+  assert.deepStrictEqual(TOML.parse(output), mergedConfig);
+  assert.deepStrictEqual(TOML.parse(output).tui, sourceConfig.tui);
+});
+
+for (const [name, sourceText, targetText] of [
+  ['dotted inline children', 'hooks = { x = { y = 2, z = 3 } }', 'hooks = { x.y = 1 }'],
+  ['root assignment without final newline', 'model = "old"', 'foo = 1\nmodel = "old"'],
+  ['nested arrays of tables', '[hooks]\nmanaged = true', '[[hooks.SessionStart]]\nmatcher = "startup"\n[[hooks.SessionStart.hooks]]\ncommand = "foo"\ntype = "command"\n'],
+  ['partially changed array of tables', 'hooks = { SessionStart = [{ matcher = "same" }, { matcher = "new" }] }', '[[hooks.SessionStart]]\nmatcher = "same"\n[[hooks.SessionStart]]\nmatcher = "old"\n'],
+  ['appended array of tables item', 'hooks = { SessionStart = [{ matcher = "same" }, { matcher = "new" }] }', '[[hooks.SessionStart]]\nmatcher = "same"\n'],
+  ['unchanged array beside changed field', 'hooks = { flag = true, SessionStart = [{ matcher = "same" }] }', '[hooks]\nflag = false\n[[hooks.SessionStart]]\nmatcher = "same"\n'],
+  ['changed offset datetime', 'x = 1979-05-27T07:32:00Z', 'x = 1980-05-27T07:32:00Z'],
+  ['date and offset datetime at midnight', 'x = 1979-05-27', 'x = 1979-05-27T00:00:00Z'],
+  ['NaN', 'x = nan', 'x = nan'],
+  ['inline arrays and datetime', 'x = { a = [{ date = 1979-05-27T00:00:00Z, values = [1, 2] }] }', 'x = { a = [] }']
+]) {
+  test(`merge-install preserves expected semantics for ${name}`, () => {
+    const sourceConfig = TOML.parse(sourceText);
+    const targetConfig = TOML.parse(targetText);
+    const mergedConfig = buildMergeInstallConfig(sourceConfig, targetConfig);
+    const output = buildMergeInstallTomlContent({ sourceConfig, targetConfig, mergedConfig, targetText });
+    assert.deepStrictEqual(TOML.parse(output), mergedConfig);
+  });
+}
+
+
+test('install and publish retain literal __proto__ configuration keys', () => {
+  const cases = [
+    ['"__proto__" = "hello"\n', ''],
+    ['[mcp_servers."__proto__"]\ncommand = "new"\n', '[mcp_servers."__proto__"]\ncommand = "old"\n'],
+    ['[hooks."__proto__"]\nenabled = true\n', '[hooks."__proto__"]\nenabled = false\n']
+  ];
+  for (const [sourceText, targetText] of cases) {
+    const sourceConfig = TOML.parse(sourceText);
+    const targetConfig = TOML.parse(targetText);
+    const mergedConfig = buildMergeInstallConfig(sourceConfig, targetConfig);
+    const output = buildMergeInstallTomlContent({ sourceConfig, targetConfig, mergedConfig, targetText });
+    assert.deepStrictEqual(TOML.parse(output), sourceConfig);
+    assert.deepStrictEqual(buildPublishedSyncConfig(sourceConfig, sourceConfig), sourceConfig);
+  }
 });

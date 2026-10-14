@@ -19,7 +19,6 @@ $ErrorActionPreference = 'Stop'
 $repoOwner = 'jiangxiaoxu'
 $repoName = 'codex-home-config'
 $releaseBranch = 'release'
-$archiveUri = "https://codeload.github.com/$repoOwner/$repoName/zip/refs/heads/$releaseBranch"
 $publishedCommitApiUri = "https://api.github.com/repos/$repoOwner/$repoName/commits/$releaseBranch"
 $userAgent = 'codex-home-config-installer'
 $maxBackupVersions = 5
@@ -665,6 +664,8 @@ function Get-RepositorySupportRoot {
 
     try {
         Write-StageMessage "Downloading published '$releaseBranch' snapshot..."
+        $commitInfo = Get-InstallCommitInfo
+        $archiveUri = "https://codeload.github.com/$repoOwner/$repoName/zip/$($commitInfo.Sha)"
         Invoke-ArchiveDownload -Uri $archiveUri -OutFile $archivePath
         Write-StageMessage "Extracting published '$releaseBranch' snapshot..."
         Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
@@ -800,7 +801,12 @@ function Get-BackupSessionPath {
     if ([string]::IsNullOrWhiteSpace($backupState.SessionPath)) {
         $backupRootPath = Get-BackupRootPath -TargetCodexPath $TargetCodexPath
         $backupState.SessionPath = Join-Path $backupRootPath $timestamp
-        $null = New-Item -ItemType Directory -Path $backupState.SessionPath -Force
+        $suffix = 0
+        while (Test-Path -LiteralPath $backupState.SessionPath) {
+            $suffix++
+            $backupState.SessionPath = Join-Path $backupRootPath ('{0}_{1:D6}' -f $timestamp, $suffix)
+        }
+        $null = New-Item -ItemType Directory -Path $backupState.SessionPath
     }
 
     return $backupState.SessionPath
@@ -1236,7 +1242,7 @@ function Get-BackupVersionDirectory {
     }
 
     return @(Get-ChildItem -LiteralPath $backupRootPath -Directory | Where-Object {
-            $_.Name -match '^\d{8}_\d{6}$'
+            $_.Name -match '^\d{8}_\d{6}(?:_\d{6})?$'
         } | Sort-Object Name -Descending)
 }
 
@@ -1746,27 +1752,6 @@ function Write-DryRunDiff {
     Write-DryRunFallbackDiff -BeforePath $BeforePath -AfterPath $AfterPath -HasSummarizedDifferences:($summarizedDifferenceCount -gt 0)
 }
 
-function Normalize-DryRunConfigFile {
-    param(
-        [Parameter(Mandatory)]
-        [string]$ConfigPath,
-
-        [Parameter(Mandatory)]
-        [string]$NormalizedPath
-    )
-
-    if (-not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) {
-        return
-    }
-
-    Invoke-ConfigTomlTool -Command 'merge-install' -Arguments @{
-        source = $ConfigPath
-        target = $ConfigPath
-        output = $NormalizedPath
-    }
-    Copy-Item -LiteralPath $NormalizedPath -Destination $ConfigPath -Force
-}
-
 function Invoke-DryRunInstallation {
     param(
         [Parameter(Mandatory)]
@@ -1782,16 +1767,11 @@ function Invoke-DryRunInstallation {
     $dryRunTempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-home-config-dry-run-" + [guid]::NewGuid().ToString('N'))
     $beforePath = Join-Path $dryRunTempRoot 'target'
     $baselinePath = Join-Path $dryRunTempRoot 'would-install'
-    $normalizedBeforeConfigPath = Join-Path $dryRunTempRoot 'normalized-target-config.toml'
-    $normalizedBaselineConfigPath = Join-Path $dryRunTempRoot 'normalized-would-install-config.toml'
 
     try {
         Copy-DryRunManagedTargetContents -SourcePath $TargetCodexPath -DestinationPath $beforePath
         Copy-DryRunManagedTargetContents -SourcePath $beforePath -DestinationPath $baselinePath
         Install-Snapshot -SnapshotInfo $SnapshotInfo -TargetCodexPath $baselinePath -SelectedComponents $SelectedComponents -ModelCatalogTargetPath $TargetCodexPath
-        Write-StageMessage 'Normalizing temporary config.toml files before comparing the dry-run result.'
-        Normalize-DryRunConfigFile -ConfigPath (Join-Path $beforePath 'config.toml') -NormalizedPath $normalizedBeforeConfigPath
-        Normalize-DryRunConfigFile -ConfigPath (Join-Path $baselinePath 'config.toml') -NormalizedPath $normalizedBaselineConfigPath
 
         $beforeModelsLocalPath = Join-Path $beforePath 'models.local.json'
         $baselineModelsLocalPath = Join-Path $baselinePath 'models.local.json'

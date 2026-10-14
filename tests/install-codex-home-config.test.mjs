@@ -227,7 +227,7 @@ function runInstallerWithPublishedReleaseMock(repositoryPath, targetPath, archiv
     : `function Invoke-RestMethod { param($Uri, $Headers) return ${mockCommit} }`;
   const webRequestMock = archiveFailure
     ? "function Invoke-WebRequest { param($Uri, $Headers, $OutFile) throw 'Mocked published release archive download failure' }"
-    : `function Invoke-WebRequest { param($Uri, $Headers, $OutFile) Copy-Item -LiteralPath ${quotePowerShell(archivePath)} -Destination $OutFile -Force }`;
+    : `function Invoke-WebRequest { param($Uri, $Headers, $OutFile) if ($Uri -ne 'https://codeload.github.com/jiangxiaoxu/codex-home-config/zip/0123456789abcdef0123456789abcdef01234567') { throw "Archive must match the resolved release commit" }; Copy-Item -LiteralPath ${quotePowerShell(archivePath)} -Destination $OutFile -Force }`;
   const command = [
     restMethodMock,
     webRequestMock,
@@ -1002,7 +1002,7 @@ test('default installation can update a config.toml with an unchanged managed ne
   });
 });
 
-test('default installation leaves config.toml untouched when the TOML semantic guard rejects a mixed inline MCP merge', { skip: !hasPwsh }, () => {
+test('default installation merges mixed inline MCP while preserving its backup', { skip: !hasPwsh }, () => {
   withTempDir((tempDir) => {
     const { localPath } = createLocalRepository(tempDir);
     const targetPath = join(tempDir, 'target');
@@ -1019,10 +1019,13 @@ test('default installation leaves config.toml untouched when the TOML semantic g
 
     const result = runInstaller(localPath, targetPath);
     const output = [result.stdout, result.stderr].filter(Boolean).join('\n');
-    assert.notEqual(result.status, 0);
-    assert.match(output, /Config TOML helper command failed: merge-install/);
-    assert.match(output, /unexpected semantics/);
-    assert.deepStrictEqual(readFileSync(targetConfigPath), targetConfig);
+    assert.equal(result.status, 0, output);
+    const installed = TOML.parse(readFileSync(targetConfigPath, 'utf8'));
+    assert.equal(installed.mcp_servers.managed.command, 'managed.exe');
+    assert.equal(installed.mcp_servers.node_repl.command, 'node-repl.exe');
+    const backupRoot = join(targetPath, 'sync_codex-home-config_backup');
+    const [backup] = readdirSync(backupRoot);
+    assert.deepStrictEqual(readFileSync(join(backupRoot, backup, 'config.toml')), targetConfig);
   });
 });
 
@@ -1038,4 +1041,41 @@ test('installer and sync keep pull and confirmation behavior', () => {
   assert.doesNotMatch(syncScript, /Write-PendingRepositoryDiff|diff\s+--no-index|Tracked file diff|Untracked file diffs/);
   assert.match(syncScript, /Read-YesOrEnterChoice -Prompt 'Continue with committing and publishing these changes\?'/);
   assert.match(syncScript, /Read-EnterAcceptChoice -Prompt "Also publish this same commit to origin\/\$\{releaseBranch\}\?"/);
+});
+
+
+test('installation preserves an existing backup from the same second', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const targetPath = join(tempDir, 'target');
+    const backupRoot = join(targetPath, 'sync_codex-home-config_backup');
+    const existingBackup = join(backupRoot, '20261014_133359');
+    mkdirSync(existingBackup, { recursive: true });
+    writeFileSync(join(existingBackup, 'config.toml'), 'model = "older"\n');
+    writeFileSync(join(targetPath, 'config.toml'), 'model = "before-install"\n');
+    const result = runInstaller(localPath, targetPath, [], {
+      commandPrefix: "function Get-Date { param($Format) return '20261014_133359' }"
+    });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(readFileSync(join(existingBackup, 'config.toml'), 'utf8'), 'model = "older"\n');
+    const backups = readdirSync(backupRoot);
+    assert.equal(backups.length, 2);
+    const newBackup = backups.find((name) => name !== '20261014_133359');
+    assert.equal(readFileSync(join(backupRoot, newBackup, 'config.toml'), 'utf8'), 'model = "before-install"\n');
+  });
+});
+
+
+test('DryRun shows removal of retired config keys', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const targetPath = join(tempDir, 'target');
+    mkdirSync(targetPath);
+    writeFileSync(join(targetPath, 'config.toml'), 'model = "base"\nmodel_context_window = 128000\n[notice.model_migrations]\nold = "new"\n');
+    const result = runInstaller(localPath, targetPath, ['-DryRun']);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /-model_context_window = 128000/);
+    assert.match(result.stdout, /-old = "new"/);
+    assert.match(readFileSync(join(targetPath, 'config.toml'), 'utf8'), /model_context_window/);
+  });
 });
