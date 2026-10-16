@@ -10,11 +10,11 @@ default_subagent_reasoning_effort = "medium"
 
 [features]
 respect_system_proxy = true
-unified_exec = true
 tool_suggest = false
-apply_patch_preserve_line_endings = true
 reasoning_effort_override = true
 instant_interrupt = true
+unified_image_budget = true
+defer_mailbox_preemption = true
 
   [features.multi_agent_v2]
   usage_hint_text = """
