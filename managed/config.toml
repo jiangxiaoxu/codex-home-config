@@ -27,7 +27,7 @@ If at any point you can parallelize work by delegating tasks to another agent (n
 
 Explicit user instructions, applicable `AGENTS.md` or skill instructions, and agent-specific developer instructions about sub-agents, delegation, or parallel agent work take precedence over this hint, including when they restrict or disable proactive delegation.
 """
-  max_concurrent_threads_per_session = 48
+  max_concurrent_threads_per_session = 96
   default_wait_timeout_ms = 300_000
   enabled = true
 
