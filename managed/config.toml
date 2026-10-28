@@ -33,7 +33,7 @@ Explicit user instructions, applicable `AGENTS.md` or skill instructions, and ag
   enabled = true
 
   [features.context_management]
-  experimental_mode = true
+  experimental_mode = false
 
   [features.current_time_reminder]
   enabled = true
@@ -41,6 +41,9 @@ Explicit user instructions, applicable `AGENTS.md` or skill instructions, and ag
   delivery_mode = "after_user_or_tool_output"
   reminder_interval_seconds = 60
   sleep_tool = true
+
+  [features.async_compaction]
+  enabled = true
 
 [tui]
 status_line = [
@@ -75,7 +78,7 @@ source_type = "git"
 source = "https://github.com/jiangxiaoxu/jxx-codex-plugins.git"
 
 [plugins."context-window-rollover-reminder@jxx-codex-plugins"]
-enabled = true
+enabled = false
 
 [hooks.state."context-window-rollover-reminder@jxx-codex-plugins:hooks/hooks.json:post_tool_use:0:0"]
 trusted_hash = "sha256:1d26b05240dba2ed2d34ff6bc51465a86226a0bcf96234236de553f26155e390"
