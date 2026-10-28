@@ -118,6 +118,7 @@ function writeSnapshot(rootPath, {
 } = {}) {
   mkdirSync(join(rootPath, 'managed', 'agents'), { recursive: true });
   mkdirSync(join(rootPath, 'tools'), { recursive: true });
+  writeFileSync(join(rootPath, '.gitattributes'), 'managed/models.local.json -text\n', 'utf8');
   writeFileSync(join(rootPath, 'install-codex-home-config.ps1'), instrumentExecutionPolicy(readFileSync(installerPath, 'utf8')), 'utf8');
   cpSync(configToolPath, join(rootPath, 'tools', 'config-toml-ops.cjs'));
   writeFileSync(join(rootPath, 'managed', 'config.toml'), config, 'utf8');
@@ -217,18 +218,60 @@ function runInstaller(repositoryPath, targetPath, args = [], {
 function runInstallerWithPublishedReleaseMock(repositoryPath, targetPath, archivePath, args = [], {
   apiFailure = false,
   archiveFailure = false,
+  ghInstalled = true,
+  ghAuthenticated = true,
+  ghInstallFailure = false,
+  ghLoginFailure = false,
+  ghLogPath = join(repositoryPath, '..', 'github-cli.log'),
+  shell = pwshPath,
   environment = {}
 } = {}) {
   const quotePowerShell = (value) => `'${value.replaceAll("'", "''")}'`;
   const commandArguments = args.map((argument) => argument.startsWith('-') ? argument : quotePowerShell(argument));
   const mockCommit = "[pscustomobject]@{ sha = '0123456789abcdef0123456789abcdef01234567'; html_url = 'https://example.invalid/commit/0123456789abcdef0123456789abcdef01234567'; commit = [pscustomobject]@{ message = 'Published release snapshot'; committer = [pscustomobject]@{ name = 'Release Bot'; date = '2026-01-02T03:04:05Z' }; author = [pscustomobject]@{ name = 'Release Bot'; date = '2026-01-02T03:04:05Z' } } }";
+  const ghMock = [
+    `$global:testGhInstalled = $${ghInstalled}`,
+    `$global:testGhAuthenticated = $${ghAuthenticated}`,
+    `function Invoke-TestGh {
+      $commandLine = $args -join ' '
+      Add-Content -LiteralPath ${quotePowerShell(ghLogPath)} -Value "gh $commandLine"
+      $global:LASTEXITCODE = 0
+      switch -Wildcard ($commandLine) {
+        'auth status *' { if (-not $global:testGhAuthenticated) { $global:LASTEXITCODE = 1 }; return }
+        'auth login *' { ${ghLoginFailure ? '$global:LASTEXITCODE = 1' : '$global:testGhAuthenticated = $true'}; return }
+        'auth token *' { if (-not $global:testGhAuthenticated) { throw 'Token requested before authentication' }; return 'mock-github-secret' }
+        default { throw "Unexpected gh command: $commandLine" }
+      }
+    }`,
+    `function Invoke-TestWinget {
+      Add-Content -LiteralPath ${quotePowerShell(ghLogPath)} -Value "winget $($args -join ' ')"
+      $global:LASTEXITCODE = ${ghInstallFailure ? '1' : '0'}
+      ${ghInstallFailure ? '' : '$global:testGhInstalled = $true'}
+    }`,
+    `function Get-Command {
+      param($Name, $CommandType, $ErrorAction)
+      if ($Name -in @('gh', 'gh.exe')) {
+        ${ghInstalled ? "return [pscustomobject]@{ Source = 'Invoke-TestGh'; Path = 'Invoke-TestGh' }" : 'return $null'}
+      }
+      if ($Name -in @('winget', 'winget.exe')) { return [pscustomobject]@{ Source = 'Invoke-TestWinget'; Path = 'Invoke-TestWinget' } }
+      Microsoft.PowerShell.Core\\Get-Command @PSBoundParameters
+    }`,
+    `function Test-Path {
+      param($LiteralPath, $Path, $PathType, $ErrorAction)
+      $candidate = if ($LiteralPath) { $LiteralPath } else { $Path }
+      if ($candidate -match '[\\\\/]GitHub CLI[\\\\/]gh.exe$') { return $global:testGhInstalled }
+      Microsoft.PowerShell.Management\\Test-Path @PSBoundParameters
+    }`,
+    `if ($env:ProgramFiles) { Set-Alias -Name (Join-Path $env:ProgramFiles 'GitHub CLI\\gh.exe') -Value Invoke-TestGh }`
+  ].join('; ');
   const restMethodMock = apiFailure
-    ? "function Invoke-RestMethod { param($Uri, $Headers) throw 'Mocked published release commit API failure' }"
-    : `function Invoke-RestMethod { param($Uri, $Headers) return ${mockCommit} }`;
+    ? "function Invoke-RestMethod { param($Uri, $Headers) if ($Headers.Authorization -ne 'Bearer mock-github-secret') { throw 'Missing authenticated API request' }; throw 'Mocked published release commit API failure' }"
+    : `function Invoke-RestMethod { param($Uri, $Headers) if ($Headers.Authorization -ne 'Bearer mock-github-secret') { throw 'Missing authenticated API request' }; Add-Content -LiteralPath ${quotePowerShell(ghLogPath)} -Value 'api commit'; return ${mockCommit} }`;
   const webRequestMock = archiveFailure
     ? "function Invoke-WebRequest { param($Uri, $Headers, $OutFile) throw 'Mocked published release archive download failure' }"
-    : `function Invoke-WebRequest { param($Uri, $Headers, $OutFile) if ($Uri -ne 'https://codeload.github.com/jiangxiaoxu/codex-home-config/zip/0123456789abcdef0123456789abcdef01234567') { throw "Archive must match the resolved release commit" }; Copy-Item -LiteralPath ${quotePowerShell(archivePath)} -Destination $OutFile -Force }`;
+    : `function Invoke-WebRequest { param($Uri, $Headers, $OutFile) if ($Headers.ContainsKey('Authorization')) { throw 'Archive request must not carry credentials' }; if ($Uri -ne 'https://codeload.github.com/jiangxiaoxu/codex-home-config/zip/0123456789abcdef0123456789abcdef01234567') { throw "Archive must match the resolved release commit" }; Copy-Item -LiteralPath ${quotePowerShell(archivePath)} -Destination $OutFile -Force }`;
   const command = [
+    ghMock,
     restMethodMock,
     webRequestMock,
     ...(apiFailure || archiveFailure ? ['function Start-Sleep { param($Seconds) }'] : []),
@@ -243,7 +286,7 @@ function runInstallerWithPublishedReleaseMock(repositoryPath, targetPath, archiv
   ].join('; ');
 
   return spawnSync(
-    pwshPath,
+    shell,
     [
       '-NoLogo',
       '-NoProfile',
@@ -576,6 +619,85 @@ test('a failed local git pull stops before touching the install target', { skip:
   });
 });
 
+test('UsePublishedRelease installs GitHub CLI and logs in before installing, including without a refreshed PATH', { skip: !hasPwsh || process.platform !== 'win32' }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const archivePath = createPublishedReleaseArchive(tempDir);
+    for (const shell of [pwshPath, ...(hasWindowsPowerShell ? [windowsPowerShellPath] : [])]) {
+      const targetPath = join(tempDir, shell, 'target');
+      const ghLogPath = join(tempDir, `${shell}.github-cli.log`);
+      const result = runInstallerWithPublishedReleaseMock(localPath, targetPath, archivePath, [], {
+        ghInstalled: false,
+        ghAuthenticated: false,
+        ghLogPath,
+        shell
+      });
+      const output = [result.stdout, result.stderr].filter(Boolean).join('\n');
+      assert.equal(result.status, 0, output);
+      assert.match(readFileSync(join(targetPath, 'config.toml'), 'utf8'), /published-release/);
+      assert.doesNotMatch(output, /mock-github-secret/);
+      const calls = readFileSync(ghLogPath, 'utf8').trim().split(/\r?\n/);
+      assert.match(calls[0], /^winget install .*--id GitHub\.cli.*--exact.*--source winget/);
+      assert.equal(calls.filter((line) => line.startsWith('winget ')).length, 1);
+      assert.equal(calls.filter((line) => line.startsWith('gh auth login ')).length, 1);
+      assert.ok(calls.findIndex((line) => line.startsWith('gh auth login ')) < calls.indexOf('api commit'));
+    }
+  });
+});
+
+for (const failure of ['install', 'login']) {
+  test(`UsePublishedRelease stops after GitHub CLI ${failure} failure before changing the target`, { skip: !hasPwsh || process.platform !== 'win32' }, () => {
+    withTempDir((tempDir) => {
+      const { localPath } = createLocalRepository(tempDir);
+      const targetPath = join(tempDir, 'target');
+      const ghLogPath = join(tempDir, 'github-cli.log');
+      const originalConfig = Buffer.from('model = "target-before"\n', 'utf8');
+      mkdirSync(targetPath, { recursive: true });
+      writeFileSync(join(targetPath, 'config.toml'), originalConfig);
+      const result = runInstallerWithPublishedReleaseMock(localPath, targetPath, join(tempDir, 'unused.zip'), [], {
+        ghInstalled: failure !== 'install',
+        ghAuthenticated: false,
+        ghInstallFailure: failure === 'install',
+        ghLoginFailure: failure === 'login',
+        ghLogPath
+      });
+      const output = [result.stdout, result.stderr].filter(Boolean).join('\n');
+      assert.notEqual(result.status, 0, output);
+      assert.match(output, /GitHub CLI|GitHub.*login/i);
+      const calls = readFileSync(ghLogPath, 'utf8').trim().split(/\r?\n/);
+      assert.equal(calls.filter((line) => line.startsWith(failure === 'install' ? 'winget ' : 'gh auth login ')).length, 1);
+      assert.ok(!calls.includes('api commit'));
+      assert.deepEqual(readFileSync(join(targetPath, 'config.toml')), originalConfig);
+      assert.ok(!existsSync(join(targetPath, 'sync_codex-home-config_backup')));
+    });
+  });
+}
+
+test('UsePublishedRelease DryRun requires existing GitHub CLI authentication without installing or logging in', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    for (const ghInstalled of [false, true]) {
+      const targetPath = join(tempDir, `target-${ghInstalled}`);
+      const ghLogPath = join(tempDir, `github-cli-${ghInstalled}.log`);
+      const originalConfig = Buffer.from('model = "target-before"\n', 'utf8');
+      mkdirSync(targetPath, { recursive: true });
+      writeFileSync(join(targetPath, 'config.toml'), originalConfig);
+      const result = runInstallerWithPublishedReleaseMock(localPath, targetPath, join(tempDir, 'unused.zip'), ['-DryRun'], {
+        ghInstalled,
+        ghAuthenticated: false,
+        ghLogPath
+      });
+      const output = [result.stdout, result.stderr].filter(Boolean).join('\n');
+      assert.notEqual(result.status, 0, output);
+      assert.match(output, /DryRun|dry run/i);
+      const calls = existsSync(ghLogPath) ? readFileSync(ghLogPath, 'utf8') : '';
+      assert.doesNotMatch(calls, /winget |gh auth login |api commit/);
+      assert.deepEqual(readFileSync(join(targetPath, 'config.toml')), originalConfig);
+      assert.ok(!existsSync(join(targetPath, 'sync_codex-home-config_backup')));
+    }
+  });
+});
+
 test('UsePublishedRelease ignores a dirty local checkout and installs the mocked published release', { skip: !hasPwsh }, () => {
   withTempDir((tempDir) => {
     const { localPath } = createLocalRepository(tempDir);
@@ -588,6 +710,8 @@ test('UsePublishedRelease ignores a dirty local checkout and installs the mocked
     assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
     assert.match(readFileSync(join(targetPath, 'config.toml'), 'utf8'), /published-release/);
     assert.equal(readFileSync(join(targetPath, 'AGENTS.md'), 'utf8'), 'published release instructions\n');
+    assert.doesNotMatch(readFileSync(join(tempDir, 'github-cli.log'), 'utf8'), /winget |gh auth login /);
+    assert.doesNotMatch([result.stdout, result.stderr].join('\n'), /mock-github-secret/);
   });
 });
 

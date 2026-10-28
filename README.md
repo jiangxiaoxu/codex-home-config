@@ -8,6 +8,8 @@
 - Windows 上的脚本先在启动阶段分别检查已安装的 `pwsh` 和 Windows PowerShell 5.1 的 `CurrentUser` 执行策略. 不是 `Unrestricted` 时自动执行 `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Unrestricted -Force` 并复查, 失败则停止后续操作. `-DryRun` 也会进行这项持久化调整; 不修改 `LocalMachine` 或 Group Policy.
 - 如果本地 `.ps1` 在加载前就被执行策略阻止, 脚本无法自行调整. 可先用 `pwsh -NoProfile -ExecutionPolicy Bypass -File .\install-codex-home-config.ps1` 启动; Windows PowerShell 5.1 使用 `powershell.exe` 替代 `pwsh`.
 - 公开在线安装只使用已发布的 `release` 分支, 不会安装 `main` 上尚未发布的内容.
+- 在线安装需要 GitHub CLI (`gh`) 认证. Windows 缺少 `gh` 时, 安装器通过 `winget` 自动安装; 系统需已有 `winget`, 安装过程可能要求管理员授权. 未登录或认证失效时, 安装器启动浏览器登录, 授权成功后自动继续. 已有有效登录会直接复用. 安装或登录失败时, 不修改目标 Codex 配置.
+- 在线安装只将认证 token 用于 GitHub API 请求, 不写入 Codex 配置或安装日志; 登录凭据由 `gh` 管理. 本地仓库安装不要求 `gh`. 在线 `-DryRun` 需要预先安装 `gh` 并登录, 不会自动安装或启动登录.
 
 ## 安装和更新
 

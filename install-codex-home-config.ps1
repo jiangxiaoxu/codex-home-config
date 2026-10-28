@@ -32,6 +32,7 @@ $runtimeState = [pscustomobject]@{
     NodeVersionText       = ''
     PublishedCommitInfo   = $null
     GitExecutable         = ''
+    GitHubToken           = ''
     RelaunchedInstaller   = $false
 }
 
@@ -179,9 +180,98 @@ function Get-DownloadRequestHeader {
 }
 
 function Get-GitHubApiRequestHeader {
+    $token = Assert-GitHubAuthentication
     return @{
         Accept       = 'application/vnd.github+json'
         'User-Agent' = $userAgent
+        Authorization = "Bearer $token"
+    }
+}
+
+function Get-GitHubCliExecutable {
+    $command = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -ne $command) {
+        return $command.Source
+    }
+
+    if ($env:OS -eq 'Windows_NT') {
+        $installRoots = @($env:ProgramFiles, ${env:ProgramFiles(x86)})
+        if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+            $installRoots += Join-Path $env:LOCALAPPDATA 'Programs'
+        }
+        foreach ($root in $installRoots) {
+            if (-not [string]::IsNullOrWhiteSpace($root)) {
+                $candidate = Join-Path $root 'GitHub CLI\gh.exe'
+                if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+                    return $candidate
+                }
+            }
+        }
+    }
+
+    return $null
+}
+
+function Assert-GitHubAuthentication {
+    if (-not [string]::IsNullOrWhiteSpace($runtimeState.GitHubToken)) {
+        return $runtimeState.GitHubToken
+    }
+
+    $ghExecutable = Get-GitHubCliExecutable
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        if ([string]::IsNullOrWhiteSpace($ghExecutable)) {
+            if ($DryRun) {
+                throw 'GitHub CLI is required for online DryRun. Install gh and run gh auth login --hostname github.com --web, then retry.'
+            }
+            $winget = Get-Command winget -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($env:OS -ne 'Windows_NT' -or $null -eq $winget) {
+                throw 'GitHub CLI is required for online installation, but automatic installation requires Windows and winget. Install gh from https://cli.github.com/ and retry.'
+            }
+
+            Write-StageMessage 'Installing GitHub CLI with winget...'
+            & $winget.Source install --id GitHub.cli --exact --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Host
+            $installExitCode = $LASTEXITCODE
+            if ($installExitCode -ne 0) {
+                throw "GitHub CLI installation failed with exit code $installExitCode. Resolve the winget error and retry."
+            }
+            $ghExecutable = Get-GitHubCliExecutable
+            if ([string]::IsNullOrWhiteSpace($ghExecutable)) {
+                throw 'GitHub CLI was installed but gh.exe could not be found. Reopen PowerShell and retry.'
+            }
+        }
+
+        $null = & $ghExecutable auth status --active --hostname github.com 2>&1
+        $authExitCode = $LASTEXITCODE
+        if ($authExitCode -ne 0) {
+            if ($DryRun) {
+                throw 'GitHub authentication is required for online DryRun. Run gh auth login --hostname github.com --web, then retry.'
+            }
+            Write-StageMessage 'Sign in to GitHub in your browser to continue installation...'
+            & $ghExecutable auth login --hostname github.com --git-protocol https --web | Out-Host
+            $loginExitCode = $LASTEXITCODE
+            if ($loginExitCode -ne 0) {
+                throw "GitHub login failed or was cancelled (exit code $loginExitCode). Installation stopped."
+            }
+            $null = & $ghExecutable auth status --active --hostname github.com 2>&1
+            $authExitCode = $LASTEXITCODE
+            if ($authExitCode -ne 0) {
+                throw 'GitHub authentication could not be verified after login. Check gh auth status --hostname github.com and retry.'
+            }
+        }
+
+        $tokenOutput = @(& $ghExecutable auth token --hostname github.com 2>$null)
+        $tokenExitCode = $LASTEXITCODE
+        $token = ($tokenOutput -join '').Trim()
+        if ($tokenExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($token)) {
+            throw 'Unable to obtain the GitHub authentication token. Run gh auth login --hostname github.com --web and retry.'
+        }
+        $runtimeState.GitHubToken = $token
+        return $token
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
     }
 }
 
@@ -469,10 +559,11 @@ function Invoke-GitHubApiRequest {
         [string]$Uri
     )
 
+    $headers = Get-GitHubApiRequestHeader
     $maxAttempts = 3
     for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
         try {
-            return Invoke-RestMethod -Uri $Uri -Headers (Get-GitHubApiRequestHeader)
+            return Invoke-RestMethod -Uri $Uri -Headers $headers
         }
         catch {
             if ($attempt -ge $maxAttempts) {
