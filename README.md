@@ -47,9 +47,9 @@ iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/relea
 
 ## 插件配置
 
-插件相关设置随 `config.toml` 同步和安装: `marketplaces.jxx-codex-plugins` 声明 Git 来源, `plugins` 声明 `context-window-rollover-reminder@jxx-codex-plugins` 的 `enabled = true`.
+插件相关设置随 `config.toml` 同步和安装: `marketplaces.jxx-codex-plugins` 声明 Git 来源, `plugins` 声明 `context-window-rollover-reminder@jxx-codex-plugins` 及其启用状态. 插件是否启用以安装时所用 snapshot 中的 `enabled` 值为准, 可按需调整后同步发布.
 
-hook 信任仅管理 `hooks.state."context-window-rollover-reminder@jxx-codex-plugins:hooks/hooks.json:post_tool_use:0:0".trusted_hash`. 发布同步只采集这一字段; 安装时保留目标中的其他 hook 条目和同一 hook 的 `enabled` 等其他字段.
+hook 信任仅管理 `hooks.state."context-window-rollover-reminder@jxx-codex-plugins:hooks/hooks.json:post_tool_use:0:0".trusted_hash`. 发布同步只采集这一字段; 安装时保留目标中的其他 hook 条目和同一 hook 的 `enabled` 等其他字段. 信任不代表启用: 该 hook 只有在所属插件启用且目标 hook 设置允许时才会运行; 插件禁用时不会运行.
 
 安装器只合并配置声明. 普通 Codex TUI 启动后, Codex 按原有逻辑异步获取缺失插件和更新插件缓存. `trusted_hash` 随配置同步, 对应特定 hook 内容; 插件更新改变该内容后, Codex 可能要求重新信任.
 
