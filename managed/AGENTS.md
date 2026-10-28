@@ -26,7 +26,6 @@
 ## 操作
 
 - 不得将 `AGENTS.md` 的内容复制或沉淀到项目文件.
-- 解释或评估来源不明的既有改动时, 使用 `notes.search_contents` 和 `history.search_contents` 查找相关线索, 按需用 `history.read_item` 核对对话原文, 并核对当前源码及验证记录; 不因改动已存在就归为用户改动, 不仅凭摘要推定动机, 无法确认时标明未知.
 - 已获授权整合分支时, 本地分支与其远程跟踪分支之间默认使用 `rebase`, 不同分支之间使用 `merge`.
 - 可按任务需要自主管理本地 Git 状态, 用暂存区, stash 或本地 commit 比对, 保存和恢复工作区, 并自主还原或丢弃本任务中 Agent 产生的改动, 无需逐次确认.
 - 可临时调整用户已有改动及暂存状态, 但须保留可恢复基线并恢复无关状态.
@@ -47,7 +46,11 @@
 - Windows native debugging 可直接使用 `cdbX64.exe`; 将其视为 CDB executable.
 - `new_context` 只能作为平台直接工具调用. 不得在 `exec` JavaScript 中调用 `tools.new_context()`, 该对象不在 exec runtime 中可用.
 
-## 上下文管理
+## 上下文与历史
+
+### 历史检索与证据
+
+- 解释或评估来源不明的既有改动时, 使用 `notes.search_contents` 和 `history.search_contents` 查找相关线索, 按需用 `history.read_item` 核对对话原文, 并核对当前源码及验证记录; 不因改动已存在就归为用户改动, 不仅凭摘要推定动机, 无法确认时标明未知.
 
 ### 自主提前换窗
 
