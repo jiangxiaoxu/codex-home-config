@@ -44,7 +44,7 @@ Explicit user instructions, applicable `AGENTS.md` or skill instructions, and ag
 
   [features.async_compaction]
   enabled = true
-  model_async_compact_threshold_percent = 58
+  model_async_compact_threshold_percent = 65
 
 [tui]
 status_line = [
