@@ -11,11 +11,11 @@ default_subagent_reasoning_effort = "medium"
 [features]
 respect_system_proxy = true
 tool_suggest = false
-reasoning_effort_override = true
-instant_interrupt = true
 unified_image_budget = true
 defer_mailbox_preemption = true
 local_thread_store_compression = true
+wake_on_agent_messages = true
+agent_message_board = true
 
   [features.multi_agent_v2]
   usage_hint_text = """
