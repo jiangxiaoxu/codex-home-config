@@ -16,6 +16,7 @@ defer_mailbox_preemption = true
 local_thread_store_compression = true
 wake_on_agent_messages = true
 agent_message_board = true
+recommended_plugins = false
 
   [features.multi_agent_v2]
   usage_hint_text = """
