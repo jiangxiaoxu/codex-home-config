@@ -14,7 +14,6 @@ tool_suggest = false
 unified_image_budget = true
 defer_mailbox_preemption = true
 local_thread_store_compression = true
-wake_on_agent_messages = true
 agent_message_board = true
 recommended_plugins = false
 
