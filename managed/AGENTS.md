@@ -43,6 +43,7 @@
 - 生成或编辑图片后使用 `view_image` 检查结果.
 - 获取日志, 搜索结果, 执行结果及其他 artifact 时, 默认分层获取并按需展开.
 - 处理 JSON / JSONL 时优先使用 `jq`.
+- 可以使用`gsudo`来进行提权.
 - Windows native debugging 可直接使用 `cdbX64.exe`; 将其视为 CDB executable.
 
 ## 子代理调度
