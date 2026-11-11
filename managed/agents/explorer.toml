@@ -9,7 +9,7 @@ Rules:
 - Reuse existing explorers for related questions.
 """
 model = "gpt-6.1-sol"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "high"
 developer_instructions = """
 Investigate the specific codebase question assigned by the caller. Trace the relevant code path and report concise findings with file and symbol references, distinguishing evidence from uncertainty.
 
