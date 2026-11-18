@@ -5,9 +5,6 @@ suppress_unstable_features_warning = true
 web_search = "live"
 background_terminal_max_timeout = 1_800_000
 
-[agents]
-default_subagent_reasoning_effort = "medium"
-
 [features]
 respect_system_proxy = true
 tool_suggest = false
