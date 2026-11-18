@@ -2,7 +2,7 @@ name = "principal"
 description = """
 Use for independent assessment, critique, or review, including verification of fixes, or when explicitly requested. Complexity or coordination alone does not justify this role; use a worker for production implementation.
 """
-model = "gpt-6.1-sol"
+model = "gpt-6.2-sol"
 model_reasoning_effort = "max"
 
 developer_instructions = """

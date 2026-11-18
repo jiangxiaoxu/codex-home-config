@@ -1,8 +1,10 @@
 name = "deep_reviewer"
 description = """
-Every dispatch of this independent second-model reviewer, including a follow-up, requires an explicit user request. High stakes or reviewer disagreement never trigger it automatically.
+Use for independent deep review only when the user explicitly requests a deep review or names deep_reviewer.
+Reuse the existing reviewer for follow-ups within the scope the user authorized.
+A new deep review or an expansion of scope requires an explicit user request.
 """
-model = "gpt-6-astra"
+model = "gpt-6.2-astra"
 model_reasoning_effort = "xhigh"
 
 developer_instructions = """
