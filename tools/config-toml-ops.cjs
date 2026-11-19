@@ -4963,6 +4963,9 @@ var configTomlPolicy = {
     removedTopLevelKeys: [
       "model_context_window"
     ],
+    removedTargetOnlyTopLevelKeys: [
+      "agents"
+    ],
     removedNestedPaths: [
       ["notice", "model_migrations"]
     ],
@@ -4986,6 +4989,7 @@ var fieldManagedTopLevelTables = new Set(configTomlPolicy.install.fieldMergedTab
 var syncFieldAllowlistedTables = new Set(configTomlPolicy.sync.fieldAllowlistedTables);
 var syncExcludedTopLevelKeys = new Set(configTomlPolicy.sync.excludedTopLevelKeys);
 var installRemovedTopLevelKeys = new Set(configTomlPolicy.install.removedTopLevelKeys);
+var installRemovedTargetOnlyTopLevelKeys = new Set(configTomlPolicy.install.removedTargetOnlyTopLevelKeys);
 var installRemovedNestedPaths = configTomlPolicy.install.removedNestedPaths;
 var syncExcludedInstallPreservedNestedPaths = configTomlPolicy.syncExcludedInstallPreservedNestedPaths;
 var installPreservedNestedPaths = configTomlPolicy.install.preservedNestedPaths;
@@ -5442,7 +5446,7 @@ function shouldPreserveTargetTomlPath(pathSegments, sourceConfig, targetConfig, 
     return true;
   }
   if (!hasOwn(sourceConfig, topLevelKey)) {
-    return true;
+    return !installRemovedTargetOnlyTopLevelKeys.has(topLevelKey);
   }
   if (!partiallyManagedTopLevelTables.has(topLevelKey)) {
     return false;
@@ -5599,7 +5603,7 @@ function buildMergeInstallConfig(sourceConfig, targetConfig) {
       setTomlProperty(mergedConfig, key, targetConfig[key]);
       continue;
     }
-    if (hasOwn(sourceConfig, key)) {
+    if (hasOwn(sourceConfig, key) || installRemovedTargetOnlyTopLevelKeys.has(key)) {
       continue;
     }
     setTomlProperty(mergedConfig, key, targetConfig[key]);

@@ -62,6 +62,9 @@ const configTomlPolicy = {
     removedTopLevelKeys: [
       'model_context_window'
     ],
+    removedTargetOnlyTopLevelKeys: [
+      'agents'
+    ],
     removedNestedPaths: [
       ['notice', 'model_migrations']
     ],
@@ -87,6 +90,7 @@ const fieldManagedTopLevelTables = new Set(configTomlPolicy.install.fieldMergedT
 const syncFieldAllowlistedTables = new Set(configTomlPolicy.sync.fieldAllowlistedTables)
 const syncExcludedTopLevelKeys = new Set(configTomlPolicy.sync.excludedTopLevelKeys)
 const installRemovedTopLevelKeys = new Set(configTomlPolicy.install.removedTopLevelKeys)
+const installRemovedTargetOnlyTopLevelKeys = new Set(configTomlPolicy.install.removedTargetOnlyTopLevelKeys)
 const installRemovedNestedPaths = configTomlPolicy.install.removedNestedPaths
 const syncExcludedInstallPreservedNestedPaths = configTomlPolicy.syncExcludedInstallPreservedNestedPaths
 const installPreservedNestedPaths = configTomlPolicy.install.preservedNestedPaths
@@ -646,7 +650,7 @@ function shouldPreserveTargetTomlPath (pathSegments, sourceConfig, targetConfig,
   }
 
   if (!hasOwn(sourceConfig, topLevelKey)) {
-    return true
+    return !installRemovedTargetOnlyTopLevelKeys.has(topLevelKey)
   }
 
   if (!partiallyManagedTopLevelTables.has(topLevelKey)) {
@@ -850,7 +854,7 @@ function buildMergeInstallConfig (sourceConfig, targetConfig) {
       continue
     }
 
-    if (hasOwn(sourceConfig, key)) {
+    if (hasOwn(sourceConfig, key) || installRemovedTargetOnlyTopLevelKeys.has(key)) {
       continue
     }
 

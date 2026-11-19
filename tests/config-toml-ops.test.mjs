@@ -242,35 +242,26 @@ test('merge-install replaces the complete agents table and removes model_context
   );
 });
 
-test('merge-install preserves local agents when the managed snapshot does not define agents', () => {
-  const sourceConfig = {
-    features: {
-      runtime_metrics: true
-    }
-  };
+for (const [syntax, localAgents] of [
+  ['table headers', '[agents]\nmax_threads = 4\n[agents.reviewer]\nmodel = "local"\n'],
+  ['dotted keys', 'agents.max_threads = 4\nagents.reviewer.model = "local"\n'],
+  ['inline table', 'agents = { max_threads = 4, reviewer = { model = "local" } }\n']
+]) {
+  test(`merge-install removes local agents declared with ${syntax} when absent from the managed snapshot`, () => {
+    const sourceConfig = { features: { runtime_metrics: true } };
+    const localSettings = "[windows]\nsandbox = 'elevated' # local setting\n";
+    const targetText = `${localAgents}\n${localSettings}`;
+    const targetConfig = TOML.parse(targetText);
+    const mergedConfig = buildMergeInstallConfig(sourceConfig, targetConfig);
+    const output = buildMergeInstallTomlContent({ sourceConfig, targetConfig, mergedConfig, targetText });
 
-  const targetConfig = {
-    agents: {
-      reviewer: {
-        model: 'gpt-5.3-codex'
-      }
-    }
-  };
-
-  assert.deepStrictEqual(
-    buildMergeInstallConfig(sourceConfig, targetConfig),
-    {
-      features: {
-        runtime_metrics: true
-      },
-      agents: {
-        reviewer: {
-          model: 'gpt-5.3-codex'
-        }
-      }
-    }
-  );
-});
+    assert.deepStrictEqual(TOML.parse(output), {
+      features: { runtime_metrics: true },
+      windows: { sandbox: 'elevated' }
+    });
+    assert.ok(output.includes(localSettings));
+  });
+}
 
 test('merge-install preserves local service_tier and plan_mode_reasoning_effort when the managed snapshot defines them', () => {
   const sourceConfig = {
