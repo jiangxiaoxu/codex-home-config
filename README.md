@@ -22,6 +22,21 @@ pwsh -NoProfile -Command "iwr -useb 'https://raw.githubusercontent.com/jiangxiao
 
 安装器始终执行默认 `Update`, 不提供 `-Action`, `-Components` 或 Restore 选择.
 
+已安装 `gh` 时, 可以用以下命令在需要时启动浏览器登录, 例如在运行在线 `-DryRun` 前. 在浏览器完成授权即可.
+
+```powershell
+gh auth status --active --hostname github.com *> $null
+$ghAuthExitCode = $LASTEXITCODE
+if ($ghAuthExitCode -ne 0) {
+    gh auth login --hostname github.com --git-protocol https --web
+}
+```
+
+### 安装时替换或移除的目录
+
+- `agents/` 由快照整目录替换, 本地独有的文件和子目录会被移除.
+- `skills/jiangxiaoxu/` 在快照提供时整目录替换. 快照缺少该目录时, 会删除本地同名目录. 此后若 `skills/` 为空, 也会移除它.
+
 ## 本地仓库强制使用已发布版本
 
 即使从本地 checkout 运行, 也可忽略本地分支和 `git pull`, 改为从 GitHub 下载已发布的 `release` snapshot:
@@ -58,7 +73,7 @@ hook 信任仅管理 `hooks.state."context-window-rollover-reminder@jxx-codex-pl
 
 ## 备份
 
-备份保存在 `<TargetCodexPath>/sync_codex-home-config_backup/<timestamp>/`. 每次更新会在覆盖前备份目标路径中已有的可安装内容. `models.local.json` 是独立的可选 snapshot 文件: 仅在 managed snapshot 和目标文件都存在时备份. 文件会完整复制, 不应用下面的同步排除规则. `models.local.json` 会原样复制, 不处理 CRLF. 更新成功后仅保留最新 5 个备份版本, 更早的版本会尽可能移入 Recycle Bin.
+备份保存在 `<TargetCodexPath>/sync_codex-home-config_backup/<timestamp>/`. 每次更新会在替换或移除前备份目标路径中已有的可安装内容. `models.local.json` 是独立的可选 snapshot 文件: 仅在 managed snapshot 和目标文件都存在时备份. 文件会完整复制, 不应用下面的同步排除规则. `models.local.json` 会原样复制, 不处理 CRLF. 更新成功后仅保留最新 5 个备份版本. 更早的版本会移入 Recycle Bin, 移入失败时会永久删除.
 
 ## models.local.json 同步策略
 
@@ -70,7 +85,12 @@ hook 信任仅管理 `hooks.state."context-window-rollover-reminder@jxx-codex-pl
 
 同步脚本不会上传完整的 `config.toml`. 默认只同步 `managed/config.toml` 中已经管理的顶层配置, 并排除下方列出的配置. `apps` 整张 table 都不会上传. `mcp_servers`, `plugins` 和 `marketplaces` 按仓库中已经管理的名称过滤, 本地新增的条目不会自动进入仓库. `mcp_servers` 筛选后为空时省略整个配置项. `hooks` 只同步 managed snapshot 已管理的字段.
 
-安装时, `config.toml` 使用 syntax-preserving merge. `mcp_servers`, `plugins` 和 `marketplaces` 按名称合并, `hooks` 按 snapshot 管理的字段合并. `managed/config.toml` 定义 `agents` 时, 安装会用 managed 配置整表替换本地 `agents`. 缺少 `agents` 时, 安装会删除本地 `[agents]` 及其所有配置项和子表. 其他未管理或未变化的顶层条目/表块会保留原始引号, 注释, 布局和行尾. `node_repl` 不参与同步, 因而保留目标文件中的原文.
+安装时, `config.toml` 使用 syntax-preserving merge. `mcp_servers`, `plugins` 和 `marketplaces` 按名称合并, `hooks` 按 snapshot 管理的字段合并. 以下配置有专门的移除规则.
+
+- 始终移除 `model_context_window` 和 `notice.model_migrations`.
+- `managed/config.toml` 缺少顶层 `agents` 时, 删除本地整个 `agents` 配置及其所有子项. 快照定义 `agents` 时, 按快照整表替换, 移除本地独有的子项.
+
+其他未管理或未变化的顶层条目/表块会保留原始引号, 注释, 布局和行尾. `node_repl` 不参与同步, 因而保留目标文件中的原文.
 
 安装生成的 managed 更新片段遵循 `managed/config.toml` 的顺序. publish-sync 保留 `managed/config.toml` 已有字段的顺序, 包括嵌套表和 allowlisted MCP child; 允许同步的新增字段按本地顺序追加, 字段值和数组元素顺序以本地配置为准. 顶层条目和 MCP child 仍受现有 allowlist 限制. 未管理的目标顶层条目/表块保留原文中的相对位置.
 
@@ -119,6 +139,6 @@ workspace_dependencies = false
 apps = false
 ```
 
-备份会原样保留上述配置. 安装更新时, `features.workspace_dependencies`, `features.apps` 和 `tui.model_availability_nux` 不会覆盖当前机器上的值. `projects`, `service_tier`, `plan_mode_reasoning_effort` 和 `sandbox_workspace_write.writable_roots` 同样保留本机值; `model_context_window` 和 `notice.model_migrations` 会被移除; 其余配置按普通安装规则处理.
+备份会原样保留上述配置. 安装更新时, `features.workspace_dependencies`, `features.apps`, `tui.model_availability_nux`, `projects`, `service_tier`, `plan_mode_reasoning_effort` 和 `sandbox_workspace_write.writable_roots` 保留本机值.
 
 请勿在此仓库中存储 secret.
