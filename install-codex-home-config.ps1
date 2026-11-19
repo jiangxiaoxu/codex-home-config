@@ -13,6 +13,10 @@ param(
     [switch]$SkipRepositoryPull
 )
 
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    throw '[codex-home-config] PowerShell 7 or later is required. Run this installer with pwsh.'
+}
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -458,17 +462,6 @@ function Get-GitHeadCommit {
     return $headCommit
 }
 
-function Get-PowerShellExecutablePath {
-    foreach ($candidateName in @('pwsh.exe', 'powershell.exe', 'pwsh', 'powershell')) {
-        $candidatePath = Join-Path $PSHOME $candidateName
-        if (Test-Path -LiteralPath $candidatePath -PathType Leaf) {
-            return $candidatePath
-        }
-    }
-
-    throw "Unable to find the current PowerShell executable under $PSHOME"
-}
-
 function Invoke-LatestInstaller {
     param(
         [Parameter(Mandatory)]
@@ -487,7 +480,7 @@ function Invoke-LatestInstaller {
 
     $argumentList = [System.Collections.Generic.List[string]]::new()
     $argumentList.Add('-NoProfile')
-    if ($env:OS -eq 'Windows_NT') {
+    if ($IsWindows) {
         $argumentList.Add('-ExecutionPolicy')
         $argumentList.Add('Bypass')
     }
@@ -503,7 +496,8 @@ function Invoke-LatestInstaller {
     $argumentList.Add($encodedCommand)
 
     Write-StageMessage 'Repository updated; relaunching the latest installer...'
-    $powerShellExecutable = Get-PowerShellExecutablePath
+    $powerShellExecutableName = if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' }
+    $powerShellExecutable = Join-Path $PSHOME $powerShellExecutableName
     & $powerShellExecutable @($argumentList)
     if ($LASTEXITCODE -ne 0) {
         throw "Relaunched installer failed with exit code $LASTEXITCODE."

@@ -24,9 +24,10 @@ const installerPath = join(repositoryRoot, 'install-codex-home-config.ps1');
 const syncScriptPath = join(repositoryRoot, 'sync-codex-home-config-repo.ps1');
 const configToolPath = join(repositoryRoot, 'tools', 'config-toml-ops.cjs');
 const pwshPath = process.platform === 'win32' ? 'pwsh.exe' : 'pwsh';
-const hasPwsh = spawnSync(pwshPath, ['-NoLogo', '-NoProfile', '-Command', '$PSVersionTable.PSVersion.Major'], {
+const pwshVersion = spawnSync(pwshPath, ['-NoLogo', '-NoProfile', '-Command', '$PSVersionTable.PSVersion.Major'], {
   encoding: 'utf8'
-}).status === 0;
+});
+const hasPwsh = pwshVersion.status === 0 && Number(pwshVersion.stdout.trim()) >= 7;
 const windowsPowerShellPath = process.platform === 'win32' ? 'powershell.exe' : null;
 const hasWindowsPowerShell = windowsPowerShellPath !== null && spawnSync(windowsPowerShellPath, [
   '-NoLogo',
@@ -223,7 +224,6 @@ function runInstallerWithPublishedReleaseMock(repositoryPath, targetPath, archiv
   ghInstallFailure = false,
   ghLoginFailure = false,
   ghLogPath = join(repositoryPath, '..', 'github-cli.log'),
-  shell = pwshPath,
   environment = {}
 } = {}) {
   const quotePowerShell = (value) => `'${value.replaceAll("'", "''")}'`;
@@ -286,7 +286,7 @@ function runInstallerWithPublishedReleaseMock(repositoryPath, targetPath, archiv
   ].join('; ');
 
   return spawnSync(
-    shell,
+    pwshPath,
     [
       '-NoLogo',
       '-NoProfile',
@@ -484,19 +484,45 @@ test('installer and sync stop before file changes when policy update fails or do
   }
 });
 
-test('normal installation succeeds without invoking Codex CLI or npm in either PowerShell', { skip: !hasPwsh }, () => {
-  for (const shell of [pwshPath, ...(hasWindowsPowerShell ? [windowsPowerShellPath] : [])]) {
-    withTempDir((tempDir) => {
-      const { localPath } = createLocalRepository(tempDir);
-      const targetPath = join(tempDir, 'target');
-      const commandLog = join(tempDir, 'commands.log');
-      const result = runInstaller(localPath, targetPath, [], { shell, environment: { commandLog } });
-      assert.equal(result.error, undefined, result.error?.message);
-      assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
-      assert.equal(TOML.parse(readFileSync(join(targetPath, 'config.toml'), 'utf8')).model, 'base');
-      assert.ok(!existsSync(commandLog), 'Codex CLI and npm must not be called');
+test('normal installation succeeds without invoking Codex CLI or npm', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const targetPath = join(tempDir, 'target');
+    const commandLog = join(tempDir, 'commands.log');
+    const result = runInstaller(localPath, targetPath, [], { environment: { commandLog } });
+    assert.equal(result.error, undefined, result.error?.message);
+    assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
+    assert.equal(TOML.parse(readFileSync(join(targetPath, 'config.toml'), 'utf8')).model, 'base');
+    assert.ok(!existsSync(commandLog), 'Codex CLI and npm must not be called');
+  });
+});
+
+test('installation rejects Windows PowerShell 5.1 before checking execution policies or changing the target', {
+  skip: !hasWindowsPowerShell
+}, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const targetPath = join(tempDir, 'target');
+    const configPath = join(targetPath, 'config.toml');
+    const originalConfig = 'model = "target-before"\n';
+    const policyLog = join(tempDir, 'policy.log');
+    mkdirSync(targetPath);
+    writeFileSync(configPath, originalConfig);
+
+    const result = runInstaller(localPath, targetPath, [], {
+      shell: windowsPowerShellPath,
+      environment: { policyLog }
     });
-  }
+
+    assert.equal(result.error, undefined, result.error?.message);
+    const output = [result.stdout, result.stderr].filter(Boolean).join('\n');
+    assert.notEqual(result.status, 0, output);
+    assert.match(output, /PowerShell 7/i);
+    assert.match(output, /pwsh/i);
+    assert.ok(!existsSync(policyLog));
+    assert.equal(readFileSync(configPath, 'utf8'), originalConfig);
+    assert.ok(!existsSync(join(targetPath, 'sync_codex-home-config_backup')));
+  });
 });
 
 test('pure config installation writes managed plugin declarations and rollover trust', { skip: !hasPwsh }, () => {
@@ -623,25 +649,22 @@ test('UsePublishedRelease installs GitHub CLI and logs in before installing, inc
   withTempDir((tempDir) => {
     const { localPath } = createLocalRepository(tempDir);
     const archivePath = createPublishedReleaseArchive(tempDir);
-    for (const shell of [pwshPath, ...(hasWindowsPowerShell ? [windowsPowerShellPath] : [])]) {
-      const targetPath = join(tempDir, shell, 'target');
-      const ghLogPath = join(tempDir, `${shell}.github-cli.log`);
-      const result = runInstallerWithPublishedReleaseMock(localPath, targetPath, archivePath, [], {
-        ghInstalled: false,
-        ghAuthenticated: false,
-        ghLogPath,
-        shell
-      });
-      const output = [result.stdout, result.stderr].filter(Boolean).join('\n');
-      assert.equal(result.status, 0, output);
-      assert.match(readFileSync(join(targetPath, 'config.toml'), 'utf8'), /published-release/);
-      assert.doesNotMatch(output, /mock-github-secret/);
-      const calls = readFileSync(ghLogPath, 'utf8').trim().split(/\r?\n/);
-      assert.match(calls[0], /^winget install .*--id GitHub\.cli.*--exact.*--source winget/);
-      assert.equal(calls.filter((line) => line.startsWith('winget ')).length, 1);
-      assert.equal(calls.filter((line) => line.startsWith('gh auth login ')).length, 1);
-      assert.ok(calls.findIndex((line) => line.startsWith('gh auth login ')) < calls.indexOf('api commit'));
-    }
+    const targetPath = join(tempDir, 'target');
+    const ghLogPath = join(tempDir, 'github-cli.log');
+    const result = runInstallerWithPublishedReleaseMock(localPath, targetPath, archivePath, [], {
+      ghInstalled: false,
+      ghAuthenticated: false,
+      ghLogPath
+    });
+    const output = [result.stdout, result.stderr].filter(Boolean).join('\n');
+    assert.equal(result.status, 0, output);
+    assert.match(readFileSync(join(targetPath, 'config.toml'), 'utf8'), /published-release/);
+    assert.doesNotMatch(output, /mock-github-secret/);
+    const calls = readFileSync(ghLogPath, 'utf8').trim().split(/\r?\n/);
+    assert.match(calls[0], /^winget install .*--id GitHub\.cli.*--exact.*--source winget/);
+    assert.equal(calls.filter((line) => line.startsWith('winget ')).length, 1);
+    assert.equal(calls.filter((line) => line.startsWith('gh auth login ')).length, 1);
+    assert.ok(calls.findIndex((line) => line.startsWith('gh auth login ')) < calls.indexOf('api commit'));
   });
 });
 

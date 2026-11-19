@@ -4,9 +4,10 @@
 
 ## 使用前提
 
+- 安装器要求 PowerShell 7+ (`pwsh`). 下列安装命令会启动 `pwsh`.
 - 配置安装要求 `Node.js 18+`, 不依赖 Codex CLI 或 npm. rollover hook 运行时需要 `Python 3.10+`.
 - Windows 上的脚本先在启动阶段分别检查已安装的 `pwsh` 和 Windows PowerShell 5.1 的 `CurrentUser` 执行策略. 不是 `Unrestricted` 时自动执行 `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Unrestricted -Force` 并复查, 失败则停止后续操作. `-DryRun` 也会进行这项持久化调整; 不修改 `LocalMachine` 或 Group Policy.
-- 如果本地 `.ps1` 在加载前就被执行策略阻止, 脚本无法自行调整. 可先用 `pwsh -NoProfile -ExecutionPolicy Bypass -File .\install-codex-home-config.ps1` 启动; Windows PowerShell 5.1 使用 `powershell.exe` 替代 `pwsh`.
+- 如果本地 `.ps1` 在加载前就被执行策略阻止, 可用 `pwsh -NoProfile -ExecutionPolicy Bypass -File .\install-codex-home-config.ps1` 启动.
 - 公开在线安装只使用已发布的 `release` 分支, 不会安装 `main` 上尚未发布的内容.
 - 在线安装需要 GitHub CLI (`gh`) 认证. Windows 缺少 `gh` 时, 安装器通过 `winget` 自动安装; 系统需已有 `winget`, 安装过程可能要求管理员授权. 未登录或认证失效时, 安装器启动浏览器登录, 授权成功后自动继续. 已有有效登录会直接复用. 安装或登录失败时, 不修改目标 Codex 配置.
 - 在线安装只将认证 token 用于 GitHub API 请求, 不写入 Codex 配置或安装日志; 登录凭据由 `gh` 管理. 本地仓库安装不要求 `gh`. 在线 `-DryRun` 需要预先安装 `gh` 并登录, 不会自动安装或启动登录.
@@ -16,7 +17,7 @@
 直接更新默认的 `$HOME/.codex`:
 
 ```powershell
-iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/release/install-codex-home-config.ps1' | iex
+pwsh -NoProfile -Command "iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/release/install-codex-home-config.ps1' | iex"
 ```
 
 安装器始终执行默认 `Update`, 不提供 `-Action`, `-Components` 或 Restore 选择.
@@ -26,7 +27,7 @@ iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/relea
 即使从本地 checkout 运行, 也可忽略本地分支和 `git pull`, 改为从 GitHub 下载已发布的 `release` snapshot:
 
 ```powershell
-.\install-codex-home-config.ps1 -UsePublishedRelease
+pwsh -NoProfile -File .\install-codex-home-config.ps1 -UsePublishedRelease
 ```
 
 该参数可与 `-DryRun` 组合.
@@ -36,13 +37,13 @@ iwr -useb 'https://raw.githubusercontent.com/jiangxiaoxu/codex-home-config/relea
 在本地仓库中, 可先预览实际安装结果:
 
 ```powershell
-.\install-codex-home-config.ps1 -DryRun
+pwsh -NoProfile -File .\install-codex-home-config.ps1 -DryRun
 ```
 
 指定目标路径时:
 
 ```powershell
-.\install-codex-home-config.ps1 -TargetCodexPath '<path>' -DryRun
+pwsh -NoProfile -File .\install-codex-home-config.ps1 -TargetCodexPath '<path>' -DryRun
 ```
 
 `-DryRun` 在安装范围内只读取 managed snapshot 和目标配置, 跳过本地仓库 `git pull`, 不创建备份且不修改目标. 启动时仍会按上面的规则调整 `CurrentUser` 执行策略. 它会输出按实际安装规则计算的目标文件 diff; 对 `models.local.json` 只报告文件是否存在差异, 不显示文件内容.

@@ -12,15 +12,15 @@
   `.\sync-codex-home-config-repo.ps1`
 * That script treats `$HOME\.codex` as the source of truth, defaults `RepoPath` to the current repository root, relaunches itself in `pwsh` 7+ if needed, checks that the repo is clean, runs `git pull --rebase origin main`, relaunches from the repository copy if that pull updates local `HEAD`, copies the selected managed components, including `models.local.json` as the optional `ModelsLocalFile` snapshot, into `managed/`, commits and pushes `main`, then prompts whether the same commit should also be published to `release`.
 * When the user asks to install the current local repository branch into a Codex home, prefer:
-  `.\install-codex-home-config.ps1`
+  `pwsh -NoProfile -File .\install-codex-home-config.ps1`
 * For a custom target directory, use:
-  `.\install-codex-home-config.ps1 -TargetCodexPath '<path>'`
+  `pwsh -NoProfile -File .\install-codex-home-config.ps1 -TargetCodexPath '<path>'`
 * For a local repository dry run, use:
-  `.\install-codex-home-config.ps1 -DryRun`
+  `pwsh -NoProfile -File .\install-codex-home-config.ps1 -DryRun`
 * The installer always performs the default `Update`; it does not accept `-Action`, `-Components`, or any Restore selection and does not show a menu.
 * `-DryRun` only reads the managed snapshot and target configuration, skips the local repository `git pull`, creates no backup, makes no target changes, and outputs the actual installation-result diff.
 * When performing an installation from this repository, the installer requires a clean worktree, pulls the current branch from `origin` with rebase, relaunches the updated installer when `HEAD` changes, and stops before installation if the pull fails or conflicts.
-* The installer itself is expected to work in Windows PowerShell 5.1 and `pwsh`.
+* Run the installer in `pwsh` 7+.
 * The public online installer installs published content from the `release` branch only. A local repository checkout installs its pulled current branch, including unpublished content when the current branch is not `release`.
 
 ## Safety Rules
