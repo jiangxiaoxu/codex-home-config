@@ -29,6 +29,7 @@ Explicit user instructions, applicable `AGENTS.md` or skill instructions, and ag
   max_concurrent_threads_per_session = 96
   default_wait_timeout_ms = 300_000
   enabled = true
+  preserve_fork_prefix = false
 
   [features.context_management]
   experimental_mode = false
