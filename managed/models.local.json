@@ -534,7 +534,7 @@
         }
       ],
       "shell_type": "unified_exec",
-      "visibility": "list",
+      "visibility": "hide",
       "supported_in_api": true,
       "priority": 5,
       "additional_speed_tiers": [
@@ -674,7 +674,7 @@
         }
       ],
       "shell_type": "unified_exec",
-      "visibility": "list",
+      "visibility": "hide",
       "supported_in_api": true,
       "priority": 6,
       "additional_speed_tiers": [
