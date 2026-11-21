@@ -62,6 +62,7 @@ resume_cwd = "session"
 screen_reader_detection_done = true
 fullscreen_transcript = true
 show_tooltips = false
+sidebar_width_percent = 55
 
 [sandbox_workspace_write]
 network_access = true

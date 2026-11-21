@@ -109,7 +109,6 @@
       "default_verbosity": "low",
       "apply_patch_tool_type": "freeform",
       "web_search_tool_type": "text_and_image",
-      "web_search_provider": "standalone",
       "truncation_policy": {
         "mode": "tokens",
         "limit": 10000
@@ -128,8 +127,7 @@
       ],
       "input_modalities": [
         "text",
-        "image",
-        "audio"
+        "image"
       ],
       "supports_search_tool": true,
       "supports_experimental_context": true,
@@ -242,7 +240,6 @@
       "default_verbosity": "low",
       "apply_patch_tool_type": "freeform",
       "web_search_tool_type": "text_and_image",
-      "web_search_provider": "standalone",
       "truncation_policy": {
         "mode": "tokens",
         "limit": 10000
@@ -377,7 +374,6 @@
       "default_verbosity": "low",
       "apply_patch_tool_type": "freeform",
       "web_search_tool_type": "text_and_image",
-      "web_search_provider": "standalone",
       "truncation_policy": {
         "mode": "tokens",
         "limit": 10000
@@ -478,7 +474,6 @@
       "default_verbosity": "low",
       "apply_patch_tool_type": "freeform",
       "web_search_tool_type": "text_and_image",
-      "web_search_provider": "standalone",
       "truncation_policy": {
         "mode": "tokens",
         "limit": 10000
@@ -614,7 +609,6 @@
       "default_verbosity": "low",
       "apply_patch_tool_type": "freeform",
       "web_search_tool_type": "text_and_image",
-      "web_search_provider": "standalone",
       "truncation_policy": {
         "mode": "tokens",
         "limit": 10000
@@ -752,7 +746,6 @@
       "default_verbosity": "low",
       "apply_patch_tool_type": "freeform",
       "web_search_tool_type": "text_and_image",
-      "web_search_provider": "standalone",
       "truncation_policy": {
         "mode": "tokens",
         "limit": 10000
@@ -884,7 +877,6 @@
       "default_verbosity": "low",
       "apply_patch_tool_type": "freeform",
       "web_search_tool_type": "text_and_image",
-      "web_search_provider": "standalone",
       "truncation_policy": {
         "mode": "tokens",
         "limit": 10000
@@ -1011,7 +1003,6 @@
       "default_verbosity": "low",
       "apply_patch_tool_type": "freeform",
       "web_search_tool_type": "text_and_image",
-      "web_search_provider": "standalone",
       "truncation_policy": {
         "mode": "tokens",
         "limit": 10000
@@ -1115,7 +1106,6 @@
       "default_verbosity": "low",
       "apply_patch_tool_type": "freeform",
       "web_search_tool_type": "text_and_image",
-      "web_search_provider": "standalone",
       "truncation_policy": {
         "mode": "tokens",
         "limit": 10000
@@ -1216,7 +1206,6 @@
       "default_verbosity": "low",
       "apply_patch_tool_type": "freeform",
       "web_search_tool_type": "text_and_image",
-      "web_search_provider": "standalone",
       "truncation_policy": {
         "mode": "tokens",
         "limit": 10000
@@ -1313,7 +1302,6 @@
       "default_verbosity": "low",
       "apply_patch_tool_type": "freeform",
       "web_search_tool_type": "text_and_image",
-      "web_search_provider": "standalone",
       "truncation_policy": {
         "mode": "tokens",
         "limit": 10000
@@ -1416,7 +1404,6 @@
       "default_verbosity": "low",
       "apply_patch_tool_type": "freeform",
       "web_search_tool_type": "text_and_image",
-      "web_search_provider": "standalone",
       "truncation_policy": {
         "mode": "tokens",
         "limit": 10000
