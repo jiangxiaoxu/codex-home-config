@@ -10,7 +10,7 @@
 * Prefer the public installer one-liner when the user wants to update the default `$HOME\.codex`.
 * When the user asks to sync the current local Codex configuration to GitHub, prefer:
   `.\sync-codex-home-config-repo.ps1`
-* That script treats `$HOME\.codex` as the source of truth, defaults `RepoPath` to the current repository root, relaunches itself in `pwsh` 7+ if needed, checks that the repo is clean, runs `git pull --rebase origin main`, relaunches from the repository copy if that pull updates local `HEAD`, copies the selected managed components, including `models.local.json` as the optional `ModelsLocalFile` snapshot, into `managed/`, commits and pushes `main`, then prompts whether the same commit should also be published to `release`.
+* That script treats `$HOME\.codex` as the source of truth, defaults `RepoPath` to the current repository root, relaunches itself in `pwsh` 7+ if needed, checks that the repo is clean, runs `git pull --rebase origin main`, relaunches from the repository copy if that pull updates local `HEAD`, and copies the selected managed components, including `models.local.json` as the optional `ModelsLocalFile` snapshot, into `managed/`. It prompts separately before creating the local commit, pushing `main`, and publishing the same commit to `release`.
 * When the user asks to install the current local repository branch into a Codex home, prefer:
   `pwsh -NoProfile -File .\install-codex-home-config.ps1`
 * For a custom target directory, use:

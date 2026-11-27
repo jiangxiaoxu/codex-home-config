@@ -348,7 +348,7 @@ function Read-YesOrEnterChoice {
     )
 
     if ([Console]::IsInputRedirected) {
-        Write-Output "Skipping prompt because stdin is redirected: $Prompt"
+        Write-Warning "Skipping prompt because stdin is redirected: $Prompt"
         return $false
     }
 
@@ -401,7 +401,7 @@ function Read-EnterAcceptChoice {
     )
 
     if ([Console]::IsInputRedirected) {
-        Write-Output "Skipping prompt because stdin is redirected: $Prompt"
+        Write-Warning "Skipping prompt because stdin is redirected: $Prompt"
         return $false
     }
 
@@ -1042,8 +1042,8 @@ try {
         return
     }
 
-    if (-not (Read-YesOrEnterChoice -Prompt 'Continue with committing and publishing these changes?')) {
-        Write-Output 'Stopped before commit and push. Pending repository changes were left in place.'
+    if (-not (Read-YesOrEnterChoice -Prompt 'Commit these changes locally?')) {
+        Write-Output 'Stopped before commit. Pending repository changes were left in place.'
         return
     }
 
@@ -1055,6 +1055,11 @@ try {
     & git -C $RepoPath commit -m $CommitMessage
     if ($LASTEXITCODE -ne 0) {
         throw "git commit failed in $RepoPath"
+    }
+
+    if (-not (Read-YesOrEnterChoice -Prompt "Push this commit to origin/${mainBranch}?")) {
+        Write-Output "Kept the commit on local $mainBranch. Stopped before push."
+        return
     }
 
     & git -C $RepoPath push origin $mainBranch

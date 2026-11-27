@@ -46,6 +46,35 @@ Explicit user instructions, applicable `AGENTS.md` or skill instructions, and ag
   enabled = true
   model_async_compact_threshold_percent = 65
 
+  [features.token_budget]
+  enabled = true
+  use_history_notes_extension = false
+  reminder_threshold_tokens = 334_800
+  reminder_message_template = """
+<context_window_reminder>
+{n_remaining} tokens remain before Codex's fallback threshold.
+
+Seek the next natural, resumable stopping point in the current work. A completed step or safe intermediate state is enough, including the current state if already suitable. Continue only as needed to reach that point. Do not start the next step or wait for the whole task to finish. Do not wait for commands and agents that can safely carry over to the new window. If the thread note is missing or stale, update it with $thread-memory before continuing.
+
+While still seeking a stopping point, recheck with get_context_remaining after substantial work or a large tool result, before doing more work. By 600,000 active-context tokens (184,800 remaining on this model), stop ordinary task work. If the reminder or a check reports 184,800 tokens or fewer remaining, stop immediately. This is a deadline, not a target; only safe interruption and checkpointing may follow.
+
+At the stopping point or deadline, save or update a concise checkpoint with $thread-memory as needed. Include the goal, constraints, decisions, verified progress, pending work, next action, and references or handles needed to resume. Reuse a checkpoint you already know is current. Then immediately call new_context and resume the task or give its final answer in the new window.
+</context_window_reminder>
+"""
+  guidance_message = """
+For tasks that may span context windows, use $thread-memory to maintain a concise checkpoint of the goal, decisions, progress, learnings and next steps, including active constraints and pending work. Include a reusable rollout ref for every relevant user request still being solved, as well as important actions and tool calls for future reference. Use a distinctive search phrase when no ref is available. Include the source thread when different and the window number or rollout segment when useful. Keep tool input/output IDs and attachment IDs when relevant.
+
+It is a good idea to take incremental notes while you work so that you do not miss any important info. Update the checkpoint when important decisions, constraints, progress or next steps change, and replace stale details. You can also use get_context_remaining to find the remaining token budget for better planning. Once the token budget is exhausted, you will lose direct access to the current window and continue in a fresh context window. Use $thread-memory to recover missing context. So be careful not to overrun the context window without a current checkpoint.
+
+If Previous context window id is present in <context_window>, it means a context reset occurred and this is a new window. After a reset, read the full thread note once before resuming and use $thread-memory to recover any missing details. When a rollout ref is known, prefer direct lookup; when it is missing or uncertain, use focused searches or recent transcripts to locate the relevant record first. Confirm the latest user intent and completed actions before continuing.
+"""
+  auto_compact_fallback_buffer_tokens = 16_384
+  auto_compact_fallback_prompt = """
+<thread_memory_fallback>
+The normal context budget is exhausted. Do not continue the task or give a final answer in this window. The next window will not automatically include this conversation. Save or update a concise checkpoint of the goal, constraints, decisions, progress, learnings and next steps with $thread-memory as needed. Include available rollout refs or distinctive search phrases and relevant IDs for every relevant user request still being solved, as well as important actions and tool calls for future reference. Do not search the rollout for new references. Reuse a checkpoint you already know is current. Then immediately call new_context. Use only the tools needed to access the skill, read or save the note, and switch windows. Resume the task in the new window.
+</thread_memory_fallback>
+"""
+
 [tui]
 status_line = [
   "model-with-reasoning",

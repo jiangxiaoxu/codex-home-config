@@ -987,6 +987,50 @@ test('DryRun reports when the target already matches the managed snapshot', { sk
   });
 });
 
+for (const [accepted, outcome] of ['working tree only', 'local commit only', 'main only', 'main and release'].entries()) {
+  test(`sync confirmation leaves changes on ${outcome}`, { skip: !hasPwsh }, () => {
+    withTempDir((tempDir) => {
+      const { localPath } = createLocalRepository(tempDir);
+      const remotePath = join(tempDir, 'remote.git');
+      const initial = run('git', ['rev-parse', 'HEAD'], localPath).stdout.trim();
+      run('git', ['push', 'origin', 'HEAD:refs/heads/release'], localPath);
+      run('git', ['config', 'user.name', 'Sync Test'], localPath);
+      run('git', ['config', 'user.email', 'sync-test@example.invalid'], localPath);
+      const sourcePath = join(tempDir, 'source');
+      mkdirSync(sourcePath);
+      writeFileSync(join(sourcePath, 'models.local.json'), '{"models":["updated"]}\n');
+
+      // Redirected input declines any prompt for which the test does not supply an answer.
+      const commandPrefix = [
+        `$global:answersLeft = ${accepted}`,
+        'function Confirm-TestStep { param($Prompt)',
+        'Write-Host "$Prompt $(git rev-parse HEAD) $(git rev-parse origin/main)"',
+        '$global:answersLeft--; return $global:answersLeft -ge 0 }',
+        ...(accepted >= 1 ? ['Set-Alias Read-YesOrEnterChoice Confirm-TestStep'] : []),
+        ...(accepted >= 3 ? ['Set-Alias Read-EnterAcceptChoice Confirm-TestStep'] : [])
+      ].join('; ');
+      const result = runSync(localPath, sourcePath, ['-Components', 'ModelsLocalFile'], { commandPrefix });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const head = run('git', ['rev-parse', 'HEAD'], localPath).stdout.trim();
+      assert.equal(head !== initial, accepted >= 1);
+      assert.equal(run('git', ['rev-parse', 'refs/heads/main'], remotePath).stdout.trim(), accepted >= 2 ? head : initial);
+      assert.equal(run('git', ['rev-parse', 'refs/heads/release'], remotePath).stdout.trim(), accepted >= 3 ? head : initial);
+      if (accepted === 3) {
+        assert.ok(result.stdout.includes(`Commit these changes locally? ${initial} ${initial}`));
+        assert.ok(result.stdout.includes(`Push this commit to origin/main? ${head} ${initial}`));
+        assert.ok(result.stdout.includes(`Also publish this same commit to origin/release? ${head} ${head}`));
+      }
+      const status = run('git', ['status', '--porcelain'], localPath).stdout;
+      if (accepted === 0) {
+        assert.match(status, /^ M managed\/models\.local\.json$/m);
+      } else {
+        assert.equal(status.trim(), '');
+        assert.equal(run('git', ['show', 'HEAD:managed/models.local.json'], localPath).stdout.trim(), '{"models":["updated"]}');
+      }
+    });
+  });
+}
+
 test('sync relaunch preserves source, repository, and component parameters after a pull', { skip: !hasPwsh }, () => {
   withTempDir((tempDir) => {
     const { localPath, seedPath } = createLocalRepository(tempDir);
@@ -1186,7 +1230,8 @@ test('installer and sync keep pull and confirmation behavior', () => {
   assert.match(installer, /\[switch\]\s*\$DryRun\b/);
   assert.ok(installer.indexOf('Invoke-LocalRepositoryPull') < installer.indexOf('Install-Snapshot'));
   assert.doesNotMatch(syncScript, /Write-PendingRepositoryDiff|diff\s+--no-index|Tracked file diff|Untracked file diffs/);
-  assert.match(syncScript, /Read-YesOrEnterChoice -Prompt 'Continue with committing and publishing these changes\?'/);
+  assert.match(syncScript, /Read-YesOrEnterChoice -Prompt 'Commit these changes locally\?'/);
+  assert.match(syncScript, /Read-YesOrEnterChoice -Prompt "Push this commit to origin\/\$\{mainBranch\}\?"/);
   assert.match(syncScript, /Read-EnterAcceptChoice -Prompt "Also publish this same commit to origin\/\$\{releaseBranch\}\?"/);
 });
 
