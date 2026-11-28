@@ -5,7 +5,7 @@
 ## 使用前提
 
 - 安装器要求 PowerShell 7+ (`pwsh`). 下列安装命令会启动 `pwsh`.
-- 配置安装要求 `Node.js 18+`, 不依赖 Codex CLI 或 npm. rollover hook 运行时需要 `Python 3.10+`.
+- 配置安装要求 `Node.js 18+`, 不依赖 Codex CLI 或 npm.
 - Windows 上的脚本先在启动阶段分别检查已安装的 `pwsh` 和 Windows PowerShell 5.1 的 `CurrentUser` 执行策略. 不是 `Unrestricted` 时自动执行 `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Unrestricted -Force` 并复查, 失败则停止后续操作. `-DryRun` 也会进行这项持久化调整; 不修改 `LocalMachine` 或 Group Policy.
 - 如果本地 `.ps1` 在加载前就被执行策略阻止, 可用 `pwsh -NoProfile -ExecutionPolicy Bypass -File .\install-codex-home-config.ps1` 启动.
 - 公开在线安装只使用已发布的 `release` 分支, 不会安装 `main` 上尚未发布的内容.
@@ -63,14 +63,6 @@ pwsh -NoProfile -File .\install-codex-home-config.ps1 -TargetCodexPath '<path>' 
 
 `-DryRun` 在安装范围内只读取 managed snapshot 和目标配置, 跳过本地仓库 `git pull`, 不创建备份且不修改目标. 启动时仍会按上面的规则调整 `CurrentUser` 执行策略. 它会输出按实际安装规则计算的目标文件 diff; 对 `models.local.json` 只报告文件是否存在差异, 不显示文件内容.
 
-## 插件配置
-
-插件相关设置随 `config.toml` 同步和安装: `marketplaces.jxx-codex-plugins` 声明 Git 来源, `plugins` 声明 `context-window-rollover-reminder@jxx-codex-plugins` 及其启用状态. 插件是否启用以安装时所用 snapshot 中的 `enabled` 值为准, 可按需调整后同步发布.
-
-hook 信任仅管理 `hooks.state."context-window-rollover-reminder@jxx-codex-plugins:hooks/hooks.json:post_tool_use:0:0".trusted_hash`. 发布同步只采集这一字段; 安装时保留目标中的其他 hook 条目和同一 hook 的 `enabled` 等其他字段. 信任不代表启用: 该 hook 只有在所属插件启用且目标 hook 设置允许时才会运行; 插件禁用时不会运行.
-
-安装器只合并配置声明. 普通 Codex TUI 启动后, Codex 按原有逻辑异步获取缺失插件和更新插件缓存. `trusted_hash` 随配置同步, 对应特定 hook 内容; 插件更新改变该内容后, Codex 可能要求重新信任.
-
 ## 备份
 
 备份保存在 `<TargetCodexPath>/sync_codex-home-config_backup/<timestamp>/`. 每次更新会在替换或移除前备份目标路径中已有的可安装内容. `models.local.json` 是独立的可选 snapshot 文件: 仅在 managed snapshot 和目标文件都存在时备份. 文件会完整复制, 不应用下面的同步排除规则. `models.local.json` 会原样复制, 不处理 CRLF. 更新成功后仅保留最新 5 个备份版本. 更早的版本会移入 Recycle Bin, 移入失败时会永久删除.
@@ -89,6 +81,7 @@ hook 信任仅管理 `hooks.state."context-window-rollover-reminder@jxx-codex-pl
 
 - 始终移除 `model_context_window` 和 `notice.model_migrations`.
 - `managed/config.toml` 缺少顶层 `agents` 时, 删除本地整个 `agents` 配置及其所有子项. 快照定义 `agents` 时, 按快照整表替换, 移除本地独有的子项.
+- 发布同步和安装都移除各自输出中的 `plugins."context-window-rollover-reminder@jxx-codex-plugins"`, 以及 `hooks.state` 下以 `context-window-rollover-reminder@jxx-codex-plugins:` 开头的全部条目. 共享的 `marketplaces.jxx-codex-plugins` 继续按现有规则同步和合并. 清理范围限于输出的 `config.toml`.
 
 其他未管理或未变化的顶层条目/表块会保留原始引号, 注释, 布局和行尾. `node_repl` 不参与同步, 因而保留目标文件中的原文.
 

@@ -17,6 +17,9 @@ const {
   writeValidatedTomlContent
 } = require('../tools/config-toml-ops.cjs');
 const TOML = require('@iarna/toml');
+const rolloverPluginId = 'context-window-rollover-reminder@jxx-codex-plugins';
+const rolloverHook = `${rolloverPluginId}:hooks/hooks.json:post_tool_use:0:0`;
+const secondRolloverHook = `${rolloverPluginId}:hooks/hooks.json:session_start:1:0`;
 
 function withTempDir(callback) {
   const tempDir = mkdtempSync(join(tmpdir(), 'codex-home-config-test-'));
@@ -27,37 +30,77 @@ function withTempDir(callback) {
   }
 }
 
-test('publish-sync limits plugin entries and hook trust fields to the managed snapshot', () => {
-  const hookKey = 'context-window-rollover-reminder@jxx-codex-plugins:hooks/hooks.json:post_tool_use:0:0';
+test('publish-sync filters plugins and hook trust to the managed snapshot and removes rollover entries', () => {
+  const previewPluginId = `${rolloverPluginId}-preview`;
+  const hookKey = `${previewPluginId}:hooks/hooks.json:post_tool_use:0:0`;
   const managedConfig = {
     marketplaces: { public: { source_type: 'git', source: 'old' } },
-    plugins: { 'reminder@public': { enabled: true } },
-    hooks: { state: { [hookKey]: { trusted_hash: 'old' } } }
+    plugins: { [previewPluginId]: { enabled: true }, [rolloverPluginId]: { enabled: true } },
+    hooks: {
+      state: {
+        [hookKey]: { trusted_hash: 'old' },
+        [rolloverHook]: { enabled: true, trusted_hash: 'old-rollover' },
+        [secondRolloverHook]: { enabled: false }
+      }
+    }
   };
   const localConfig = {
     marketplaces: { private: { source: 'private' }, public: { source_type: 'git', source: 'new' } },
-    plugins: { 'private@private': { enabled: true }, 'reminder@public': { enabled: false } },
+    plugins: {
+      'private@private': { enabled: true },
+      [previewPluginId]: { enabled: false },
+      [rolloverPluginId]: { enabled: true }
+    },
     hooks: {
       enabled: false,
       state: {
         unrelated: { trusted_hash: 'private' },
-        [hookKey]: { enabled: false, trusted_hash: 'new', local_setting: 1 }
+        [hookKey]: { enabled: false, trusted_hash: 'new', local_setting: 1 },
+        [rolloverHook]: { enabled: false, trusted_hash: 'new-rollover' },
+        [secondRolloverHook]: { enabled: true }
       }
     }
   };
   assert.deepStrictEqual(buildPublishedSyncConfig(localConfig, managedConfig), {
     marketplaces: { public: { source_type: 'git', source: 'new' } },
-    plugins: { 'reminder@public': { enabled: false } },
+    plugins: { [previewPluginId]: { enabled: false } },
     hooks: { state: { [hookKey]: { trusted_hash: 'new' } } }
   });
 });
 
-test('merge-install CLI updates plugin configuration and hook trust while preserving local syntax and state', () => {
+test('publish-sync and merge-install omit tables that only contained rollover entries', () => {
+  const expected = { state: 'unrelated top-level setting' };
+  const config = {
+    ...expected,
+    plugins: { [rolloverPluginId]: { enabled: true } },
+    hooks: { state: { [rolloverHook]: { trusted_hash: 'old-rollover' } } }
+  };
+  const originalConfig = structuredClone(config);
+  assert.deepStrictEqual(buildPublishedSyncConfig(config, config), expected);
+  assert.deepStrictEqual(buildMergeInstallConfig(config, {}), expected);
+  assert.deepStrictEqual(buildMergeInstallConfig({}, config), expected);
+  assert.deepStrictEqual(config, originalConfig);
+});
+
+test('publish-sync does not keep retired tables on the allowlist when only unrelated local entries remain', () => {
+  const managedConfig = {
+    plugins: { [rolloverPluginId]: { enabled: true } },
+    hooks: { state: { [rolloverHook]: { trusted_hash: 'old' } } }
+  };
+  const localConfig = {
+    plugins: { 'local@market': { enabled: true } },
+    hooks: { state: { local: { trusted_hash: 'local' } } }
+  };
+
+  assert.deepStrictEqual(buildPublishedSyncConfig(localConfig, managedConfig), {});
+});
+
+test('merge-install CLI removes rollover sections while preserving other plugin configuration and hook trust', () => {
   withTempDir((tempDir) => {
     const sourcePath = join(tempDir, 'source.toml');
     const targetPath = join(tempDir, 'target.toml');
     const outputPath = join(tempDir, 'output.toml');
-    const hookKey = 'context-window-rollover-reminder@jxx-codex-plugins:hooks/hooks.json:post_tool_use:0:0';
+    const hookKey = `${rolloverPluginId}-preview:hooks/hooks.json:post_tool_use:0:0`;
     const preservedBlocks = [
       "[marketplaces.private]\r\nsource = 'private' # local marketplace\r\n",
       "[plugins.'private@private']\r\nenabled = false # local plugin\r\n",
@@ -67,15 +110,20 @@ test('merge-install CLI updates plugin configuration and hook trust while preser
     writeFileSync(sourcePath, [
       '[marketplaces.public]', 'source_type = "git"', 'source = "new"',
       '[plugins."reminder@public"]', 'enabled = true',
-      `[hooks.state."${hookKey}"]`, 'trusted_hash = "new"', ''
+      `[plugins."${rolloverPluginId}"]`, 'enabled = true',
+      `[hooks.state."${hookKey}"]`, 'trusted_hash = "new"',
+      `[hooks.state."${rolloverHook}"]`, 'trusted_hash = "old-managed-trust"', ''
     ].join('\n'), 'utf8');
     const localHookField = 'enabled = false # retain explicit local hook state\r\n';
     writeFileSync(targetPath, [
       '[marketplaces.public]\r\nsource_type = "git"\r\nsource = "old"\r\n',
       preservedBlocks[0],
       '[plugins."reminder@public"]\r\nenabled = false\r\n',
-      preservedBlocks[1], preservedBlocks[2],
+      preservedBlocks[1],
+      `  [plugins.'${rolloverPluginId}']\r\nenabled = false\r\n`,
+      preservedBlocks[2],
       `[hooks.state."${hookKey}"]\r\ntrusted_hash = "old"\r\n${localHookField}`,
+      `[hooks.state.'${secondRolloverHook}']\r\nenabled = false\r\n`,
       preservedBlocks[3]
     ].join('\r\n'), 'utf8');
     const args = ['tools/config-toml-ops.cjs', 'merge-install', '--source', sourcePath, '--target', targetPath, '--output', outputPath];
@@ -85,15 +133,73 @@ test('merge-install CLI updates plugin configuration and hook trust while preser
     for (const block of [...preservedBlocks, localHookField]) {
       assert.ok(outputText.includes(block), `Local source text must remain unchanged: ${block}`);
     }
+    assert.doesNotMatch(outputText, /^ +\[hooks\]/m);
     const outputConfig = TOML.parse(outputText);
     assert.equal(outputConfig.marketplaces.public.source, 'new');
     assert.equal(outputConfig.plugins['reminder@public'].enabled, true);
+    assert.equal(Object.hasOwn(outputConfig.plugins, rolloverPluginId), false);
     assert.deepStrictEqual(outputConfig.hooks.state[hookKey], { trusted_hash: 'new', enabled: false });
+    assert.equal(Object.hasOwn(outputConfig.hooks.state, rolloverHook), false);
+    assert.equal(Object.hasOwn(outputConfig.hooks.state, secondRolloverHook), false);
     writeFileSync(targetPath, outputText, 'utf8');
     const secondResult = spawnSync(process.execPath, args, { cwd: process.cwd(), encoding: 'utf8' });
     assert.equal(secondResult.status, 0, secondResult.stderr);
     assert.equal(readFileSync(outputPath, 'utf8'), outputText);
   });
+});
+
+for (const [syntax, targetLines, expectedLines] of [
+  ['inline tables', [
+    `plugins = { '${rolloverPluginId}' = { enabled = true }, 'local@market' = { enabled = false } } # local plugins`,
+    `hooks = { enabled = false, state = { a = { enabled = true }, '${rolloverHook}' = { enabled = false, trusted_hash = 'rollover' }, z = { trusted_hash = 'keep' } } } # local hook state`
+  ], [
+    "plugins = { 'local@market' = { enabled = false } } # local plugins",
+    "hooks = { enabled = false, state = { a = { enabled = true }, z = { trusted_hash = 'keep' } } } # local hook state"
+  ]],
+  ['an inline table inside a section', [
+    '[hooks] # local hook settings',
+    'enabled = false # local choice',
+    `state = { '${rolloverHook}' = { trusted_hash = 'rollover' }, z = { trusted_hash = 'keep' } } # local hook state`
+  ], [
+    '[hooks] # local hook settings',
+    'enabled = false # local choice',
+    "state = { z = { trusted_hash = 'keep' } } # local hook state"
+  ]],
+  ['dotted keys', [
+    `plugins.'${rolloverPluginId}'.enabled = true`,
+    "plugins.'local@market'.enabled = false # local plugin",
+    `hooks.state.'${rolloverHook}'.enabled = false`,
+    `hooks.state.'${rolloverHook}'.trusted_hash = 'rollover'`,
+    "hooks.state.z.trusted_hash = 'keep' # local trust"
+  ], [
+    "plugins.'local@market'.enabled = false # local plugin",
+    "hooks.state.z.trusted_hash = 'keep' # local trust"
+  ]]
+]) {
+  test(`merge-install removes target-only rollover entries from ${syntax}`, () => {
+    const sourceConfig = {};
+    const targetText = targetLines.join('\r\n') + '\r\n';
+    const expectedText = expectedLines.join('\r\n') + '\r\n';
+    const targetConfig = TOML.parse(targetText);
+    const mergedConfig = buildMergeInstallConfig(sourceConfig, targetConfig);
+    assert.deepStrictEqual(mergedConfig, TOML.parse(expectedText));
+    const output = buildMergeInstallTomlContent({ sourceConfig, targetConfig, mergedConfig, targetText });
+    assert.ok(output.startsWith(expectedText), output);
+    assert.equal(output.slice(expectedText.length).trim(), '');
+  });
+}
+
+test('merge-install preserves a local hook section when the snapshot only manages rollover hook state', () => {
+  const sourceConfig = { hooks: { state: { [rolloverHook]: { trusted_hash: 'old-managed' } } } };
+  const localSection = "[hooks.state.'keep'] # local hook\r\ntrusted_hash = 'keep'\r\n";
+  const targetText = `${localSection}\r\n[hooks.state.'${rolloverHook}']\r\ntrusted_hash = 'old-local'\r\n`;
+  const targetConfig = TOML.parse(targetText);
+  const mergedConfig = buildMergeInstallConfig(sourceConfig, targetConfig);
+  const expected = TOML.parse(localSection);
+  assert.deepStrictEqual(mergedConfig, expected);
+  const output = buildMergeInstallTomlContent({ sourceConfig, targetConfig, mergedConfig, targetText });
+  assert.deepStrictEqual(TOML.parse(output), expected);
+  assert.ok(output.includes(localSection), output);
 });
 
 test('merge-install replaces managed tables, preserves unmanaged keys, and keeps local projects', () => {

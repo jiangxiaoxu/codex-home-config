@@ -13,6 +13,7 @@ const preferredTopLevelKeyOrder = [
   'model_reasoning_effort'
 ]
 const configTomlPolicy = {
+  retiredPluginId: 'context-window-rollover-reminder@jxx-codex-plugins',
   syncExcludedInstallPreservedNestedPaths: [
     ['features', 'workspace_dependencies'],
     ['features', 'apps'],
@@ -272,7 +273,7 @@ function assertTomlSnapshotUnchanged (filePath, expectedSnapshot) {
 function buildMergeInstallTomlContent ({ sourceConfig, mergedConfig, targetConfig = {}, targetText }) {
   const preservedTargetSections = targetText === null || targetText.length === 0
     ? { nestedKeyValueContent: new Map(), preferredRoot: '', preservedNodePaths: new Set(), root: '', tables: '' }
-    : collectPreservedTargetTomlSections(targetText, sourceConfig, targetConfig, mergedConfig)
+    : collectPreservedTargetTomlSections(targetText, targetConfig, mergedConfig)
   const sourceContribution = buildMergeInstallSourceContribution(sourceConfig, mergedConfig, targetConfig, preservedTargetSections.preservedNodePaths)
   const managedContent = insertPreservedNestedKeyValueContent(
     TOML.stringify(orderTopLevelKeys(sourceContribution)),
@@ -322,7 +323,7 @@ function joinTomlFragments (leftContent, rightContent) {
 function buildMergeInstallSourceContribution (sourceConfig, mergedConfig, targetConfig = {}, preservedNodePaths = new Set()) {
   const contribution = {}
 
-  for (const key of Object.keys(sourceConfig)) {
+  for (const [key, mergedValue] of Object.entries(mergedConfig)) {
     if (canPreserveTomlValue(targetConfig, mergedConfig, key)) {
       continue
     }
@@ -331,34 +332,10 @@ function buildMergeInstallSourceContribution (sourceConfig, mergedConfig, target
       continue
     }
 
-    if (fieldManagedTopLevelTables.has(key)) {
-      setTomlProperty(contribution, key, pickManagedFields(mergedConfig[key], sourceConfig[key]))
-      continue
-    }
-
-    if (partiallyManagedTopLevelTables.has(key) && isTomlObject(sourceConfig[key])) {
-      const managedChildren = {}
-      for (const childKey of Object.keys(sourceConfig[key])) {
-        if (!isTomlObject(mergedConfig[key]) || !hasOwn(mergedConfig[key], childKey)) {
-          continue
-        }
-
-        setTomlProperty(managedChildren, childKey, cloneTomlValue(mergedConfig[key][childKey]))
-      }
-
-      setTomlProperty(contribution, key, managedChildren)
-      continue
-    }
-
-    if (hasOwn(mergedConfig, key)) {
-      setTomlProperty(contribution, key, cloneTomlValue(mergedConfig[key]))
-    }
-  }
-
-  for (const key of preferredTopLevelKeyOrder) {
-    if (!hasOwn(contribution, key) && hasOwn(mergedConfig, key) && !canPreserveTomlValue(targetConfig, mergedConfig, key)) {
-      setTomlProperty(contribution, key, cloneTomlValue(mergedConfig[key]))
-    }
+    const value = hasOwn(sourceConfig, key) && fieldManagedTopLevelTables.has(key)
+      ? orderTomlKeysLike(mergedValue, sourceConfig[key])
+      : mergedValue
+    setTomlProperty(contribution, key, cloneTomlValue(value))
   }
 
   removePreservedTargetPaths(contribution, preservedNodePaths)
@@ -400,12 +377,12 @@ function canPreserveTomlValue (targetConfig, mergedConfig, pathSegment) {
   return hasOwn(targetConfig, pathSegment) && hasOwn(mergedConfig, pathSegment) && tomlValuesEqual(targetConfig[pathSegment], mergedConfig[pathSegment])
 }
 
-function collectPreservedTargetTomlContent (targetText, sourceConfig, targetConfig = {}, mergedConfig = targetConfig) {
-  const sections = collectPreservedTargetTomlSections(targetText, sourceConfig, targetConfig, mergedConfig)
+function collectPreservedTargetTomlContent (targetText, _sourceConfig, targetConfig = {}, mergedConfig = targetConfig) {
+  const sections = collectPreservedTargetTomlSections(targetText, targetConfig, mergedConfig)
   return `${sections.preferredRoot}${sections.root}${sections.tables}`
 }
 
-function collectPreservedTargetTomlSections (targetText, sourceConfig, targetConfig, mergedConfig) {
+function collectPreservedTargetTomlSections (targetText, targetConfig, mergedConfig) {
   let targetAst
   try {
     targetAst = parseTOML(targetText)
@@ -414,7 +391,7 @@ function collectPreservedTargetTomlSections (targetText, sourceConfig, targetCon
   }
 
   const nodes = targetAst.body[0].body
-  const preservedNodes = nodes.map((node) => shouldPreserveTargetTomlNode(node, sourceConfig, targetConfig, mergedConfig))
+  const preservedNodes = nodes.map((node) => shouldPreserveTargetTomlPath(getTomlNodePath(node), targetConfig, mergedConfig))
   const nestedKeyValueContent = new Map()
   const preservedNodePaths = new Set()
   let rootContent = ''
@@ -425,9 +402,9 @@ function collectPreservedTargetTomlSections (targetText, sourceConfig, targetCon
     if (!preservedNodes[index] && node.type === 'TOMLKeyValue' && node.value.type === 'TOMLInlineTable') {
       const path = getTomlNodePath(node)
       const mergedValue = getTomlPathValue(mergedConfig, path)
-      if (isTomlObject(mergedValue)) {
+      if (isTomlObject(mergedValue) && !(mergedValue instanceof Date)) {
         preservedNodePaths.add(getTomlPathKey(path))
-        rootContent += `${getTomlNodeLeadingComment(targetText, nodes[index - 1], node)}${targetText.slice(node.range[0], node.value.range[0])}${renderMergedInlineTable(targetText, node.value, getTomlPathValue(targetConfig, path), mergedValue)}${targetText.slice(node.value.range[1], findTomlLineEnd(targetText, node.range[1]))}`
+        rootContent += `${getTomlNodeLeadingComment(targetText, nodes[index - 1], node)}${renderMergedInlineAssignment(targetText, node, getTomlPathValue(targetConfig, path), mergedValue)}`
         continue
       }
     }
@@ -441,15 +418,23 @@ function collectPreservedTargetTomlSections (targetText, sourceConfig, targetCon
 
     if (node.type === 'TOMLTable' && !preservedNodes[index]) {
       const tablePath = getTomlNodePath(node)
+      if (tablePath.some((segment) => typeof segment === 'number')) {
+        continue
+      }
       for (let childIndex = 0; childIndex < node.body.length; childIndex += 1) {
         const childNode = node.body[childIndex]
         const childPath = [...tablePath, ...getTomlNodePath(childNode)]
-        if (!shouldPreserveTargetTomlPath(childPath, sourceConfig, targetConfig, mergedConfig)) {
+        const keepOriginal = shouldPreserveTargetTomlPath(childPath, targetConfig, mergedConfig)
+        const mergedValue = getTomlPathValue(mergedConfig, childPath)
+        if (!keepOriginal && (childNode.value.type !== 'TOMLInlineTable' || !isTomlObject(mergedValue) || mergedValue instanceof Date)) {
           continue
         }
 
         preservedNodePaths.add(getTomlPathKey(childPath))
-        const childContent = `${getTomlNodeLeadingComment(targetText, node.body[childIndex - 1], childNode, findTomlLineEnd(targetText, node.range[1]))}${targetText.slice(childNode.range[0], findTomlLineEnd(targetText, childNode.range[1]))}`
+        const assignment = keepOriginal
+          ? targetText.slice(childNode.range[0], findTomlLineEnd(targetText, childNode.range[1]))
+          : renderMergedInlineAssignment(targetText, childNode, getTomlPathValue(targetConfig, childPath), mergedValue)
+        const childContent = `${getTomlNodeLeadingComment(targetText, node.body[childIndex - 1], childNode, findTomlLineEnd(targetText, node.range[1]))}${assignment}`
         const tablePathKey = getTomlPathKey(tablePath)
         const existingEntry = nestedKeyValueContent.get(tablePathKey)
         nestedKeyValueContent.set(tablePathKey, {
@@ -486,7 +471,7 @@ function collectPreservedTargetTomlSections (targetText, sourceConfig, targetCon
     const previousNode = nodes[index - 1]
     const nextNode = nodes[lastPreservedIndex + 1]
     const start = previousNode ? findTomlLineEnd(targetText, previousNode.range[1]) : 0
-    const end = nextNode ? nextNode.range[0] : targetText.length
+    const end = nextNode ? targetText.lastIndexOf('\n', nextNode.range[0] - 1) + 1 : targetText.length
     tableContent += targetText.slice(start, end)
   }
 
@@ -514,6 +499,12 @@ function renderInlineTomlValue (value) {
   if (Array.isArray(value)) return `[${value.map(renderInlineTomlValue).join(', ')}]`
   if (isTomlObject(value) && !(value instanceof Date)) return `{ ${Object.entries(value).map(([key, child]) => `${JSON.stringify(key)} = ${renderInlineTomlValue(child)}`).join(', ')} }`
   return TOML.stringify({ value }).trim().slice('value = '.length)
+}
+
+function renderMergedInlineAssignment (text, node, targetValue, mergedValue) {
+  const prefix = text.slice(node.range[0], node.value.range[0])
+  const suffix = text.slice(node.value.range[1], findTomlLineEnd(text, node.range[1]))
+  return `${prefix}${renderMergedInlineTable(text, node.value, targetValue, mergedValue)}${suffix}`
 }
 
 function renderMergedInlineTable (text, node, targetValue, mergedValue) {
@@ -612,12 +603,7 @@ function getTomlNodeLeadingComment (content, previousNode, node, fallbackStart =
   return /#[^\r\n]*/.test(trivia) ? trivia : ''
 }
 
-function shouldPreserveTargetTomlNode (node, sourceConfig, targetConfig, mergedConfig) {
-  const pathSegments = getTomlNodePath(node)
-  return shouldPreserveTargetTomlPath(pathSegments, sourceConfig, targetConfig, mergedConfig)
-}
-
-function shouldPreserveTargetTomlPath (pathSegments, sourceConfig, targetConfig, mergedConfig) {
+function shouldPreserveTargetTomlPath (pathSegments, targetConfig, mergedConfig) {
   if (pathSegments.length === 0) {
     return false
   }
@@ -630,38 +616,13 @@ function shouldPreserveTargetTomlPath (pathSegments, sourceConfig, targetConfig,
     return tomlValuesEqual(getTomlPathValue(targetConfig, arrayPath), getTomlPathValue(mergedConfig, arrayPath))
   }
 
-  const [topLevelKey, childKey] = pathSegments
   if (isRemovedTomlPath(pathSegments)) {
     return false
   }
 
   const targetValue = getTomlPathValue(targetConfig, pathSegments)
   const mergedValue = getTomlPathValue(mergedConfig, pathSegments)
-  if (typeof targetValue !== 'undefined' && typeof mergedValue !== 'undefined' && tomlValuesEqual(targetValue, mergedValue)) {
-    return true
-  }
-
-  if (installRemovedTopLevelKeys.has(topLevelKey)) {
-    return false
-  }
-
-  if (installPreservedTopLevelKeys.has(topLevelKey) || installPreservedTopLevelTables.has(topLevelKey)) {
-    return true
-  }
-
-  if (!hasOwn(sourceConfig, topLevelKey)) {
-    return !installRemovedTargetOnlyTopLevelKeys.has(topLevelKey)
-  }
-
-  if (!partiallyManagedTopLevelTables.has(topLevelKey)) {
-    return false
-  }
-
-  if (typeof childKey === 'undefined') {
-    return false
-  }
-
-  return !isTomlObject(sourceConfig[topLevelKey]) || !hasOwn(sourceConfig[topLevelKey], childKey)
+  return typeof targetValue !== 'undefined' && typeof mergedValue !== 'undefined' && tomlValuesEqual(targetValue, mergedValue)
 }
 
 function isRemovedTomlPath (pathSegments) {
@@ -869,10 +830,11 @@ function buildMergeInstallConfig (sourceConfig, targetConfig) {
 
   preserveNestedPaths(mergedConfig, targetConfig, installPreservedNestedPaths)
   removeNestedPaths(mergedConfig, installRemovedNestedPaths)
+  removeRetiredPlugin(mergedConfig)
   return mergedConfig
 }
 
-function preservePublishedKeyOrder (value, previousValue) {
+function orderTomlKeysLike (value, previousValue) {
   if (!isTomlObject(value) || value instanceof Date) {
     return value
   }
@@ -882,7 +844,7 @@ function preservePublishedKeyOrder (value, previousValue) {
   const keys = new Set([...Object.keys(previousTable), ...Object.keys(value)])
   for (const key of keys) {
     if (hasOwn(value, key)) {
-      orderedEntries.push([key, preservePublishedKeyOrder(value[key], previousTable[key])])
+      orderedEntries.push([key, orderTomlKeysLike(value[key], previousTable[key])])
     }
   }
   return Object.fromEntries(orderedEntries)
@@ -890,7 +852,9 @@ function preservePublishedKeyOrder (value, previousValue) {
 
 function buildPublishedSyncConfig (localConfig, managedConfig) {
   const publishedConfig = {}
-  const managedTopLevelKeys = new Set(Object.keys(managedConfig))
+  const activeManagedConfig = { ...managedConfig }
+  removeRetiredPlugin(activeManagedConfig)
+  const managedTopLevelKeys = new Set(Object.keys(activeManagedConfig))
 
   for (const key of Object.keys(localConfig)) {
     if (!managedTopLevelKeys.has(key) || syncExcludedTopLevelKeys.has(key)) {
@@ -898,12 +862,12 @@ function buildPublishedSyncConfig (localConfig, managedConfig) {
     }
 
     if (syncFieldAllowlistedTables.has(key)) {
-      setTomlProperty(publishedConfig, key, pickManagedFields(localConfig[key], managedConfig[key]))
+      setTomlProperty(publishedConfig, key, pickManagedFields(localConfig[key], activeManagedConfig[key]))
       continue
     }
 
     if (syncAllowlistedChildTables.has(key)) {
-      const managedAllowlist = isTomlObject(managedConfig[key]) ? managedConfig[key] : {}
+      const managedAllowlist = isTomlObject(activeManagedConfig[key]) ? activeManagedConfig[key] : {}
       const filteredValue = pickNamedChildEntriesByAllowlist(localConfig[key], managedAllowlist)
       if (key === 'mcp_servers' && isTomlObject(filteredValue) && Object.keys(filteredValue).length === 0) {
         continue
@@ -915,9 +879,29 @@ function buildPublishedSyncConfig (localConfig, managedConfig) {
     setTomlProperty(publishedConfig, key, localConfig[key])
   }
 
-  const orderedConfig = preservePublishedKeyOrder(publishedConfig, managedConfig)
+  const orderedConfig = orderTomlKeysLike(publishedConfig, activeManagedConfig)
   removeNestedPaths(orderedConfig, syncExcludedNestedPaths)
+  removeRetiredPlugin(orderedConfig)
   return orderedConfig
+}
+
+function removeRetiredPlugin (config) {
+  const pluginId = configTomlPolicy.retiredPluginId
+  if (isTomlObject(config.plugins) && hasOwn(config.plugins, pluginId)) {
+    config.plugins = { ...config.plugins }
+    removeNestedPath(config, ['plugins', pluginId])
+  }
+
+  const hookState = getTomlPathValue(config, ['hooks', 'state'])
+  if (!isTomlObject(hookState)) {
+    return
+  }
+
+  const retiredHooks = Object.keys(hookState).filter((key) => key.startsWith(`${pluginId}:`))
+  if (retiredHooks.length > 0) {
+    config.hooks = { ...config.hooks, state: { ...hookState } }
+    removeNestedPaths(config, retiredHooks.map((key) => ['hooks', 'state', key]))
+  }
 }
 
 function removeNestedPaths (config, nestedPaths) {
@@ -963,7 +947,7 @@ function removeNestedPath (config, pathSegments) {
   removeNestedPathFromObject(config, config[topLevelKey], topLevelKey, restPath)
 }
 
-function removeNestedPathFromObject (rootConfig, currentValue, currentKey, remainingPath) {
+function removeNestedPathFromObject (parent, currentValue, currentKey, remainingPath) {
   if (remainingPath.length === 0) {
     return
   }
@@ -981,14 +965,11 @@ function removeNestedPathFromObject (rootConfig, currentValue, currentKey, remai
       return
     }
 
-    removeNestedPathFromObject(rootConfig, nextValue, nextKey, restPath)
-    if (Object.keys(nextValue).length === 0) {
-      delete currentValue[nextKey]
-    }
+    removeNestedPathFromObject(currentValue, nextValue, nextKey, restPath)
   }
 
   if (Object.keys(currentValue).length === 0) {
-    delete rootConfig[currentKey]
+    delete parent[currentKey]
   }
 }
 

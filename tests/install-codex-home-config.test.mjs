@@ -37,6 +37,8 @@ const hasWindowsPowerShell = windowsPowerShellPath !== null && spawnSync(windows
   '$PSVersionTable.PSVersion.Major'
 ], { encoding: 'utf8' }).status === 0;
 const modelsLocalFixture = Buffer.from('\uFEFF{\r\n  "models": []\r\n}\r\n', 'utf8');
+const rolloverPluginId = 'context-window-rollover-reminder@jxx-codex-plugins';
+const rolloverHook = `${rolloverPluginId}:hooks/hooks.json:post_tool_use:0:0`;
 const testToolsPath = mkdtempSync(join(tmpdir(), 'codex-installer-test-tools-'));
 if (process.platform === 'win32') {
   for (const command of ['codex', 'npm']) {
@@ -525,42 +527,52 @@ test('installation rejects Windows PowerShell 5.1 before checking execution poli
   });
 });
 
-test('pure config installation writes managed plugin declarations and rollover trust', { skip: !hasPwsh }, () => {
+test('configuration installation removes rollover entries from an old snapshot and backs up the target', { skip: !hasPwsh }, () => {
   withTempDir((tempDir) => {
     const { localPath } = createLocalRepository(tempDir);
     const targetPath = join(tempDir, 'target');
     const commandLog = join(tempDir, 'commands.log');
-    const rolloverId = 'context-window-rollover-reminder@jxx-codex-plugins';
     const usageId = 'context-window-usage-reminder@jxx-codex-plugins';
-    const hookKey = `${rolloverId}:hooks/hooks.json:post_tool_use:0:0`;
+    const usageHook = `${usageId}:hooks/hooks.json:post_tool_use:0:0`;
     const trustedHash = 'sha256:1d26b05240dba2ed2d34ff6bc51465a86226a0bcf96234236de553f26155e390';
     const marketplace = { source_type: 'git', source: 'https://github.com/jiangxiaoxu/jxx-codex-plugins.git' };
     const managed = {
-      plugins: { [usageId]: { enabled: true }, [rolloverId]: { enabled: true } },
+      plugins: { [usageId]: { enabled: true }, [rolloverPluginId]: { enabled: true } },
       marketplaces: { 'jxx-codex-plugins': marketplace },
-      hooks: { state: { [hookKey]: { trusted_hash: trustedHash } } }
+      hooks: { state: {
+        [usageHook]: { trusted_hash: trustedHash },
+        [rolloverHook]: { trusted_hash: 'old-managed-rollover' }
+      } }
     };
     writeFileSync(join(localPath, 'managed', 'config.toml'), TOML.stringify(managed), 'utf8');
     commitAll(localPath, 'Publish plugin configuration');
     mkdirSync(targetPath);
-    writeFileSync(join(targetPath, 'config.toml'), TOML.stringify({
-      plugins: { 'local-plugin@local': { enabled: false } },
+    const originalConfig = TOML.stringify({
+      plugins: {
+        [rolloverPluginId]: { enabled: false },
+        'local-plugin@local': { enabled: false }
+      },
       hooks: { state: {
-        [hookKey]: { enabled: false, trusted_hash: 'previous-hash' },
+        [rolloverHook]: { enabled: true, trusted_hash: 'old-local-rollover' },
+        [usageHook]: { enabled: false, trusted_hash: 'previous-hash' },
         'local-hook': { enabled: true, trusted_hash: 'local-hash' }
       } }
-    }), 'utf8');
+    });
+    writeFileSync(join(targetPath, 'config.toml'), originalConfig, 'utf8');
 
     const result = runInstaller(localPath, targetPath, [], { environment: { commandLog } });
     assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
     const installed = TOML.parse(readFileSync(join(targetPath, 'config.toml'), 'utf8'));
     assert.deepEqual(installed.marketplaces['jxx-codex-plugins'], marketplace);
     assert.equal(installed.plugins[usageId].enabled, true);
-    assert.equal(installed.plugins[rolloverId].enabled, true);
-    assert.equal(installed.hooks.state[hookKey].trusted_hash, trustedHash);
-    assert.equal(installed.hooks.state[hookKey].enabled, false);
+    assert.equal(Object.hasOwn(installed.plugins, rolloverPluginId), false);
+    assert.equal(Object.hasOwn(installed.hooks.state, rolloverHook), false);
+    assert.deepEqual(installed.hooks.state[usageHook], { trusted_hash: trustedHash, enabled: false });
     assert.deepEqual(installed.plugins['local-plugin@local'], { enabled: false });
     assert.deepEqual(installed.hooks.state['local-hook'], { enabled: true, trusted_hash: 'local-hash' });
+    const backupRoot = join(targetPath, 'sync_codex-home-config_backup');
+    const [backupVersion] = readdirSync(backupRoot);
+    assert.equal(readFileSync(join(backupRoot, backupVersion, 'config.toml'), 'utf8'), originalConfig);
     assert.ok(!existsSync(commandLog), 'configuration installation must not invoke Codex CLI or npm');
   });
 });
@@ -845,7 +857,15 @@ test('DryRun prints actual managed file diffs without modifying the target or cr
     const { localPath } = createLocalRepository(tempDir);
     const targetPath = join(tempDir, 'target');
     const originalFiles = {
-      config: Buffer.from('model = "old"\n', 'utf8'),
+      config: Buffer.from([
+        'model = "old"',
+        `[plugins."${rolloverPluginId}"]`,
+        'enabled = true',
+        `[hooks.state."${rolloverHook}"]`,
+        'enabled = false',
+        'trusted_hash = "old-rollover"',
+        ''
+      ].join('\n'), 'utf8'),
       modelsLocal: Buffer.from('\uFEFF{\r\n  "models": ["old"]\r\n}\r\n', 'utf8'),
       agents: Buffer.from('old instructions\n', 'utf8'),
       agent: Buffer.from('old agent\n', 'utf8')
@@ -865,6 +885,10 @@ test('DryRun prints actual managed file diffs without modifying the target or cr
     assert.match(result.stdout, /agents[\\/]reviewer\.toml/);
     assert.match(result.stdout, /-model = "old"/);
     assert.match(result.stdout, /\+model = "base"/);
+    const diffLines = result.stdout.split(/\r?\n/);
+    assert.ok(diffLines.includes(`-[plugins."${rolloverPluginId}"]`));
+    assert.ok(diffLines.includes(`-[hooks.state."${rolloverHook}"]`));
+    assert.ok(diffLines.includes('-trusted_hash = "old-rollover"'));
     assert.ok(result.stdout.includes('+' + TOML.stringify({ model_catalog_json: join(targetPath, 'models.local.json') }).trimEnd()));
     assert.doesNotMatch(result.stdout, /model_catalog_json.*codex-home-config-dry-run-/);
     assert.doesNotMatch(result.stdout, /^(?:diff --git .*models\.local\.json|--- .*models\.local\.json|\+\+\+ .*models\.local\.json)$/m);
@@ -984,6 +1008,32 @@ test('DryRun reports when the target already matches the managed snapshot', { sk
     assert.match(result.stdout, /No changes|No differences|No diff/i);
     assert.doesNotMatch(result.stdout, /^diff --git /m);
     assert.ok(!existsSync(join(targetPath, 'sync_codex-home-config_backup')));
+  });
+});
+
+test('sync removes rollover entries from the managed snapshot and preserves the source file', { skip: !hasPwsh }, () => {
+  withTempDir((tempDir) => {
+    const { localPath } = createLocalRepository(tempDir);
+    const sourcePath = join(tempDir, 'source');
+    const sourceConfigPath = join(sourcePath, 'config.toml');
+    const managedConfigPath = join(localPath, 'managed', 'config.toml');
+    const marketplace = { source_type: 'git', source: 'https://github.com/jiangxiaoxu/jxx-codex-plugins.git' };
+    const originalConfig = TOML.stringify({
+      marketplaces: { 'jxx-codex-plugins': marketplace },
+      plugins: { [rolloverPluginId]: { enabled: true } },
+      hooks: { state: { [rolloverHook]: { enabled: false, trusted_hash: 'old-rollover' } } }
+    });
+    mkdirSync(sourcePath);
+    writeFileSync(sourceConfigPath, originalConfig);
+    writeFileSync(managedConfigPath, originalConfig);
+    commitAll(localPath, 'Prepare old managed plugin configuration');
+
+    const result = runSync(localPath, sourcePath, ['-Components', 'Config']);
+    assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'));
+    assert.deepEqual(TOML.parse(readFileSync(managedConfigPath, 'utf8')), {
+      marketplaces: { 'jxx-codex-plugins': marketplace }
+    });
+    assert.equal(readFileSync(sourceConfigPath, 'utf8'), originalConfig);
   });
 });
 
